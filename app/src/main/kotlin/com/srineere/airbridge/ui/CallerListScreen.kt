@@ -36,9 +36,14 @@ internal enum class CallerGroup(val route: String, val title: String) {
  * hold, so giving each its own screen would be three copies of one list.
  */
 @Composable
-internal fun CallerListScreen(group: CallerGroup, onBack: () -> Unit, onOpen: (String) -> Unit) {
+internal fun CallerListScreen(
+    group: CallerGroup,
+    onBack: () -> Unit,
+    onOpen: (String) -> Unit,
+    packageName: String? = null,
+) {
     val state = LocalRelayState.current
-    val people = state.group(group)
+    val people = byPerson(state.group(group, packageName))
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle(group.title, onBack = onBack)
@@ -65,13 +70,14 @@ internal fun CallerListScreen(group: CallerGroup, onBack: () -> Unit, onOpen: (S
             )
         }
 
-        people.forEach { (id, caller) ->
-            CallerRow(
-                id = id,
-                caller = caller,
+        people.forEach { rules ->
+            PersonRow(
+                rules = rules,
                 state = state,
                 onOpen = onOpen,
                 forgettable = group != CallerGroup.Recent,
+                // One app's list already says which app it is.
+                showSource = packageName == null,
             )
         }
 

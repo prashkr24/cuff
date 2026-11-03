@@ -51,20 +51,14 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
             onClick = { onOpen("people") },
         )
         if (state.history.isNotEmpty()) {
-            SectionHeader("Recent")
-            state.history.forEach { entry ->
-                SettingsRow(
-                    title = state.label(entry.sourcePackage),
-                    subtitle = describeActivity(entry.stage, entry.errorCode, entry.preset),
-                    trailing = {
-                        Text(
-                            ago(entry.atMillis),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
-            }
+            // The newest few answer "did that buzz come from what I think it
+            // did"; the rest is for when it did not, and lives behind this.
+            SectionHeader(
+                text = "Recent",
+                action = if (state.history.size > RECENT) "Show all" else null,
+                onAction = { onOpen("activity") },
+            )
+            state.history.take(RECENT).forEach { entry -> ActivityRow(entry, state) }
         }
 
         Box(Modifier.padding(bottom = 24.dp))

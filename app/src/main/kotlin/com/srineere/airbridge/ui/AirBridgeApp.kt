@@ -105,6 +105,17 @@ fun AirBridgeApp() {
                 pushed("apps") { AppsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("calls") { CallsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("people") { PeopleScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed("activity") { ActivityScreen(onBack = nav::popBackStack) }
+                pushed(
+                    route = "person/{id}",
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    PersonScreen(
+                        id = entry.arguments?.getString("id").orEmpty(),
+                        onBack = nav::popBackStack,
+                        onOpen = nav::navigate,
+                    )
+                }
                 pushed("contacts") { ContactsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed(
                     route = "contacts/{source}",
@@ -124,6 +135,20 @@ fun AirBridgeApp() {
                         group = CallerGroup.of(entry.arguments?.getString("group")),
                         onBack = nav::popBackStack,
                         onOpen = nav::navigate,
+                    )
+                }
+                pushed(
+                    route = "callers/{group}/{scope}",
+                    arguments = listOf(
+                        navArgument("group") { type = NavType.StringType },
+                        navArgument("scope") { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    CallerListScreen(
+                        group = CallerGroup.of(entry.arguments?.getString("group")),
+                        onBack = nav::popBackStack,
+                        onOpen = nav::navigate,
+                        packageName = entry.arguments?.getString("scope"),
                     )
                 }
                 pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }

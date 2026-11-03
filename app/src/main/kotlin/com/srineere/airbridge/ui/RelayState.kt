@@ -109,7 +109,7 @@ internal class RelayState(private val context: Context, private val invalidate: 
         RelayHistory.read(context)
             .filter { it.stage in SHOWN_STAGES }
             .sortedByDescending { it.atMillis }
-            .take(12)
+            .take(60)
     }
 
     fun label(packageName: String?): String = packageName?.let { name ->
@@ -272,16 +272,23 @@ internal class RelayState(private val context: Context, private val invalidate: 
             .sortedBy { it.value.label.lowercase() }
             .map { it.key to it.value }
 
-    /** The people in one of the three groups the Calls screen shows. */
-    fun group(group: CallerGroup): List<Pair<String, SavedCaller>> {
-        val saved = config.callers.entries.sortedBy { it.value.label.lowercase() }
+    /**
+     * The people in one of the three groups. Scoped to one app where the
+     * screen asking is about that app -- Calls is the phone, so a rule for
+     * someone's WhatsApp has no business being listed under it.
+     */
+    fun group(group: CallerGroup, packageName: String? = null): List<Pair<String, SavedCaller>> {
+        val saved = config.callers.entries
+            .filter { packageName == null || it.value.packageName == packageName }
+            .sortedBy { it.value.label.lowercase() }
             .map { it.key to it.value }
         return when (group) {
             CallerGroup.Own -> saved.filter { it.second.preset?.silent == false }
             CallerGroup.Silenced -> saved.filter { it.second.preset?.silent == true }
             // Saved-but-unchanged and never-saved both mean "uses the
             // default", so they read as one list.
-            CallerGroup.Recent -> saved.filter { it.second.preset == null } + recent
+            CallerGroup.Recent -> saved.filter { it.second.preset == null } +
+                recent.filter { packageName == null || it.second.packageName == packageName }
         }
     }
 

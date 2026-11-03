@@ -84,14 +84,17 @@ internal fun CallsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     },
                 )
 
-                // A shortcut, not a second home: the rules themselves live
-                // under People, because they hold for apps as well.
+                // The same groups as before, but only the phone's: a rule
+                // for someone's WhatsApp is theirs under People, not an
+                // answer to "who rings this phone differently".
                 SettingsRow(
-                    title = "People",
-                    subtitle = peopleSummary(state),
+                    title = "All contacts",
+                    subtitle = "Give someone a buzz before they ring",
                     icon = Icons.Outlined.People,
-                    onClick = { onOpen("people") },
+                    onClick = { onOpen("contacts/" + state.dialer) },
                 )
+
+                CallerGroup.entries.forEach { group -> PhoneGroup(group, onOpen) }
             }
         }
 
@@ -166,3 +169,27 @@ private fun OnlySavedDialog(onCancel: () -> Unit, onConfirm: (Boolean) -> Unit) 
     )
 }
 
+/** How many of a group this screen shows before handing over to its list. */
+private const val PREVIEW = 3
+
+/** One group of people, as they ring this phone. */
+@Composable
+private fun PhoneGroup(group: CallerGroup, onOpen: (String) -> Unit) {
+    val state = LocalRelayState.current
+    val people = state.group(group, state.dialer)
+    if (people.isEmpty()) return
+
+    SectionHeader(
+        text = group.title,
+        action = if (people.size > PREVIEW) "View all ${people.size}" else null,
+        onAction = { onOpen("callers/${group.route}/" + state.dialer) },
+    )
+    people.take(PREVIEW).forEach { (id, caller) ->
+        CallerRow(
+            id, caller, state, onOpen,
+            forgettable = group != CallerGroup.Recent,
+            showSource = false,
+            showNumber = true,
+        )
+    }
+}
