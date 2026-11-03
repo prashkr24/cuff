@@ -109,7 +109,11 @@ fun AirBridgeTheme(
         }
     }
 
-    CompositionLocalProvider(LocalAirExtras provides if (dark) DarkExtras else LightExtras) {
+    val extras = (if (dark) DarkExtras else LightExtras).copy(
+        accentOutline = if (wallpaper) scheme.outline else accentColors(accent, dark).containerOutline,
+    )
+
+    CompositionLocalProvider(LocalAirExtras provides extras) {
         MaterialTheme(
             colorScheme = scheme,
             typography = AirTypography,

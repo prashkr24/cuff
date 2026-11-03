@@ -105,10 +105,12 @@ internal val AmberLight = AccentColors(
  * Colours Material 3 has no role for. [positive] is "this is working" — the
  * relay dot, a battery bar, a resting rate trending the right way.
  */
-internal data class AirExtraColors(
+data class AirExtraColors(
     val positive: Color,
     val disabled: Color,
     val navSurface: Color,
+    /** Border of a live, accent-tinted card. Filled in per accent by the theme. */
+    val accentOutline: Color = Color(0xFF1E4C59),
     val sleepAwake: Color,
     val sleepLight: Color,
     val sleepDeep: Color,

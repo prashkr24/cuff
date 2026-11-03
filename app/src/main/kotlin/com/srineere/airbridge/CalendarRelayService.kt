@@ -22,15 +22,19 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
-import io.flutter.FlutterInjector
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.embedding.engine.dart.DartExecutor
-import io.flutter.plugin.common.MethodChannel
+import dev.airpulse.fitbit_air.AirLink
+import dev.airpulse.fitbit_air.AirResult
 
 /** User-started example relay; never starts work from a notification callback. */
 class CalendarRelayService : Service() {
-    private var engine: FlutterEngine? = null
-    private var channel: MethodChannel? = null
+    private var air: AirLink? = null
+    /**
+     * The Air runs one secure session at a time, so band work is serialised
+     * here. A message arriving mid-ring waits rather than failing BUSY, which
+     * is what the Dart operation queue used to do.
+     */
+    private val airQueue = ArrayDeque<(AirLink) -> Unit>()
+    private var airBusy = false
     private var filter: CalendarAlertFilter? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var pending = 0
@@ -184,15 +188,15 @@ class CalendarRelayService : Service() {
         }
         if (intent?.action == SILENCE) {
             stopRing("silenced")
-            if (engine == null) stopSelf()
+            if (air == null) stopSelf()
             return START_NOT_STICKY
         }
         if (intent?.action == PAUSE || intent?.action == RESUME) {
             RelayRuleStore.update(this) { it.copy(silence = it.silence.copy(pauseUntil = if (intent.action == RESUME) 0 else System.currentTimeMillis() + 900_000)) }
-            if (engine == null) stopSelf()
+            if (air == null) stopSelf()
             return START_NOT_STICKY
         }
-        if (engine != null) return START_STICKY
+        if (air != null) return START_STICKY
         selectedPackages = RelayRuleStore.read(this).selectedPackages
         pulseStyle = RelayAppSelection.pulseStyle(this)
         if (selectedPackages.isEmpty()) {
@@ -236,7 +240,7 @@ class CalendarRelayService : Service() {
     private var listenerWaitUntil = 0L
     private val listenerWait = object : Runnable {
         override fun run() {
-            if (engine != null || stopping) return
+            if (air != null || stopping) return
             if (CalendarNotificationListener.connected) { startWorker(); return }
             if (System.currentTimeMillis() > listenerWaitUntil) {
                 requestStop("Notification access did not come back. Start the relay again.")
@@ -249,38 +253,53 @@ class CalendarRelayService : Service() {
     private fun startWorker() {
         try {
             saveOutcome("Starting notification relay…")
-            val loader = FlutterInjector.instance().flutterLoader()
-            loader.startInitialization(applicationContext)
-            loader.ensureInitializationComplete(applicationContext, null)
-            val relayEngine = FlutterEngine(applicationContext)
-            engine = relayEngine
-            channel = MethodChannel(relayEngine.dartExecutor.binaryMessenger, "air_bridge/calendar_worker")
-                .also { worker ->
-                    worker.setMethodCallHandler { call, result ->
-                        if (call.method == "ready") {
-                            try {
-                                check(hasAccess(this) && CalendarNotificationListener.connected)
-                                filter = CalendarAlertFilter(System.currentTimeMillis(),
-                                    CalendarNotificationListener.existingKeys(selectedPackages), selectedPackages)
-                                ready = true
-                                settingsChanged()
-                                handler.removeCallbacks(watchdog)
-                                saveOutcome("Listening for alerts from ${selectedPackages.size} selected app(s).")
-                                result.success(null)
-                                if (stopping) requestStop("Relay stopped.")
-                            } catch (error: Exception) {
-                                result.error("NOTIFICATION_ACCESS", "Notification listener unavailable.", null)
-                                requestStop("Notification listener unavailable. Enable access and start again.")
-                            }
-                        } else result.notImplemented()
-                    }
-                }
-            handler.postDelayed(watchdog, 60_000)
-            relayEngine.dartExecutor.executeDartEntrypoint(
-                DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "airCalendarRelay"))
+            check(hasAccess(this) && CalendarNotificationListener.connected)
+            air = AirLink(applicationContext)
+            filter = CalendarAlertFilter(
+                System.currentTimeMillis(),
+                CalendarNotificationListener.existingKeys(selectedPackages), selectedPackages,
+            )
+            ready = true
+            settingsChanged()
+            handler.removeCallbacks(watchdog)
+            saveOutcome("Listening for alerts from ${selectedPackages.size} selected app(s).")
+            if (stopping) requestStop("Relay stopped.")
+        } catch (error: IllegalStateException) {
+            requestStop("Notification listener unavailable. Enable access and start again.")
         } catch (error: Exception) {
             saveOutcome("Relay startup failed: ${error.javaClass.simpleName}")
             stopSelf()
+        }
+    }
+
+    /**
+     * Runs [work] against the band once nothing else holds it. [work] must
+     * call [airDone] when its operation completes, however it ends.
+     */
+    private fun onAir(work: (AirLink) -> Unit) {
+        val link = air
+        if (link == null) return
+        if (airBusy) { airQueue.addLast(work); return }
+        airBusy = true
+        work(link)
+    }
+
+    private fun airDone() {
+        val next = airQueue.removeFirstOrNull()
+        val link = air
+        if (next == null || link == null) { airBusy = false; return }
+        next(link)
+    }
+
+    /** Builds the reply for one band operation, freeing the queue either way. */
+    private fun airReply(onResult: (RelayWorkerResult) -> Unit) = object : AirResult {
+        override fun success(result: Any?) {
+            airDone()
+            onResult(RelayWorkerResult("verified", null))
+        }
+        override fun error(code: String, message: String?, details: Any?) {
+            airDone()
+            onResult(RelayWorkerResult("failed", code.takeIf { it.matches(ERROR_CODE) } ?: "WORKER_ERROR"))
         }
     }
 
@@ -382,7 +401,9 @@ class CalendarRelayService : Service() {
         record(nextId(), session.packageName, session.startedAt, "ring_stopped", reason, session.match)
         // Releases the held session; the in-flight ring call then completes on
         // its own and does its own bookkeeping.
-        runCatching { channel?.invokeMethod("stopRing", null) }
+        // Deliberately not queued: the queue is busy holding the ring, and
+        // this is what releases it.
+        runCatching { air?.stopRing() }
         // Give Google Health the usual quiet window now that the ring is over.
         coalescer.onFinished(System.currentTimeMillis())
         refreshNotification()
@@ -406,8 +427,7 @@ class CalendarRelayService : Service() {
         if (stopping || !ready) { stopRing("cancelled"); return }
         if (answered(session)) { stopRing("answered"); return }
         RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())?.let { stopRing(it); return }
-        val worker = channel
-        if (worker == null) { stopRing("worker_unavailable"); return }
+        if (air == null) { stopRing("worker_unavailable"); return }
         val id = nextId()
         begin()
         refreshDeadline()
@@ -422,15 +442,15 @@ class CalendarRelayService : Service() {
             // Reaching the duration ends the ring without anyone asking.
             if (ring === session) stopRing("ring_finished")
         }
-        worker.invokeMethod("ring", mapOf(
-            "gapMillis" to session.settings.gapMillis,
-            "maxMillis" to session.settings.maxMillis.toInt(),
-            "intensity" to session.match.preset.intensity,
-        ), object : MethodChannel.Result {
-            override fun success(result: Any?) { finished(RelayWorkerResult.decode(result)) }
-            override fun error(code: String, message: String?, details: Any?) { finished(RelayWorkerResult("failed", "WORKER_ERROR")) }
-            override fun notImplemented() { finished(RelayWorkerResult("failed", "WORKER_UNAVAILABLE")) }
-        })
+        onAir { link ->
+            link.ring(
+                intensity = session.match.preset.intensity,
+                gapMillis = session.settings.gapMillis.toLong(),
+                maxMillis = session.settings.maxMillis,
+                pulses = null,
+                result = airReply { finished(it) },
+            )
+        }
     }
 
     internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {
@@ -501,22 +521,24 @@ class CalendarRelayService : Service() {
         end()
     }
 
-    internal fun readBattery(reply: MethodChannel.Result) = readDeviceStatus("readBattery", reply)
-    internal fun readSignal(reply: MethodChannel.Result) = readDeviceStatus("readSignalStrength", reply)
-    internal fun readDeviceInfo(reply: MethodChannel.Result) = readDeviceStatus("readDeviceInfo", reply)
+    internal fun readBattery(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readBattery(r) }
+    internal fun readSignal(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readSignalStrength(r) }
+    internal fun readDeviceInfo(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readDeviceInfo(r) }
 
-    private fun readDeviceStatus(operation: String, reply: MethodChannel.Result) {
-        val worker = channel
-        if (!ready || stopping || pending != 0 || worker == null) {
+    private fun readDeviceStatus(reply: AirResult, operation: (AirLink, AirResult) -> Unit) {
+        if (!ready || stopping || pending != 0 || air == null) {
             reply.error("BUSY", "The relay is delivering a notification. Try again shortly.", null)
             return
         }
         begin()
-        worker.invokeMethod(operation, null, object : MethodChannel.Result {
-            override fun success(result: Any?) { end(); reply.success(result) }
-            override fun error(code: String, message: String?, details: Any?) { end(); reply.error(code, message, details) }
-            override fun notImplemented() { end(); reply.error("WORKER_UNAVAILABLE", "Device read unavailable.", null) }
-        })
+        onAir { link ->
+            operation(link, object : AirResult {
+                override fun success(result: Any?) { airDone(); end(); reply.success(result) }
+                override fun error(code: String, message: String?, details: Any?) {
+                    airDone(); end(); reply.error(code, message, details)
+                }
+            })
+        }
     }
 
     private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long, match: RelayMatch) {
@@ -543,15 +565,35 @@ class CalendarRelayService : Service() {
         // session, so they land close enough together to read as a pattern,
         // and both play at the strength the rule asked for.
         val pulses = preset.pattern.pulses ?: 1
-        channel?.invokeMethod("dispatch", mapOf(
-            "id" to id, "expiresAt" to expiresAt,
-            "kind" to "tap", "intensity" to preset.intensity,
-            "pulses" to pulses, "gapMillis" to PATTERN_GAP_MILLIS,
-        ), object : MethodChannel.Result {
-            override fun success(result: Any?) { finished(RelayWorkerResult.decode(result)) }
-            override fun error(code: String, message: String?, details: Any?) { finished(RelayWorkerResult("failed", "WORKER_ERROR")) }
-            override fun notImplemented() { finished(RelayWorkerResult("failed", "WORKER_UNAVAILABLE")) }
-        })
+        onAir { link ->
+            if (pulses > 1) {
+                // A pattern is a short bounded ring: every pulse shares one
+                // session, so they land close enough together to read as one
+                // shape, and all play at the strength the rule asked for.
+                link.ring(
+                    intensity = preset.intensity,
+                    gapMillis = PATTERN_GAP_MILLIS.toLong(),
+                    maxMillis = 20_000L,
+                    pulses = pulses,
+                    result = object : AirResult {
+                        override fun success(result: Any?) {
+                            airDone()
+                            val played = ((result as? Map<*, *>)?.get("pulses") as? Int) ?: 0
+                            finished(
+                                if (played >= pulses) RelayWorkerResult("verified", null)
+                                else RelayWorkerResult("failed", "PARTIAL")
+                            )
+                        }
+                        override fun error(code: String, message: String?, details: Any?) {
+                            airDone()
+                            finished(RelayWorkerResult("failed", code.takeIf { it.matches(ERROR_CODE) } ?: "WORKER_ERROR"))
+                        }
+                    },
+                )
+            } else {
+                link.tap(preset.intensity, airReply { finished(it) })
+            }
+        }
     }
 
     /** Running commands and a waiting follow-up each hold the wake lock and watchdog. */
@@ -591,7 +633,7 @@ class CalendarRelayService : Service() {
         stopping = true
         stopRing("cancelled")
         saveOutcome(reason)
-        channel?.invokeMethod("close", null)
+        runCatching { air?.close() }
         handler.removeCallbacks(silenceTick)
         cancelWaiting("cancelled")
         if (pending == 0) stopSelf()
@@ -636,10 +678,10 @@ class CalendarRelayService : Service() {
         if (active === this) active = null
         handler.removeCallbacks(watchdog)
         handler.removeCallbacks(followUp)
-        channel?.setMethodCallHandler(null)
-        channel = null
-        engine?.destroy()
-        engine = null
+        airQueue.clear()
+        airBusy = false
+        air?.close()
+        air = null
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
@@ -706,6 +748,8 @@ class CalendarRelayService : Service() {
         private const val RING_WATCH_MILLIS = 1_000L
         /** Spacing inside a fixed pattern, close enough to feel like one alert. */
         private const val PATTERN_GAP_MILLIS = 300
+        /** Codes we pass through to the log; anything else becomes WORKER_ERROR. */
+        private val ERROR_CODE = Regex("[A-Z0-9_]{1,64}")
         private const val CHANNEL = "calendar_relay"
         private const val STOP = "calendar_relay.STOP"
         private const val SILENCE = "calendar_relay.SILENCE"
