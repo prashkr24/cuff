@@ -3,7 +3,9 @@ package com.srineere.airbridge.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,6 +42,11 @@ internal fun CallsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             live = callsOn,
             onToggle = { state.setCallsOn(it) },
         )
+
+        // The card is its own thing, not a heading for the rows under it.
+        // On Alerts a section header holds them apart; here there is none, so
+        // the distance has to be said outright.
+        Spacer(Modifier.height(12.dp))
 
         // Everything below only means something once calls are coming through.
         AnimatedVisibility(visible = callsOn) {
