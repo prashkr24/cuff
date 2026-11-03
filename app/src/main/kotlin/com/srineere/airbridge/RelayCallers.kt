@@ -147,16 +147,6 @@ internal object RelayRecentCallers {
         while (recent.size > LIMIT) recent.remove(recent.keys.first())
     }
 
-    /** Newest first for one app, excluding callers that already have a rule. */
-    @Synchronized
-    fun list(saved: Set<String>, packageName: String): List<Map<String, String>> = recent.entries
-        .reversed()
-        .filterNot { it.key in saved }
-        .filter { it.value.packageName == packageName }
-        .map {
-            mapOf("id" to it.key, "label" to it.value.label, "detail" to (it.value.detail ?: ""))
-        }
-
     /** Everyone who has rung since the relay started, newest first. */
     @Synchronized
     fun all(saved: Set<String>): List<RelayCallerIdentity.Caller> =

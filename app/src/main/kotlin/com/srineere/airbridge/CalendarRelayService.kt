@@ -3,9 +3,6 @@ package com.srineere.airbridge
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import android.Manifest
-import android.bluetooth.BluetoothManager
-import android.content.pm.PackageManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -850,30 +847,5 @@ class CalendarRelayService : Service() {
                 .isIgnoringBatteryOptimizations(context.packageName)
         }.getOrDefault(false)
 
-        private fun bluetoothPermission(context: Context): Boolean = Build.VERSION.SDK_INT < 31 ||
-            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-
-        fun status(context: Context, callersFor: String = RelayRuleStore.DIALER): Map<String, Any?> = mapOf(
-            "notificationControlsAllowed" to context.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled(),
-            "setupStep" to context.getSharedPreferences("relay_onboarding", MODE_PRIVATE).getInt("step", 0).coerceIn(0, 3),
-            "setupCompleted" to context.getSharedPreferences("relay_onboarding", MODE_PRIVATE).getBoolean("completed", false),
-            "access" to hasAccess(context),
-            "connected" to CalendarNotificationListener.connected,
-            "running" to isRunning,
-            "ready" to (active?.ready == true),
-            "stopping" to (active?.stopping == true),
-            "ringing" to (active?.ring != null),
-            "selectedApps" to RelayRuleStore.read(context).selectedPackages.sorted(),
-            "pulseStyle" to RelayRuleStore.read(context).defaultPreset.id,
-            "rules" to RelayRuleStore.status(context, callersFor),
-            "conversations" to RelayConversations.status(),
-            "history" to RelayHistory.read(context).asReversed().map { it.toMap() },
-            "bluetoothPermission" to bluetoothPermission(context),
-            "batteryExempt" to batteryExempt(context),
-            "bluetoothEnabled" to if (bluetoothPermission(context)) runCatching {
-                context.getSystemService(BluetoothManager::class.java).adapter?.isEnabled
-            }.getOrNull() else null,
-            "outcome" to context.getSharedPreferences("calendar_relay", MODE_PRIVATE).getString("outcome", null)
-        )
     }
 }

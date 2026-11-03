@@ -151,37 +151,4 @@ internal object RelayRuleStore {
         write(context, next)
         CalendarRelayService.active?.settingsChanged()
     }
-
-    fun status(context: Context, callersFor: String = DIALER): Map<String, Any?> {
-        val c = read(context)
-        return mapOf("defaultPreset" to c.defaultPreset.id,
-            "defaultCallPreset" to c.defaultCallPreset.id,
-            "defaultAppCallPreset" to c.defaultAppCallPreset.id,
-            "ringGapMillis" to c.ring.gapMillis, "ringMaxSeconds" to c.ring.maxSeconds,
-            "apps" to c.apps.mapValues { (_, r) ->
-                mapOf("enabled" to r.enabled, "preset" to r.preset?.id,
-                    "callPreset" to r.callPreset?.id,
-                    "ringGapMillis" to r.ring?.gapMillis, "ringMaxSeconds" to r.ring?.maxSeconds)
-            },
-            "onlySavedCallers" to c.onlySavedCallers,
-            "callers" to c.callers.filter { it.value.packageName == callersFor }.map { (id, caller) ->
-                mapOf("id" to id, "packageName" to caller.packageName,
-                    "label" to caller.label, "preset" to caller.preset?.id,
-                    "detail" to caller.detail,
-                    "ringGapMillis" to caller.ring?.gapMillis,
-                    "ringMaxSeconds" to caller.ring?.maxSeconds)
-            },
-            // Callers belong to the app they call through, so the list is
-            // scoped to whichever app's people are being looked at.
-            "recentCallers" to RelayRecentCallers.list(c.callers.keys, callersFor),
-            "callersFor" to callersFor,
-            "chats" to c.chats.map { (id, chat) ->
-                mapOf("id" to id, "packageName" to chat.packageName, "label" to chat.label, "kind" to chat.kind,
-                    "preset" to chat.preset?.id)
-            },
-            "everyoneElseSilent" to c.everyoneElseSilent,
-            "pauseUntil" to c.silence.pauseUntil, "quietEnabled" to c.silence.quietEnabled,
-            "startMinute" to c.silence.startMinute, "endMinute" to c.silence.endMinute,
-            "silenceReason" to c.silence.reason(System.currentTimeMillis()),)
-    }
 }

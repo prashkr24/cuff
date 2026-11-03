@@ -13,9 +13,7 @@ import org.json.JSONArray
  * live in [RelayRuleStore]. Metadata only: no message text is read, stored or exported.
  */
 internal object RelayConversations {
-    private data class Chat(val id: String, val packageName: String, val label: String, val kind: String = "shortcut") {
-        fun toMap() = mapOf("id" to id, "packageName" to packageName, "label" to label, "kind" to kind)
-    }
+    private data class Chat(val id: String, val packageName: String, val label: String, val kind: String = "shortcut")
     private val candidates = linkedMapOf<String, Chat>()
     private val window = ConversationCaptureWindow()
     private val diagnostics = linkedMapOf<String, Int>()
@@ -113,10 +111,4 @@ internal object RelayConversations {
     fun candidate(id: String): SavedChat? = candidates[id]?.takeIf { window.selectable(SystemClock.elapsedRealtime()) }
         ?.let { SavedChat(it.packageName, it.label, it.kind) }
 
-    fun status(): Map<String, Any> {
-        val remaining = window.remaining(SystemClock.elapsedRealtime())
-        if (!window.selectable(SystemClock.elapsedRealtime())) candidates.clear()
-        return mapOf("captureRemainingMillis" to remaining, "unsupported" to unsupported,
-            "diagnostics" to diagnostics.toMap(), "candidates" to candidates.values.map { it.toMap() })
-    }
 }
