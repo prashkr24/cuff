@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayPattern
 import com.srineere.airbridge.RelayPreset
-import java.util.concurrent.TimeUnit
 
 @Composable
 internal fun AlertsScreen(onOpen: (String) -> Unit) {
@@ -68,7 +67,8 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
                 action = if (state.history.size > RECENT) "Show all" else null,
                 onAction = { onOpen("activity") },
             )
-            state.history.take(RECENT).forEach { entry -> ActivityRow(entry, state) }
+            val now = nowTicking()
+            state.history.take(RECENT).forEach { entry -> ActivityRow(entry, state, now) }
         }
 
         Box(Modifier.padding(bottom = 24.dp))
@@ -142,27 +142,4 @@ internal fun describe(preset: RelayPreset): String {
     if (preset.pattern == RelayPattern.SILENT) return "Silent"
     val strength = if (preset.strength == RelayPreset.FULL_STRENGTH) "strong" else "light"
     return "${shape(preset)} · $strength"
-}
-
-private fun describeActivity(stage: String, errorCode: String?, preset: String?): String {
-    val shape = preset?.let { runCatching { describe(RelayPreset.parse(it)) }.getOrNull() }
-    return when (stage) {
-        "verified" -> shape ?: "Buzzed"
-        "ring_started" -> "Started ringing"
-        "ring_stopped" -> "Ring ended"
-        else -> errorCode?.lowercase()?.replace('_', ' ')?.replaceFirstChar { it.uppercase() } ?: "Did not reach the band"
-    }
-}
-
-private fun ago(atMillis: Long): String {
-    val delta = (System.currentTimeMillis() - atMillis).coerceAtLeast(0)
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(delta)
-    val hours = TimeUnit.MILLISECONDS.toHours(delta)
-    val days = TimeUnit.MILLISECONDS.toDays(delta)
-    return when {
-        minutes < 1 -> "now"
-        minutes < 60 -> "$minutes min"
-        hours < 24 -> "$hours hr"
-        else -> "$days d"
-    }
 }

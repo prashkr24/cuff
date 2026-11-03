@@ -33,8 +33,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +47,26 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.ui.theme.extras
+import kotlinx.coroutines.delay
+
+/**
+ * The time now, re-read on each minute boundary.
+ *
+ * Anything that reads "2 min ago" has to become "3 min ago" while it is being
+ * looked at. Without this it changed only when something unrelated redrew the
+ * screen, so a card left open kept saying "just now" an hour later.
+ */
+@Composable
+internal fun nowTicking(): Long {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000 - System.currentTimeMillis() % 60_000)
+            now = System.currentTimeMillis()
+        }
+    }
+    return now
+}
 
 /**
  * A screen title, with a back arrow when the screen was pushed over a tab, and

@@ -190,11 +190,9 @@ internal data class RelayRuleConfig(
         val overrides = saved.mapNotNull { it.preset }
         // A saved mute always wins if Android supplies multiple identity forms.
         if (overrides.any { it.silent }) return null
-        val base = overrides.firstOrNull() ?: app.preset ?: defaultPreset
-        if (base.silent) return null
-        val preset = base
-        val specificity = if (overrides.isEmpty()) 0 else 1
-        return if (preset.silent) null else RelayMatch(preset, specificity)
+        val preset = overrides.firstOrNull() ?: app.preset ?: defaultPreset
+        if (preset.silent) return null
+        return RelayMatch(preset, if (overrides.isEmpty()) 0 else 1)
     }
 }
 

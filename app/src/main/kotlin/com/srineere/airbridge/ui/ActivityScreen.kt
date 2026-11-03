@@ -65,7 +65,8 @@ internal fun ActivityScreen(onBack: () -> Unit) {
             )
         }
 
-        state.history.forEach { entry -> ActivityRow(entry, state, absolute = true) }
+        val now = nowTicking()
+        state.history.forEach { entry -> ActivityRow(entry, state, now, absolute = true) }
 
         Box(Modifier.padding(bottom = 24.dp))
     }
@@ -83,6 +84,7 @@ internal fun ActivityScreen(onBack: () -> Unit) {
 internal fun ActivityRow(
     entry: RelayActivity,
     state: RelayState,
+    now: Long,
     absolute: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -114,7 +116,7 @@ internal fun ActivityRow(
         trailing = {
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    if (absolute) clock.format(Date(entry.atMillis)) else ago(entry.atMillis),
+                    if (absolute) clock.format(Date(entry.atMillis)) else ago(entry.atMillis, now),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -217,8 +219,8 @@ private fun describeActivity(stage: String, errorCode: String?, preset: String?)
     }
 }
 
-private fun ago(atMillis: Long): String {
-    val delta = (System.currentTimeMillis() - atMillis).coerceAtLeast(0)
+private fun ago(atMillis: Long, now: Long): String {
+    val delta = (now - atMillis).coerceAtLeast(0)
     val minutes = TimeUnit.MILLISECONDS.toMinutes(delta)
     val hours = TimeUnit.MILLISECONDS.toHours(delta)
     val days = TimeUnit.MILLISECONDS.toDays(delta)

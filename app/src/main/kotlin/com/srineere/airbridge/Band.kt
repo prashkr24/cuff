@@ -26,10 +26,19 @@ internal object Band {
     private const val TAG = "AirBridge"
 
     private val handler = Handler(Looper.getMainLooper())
-    private val queue = ArrayDeque<(AirLink) -> Unit>()
+    private val queue = ArrayDeque<Work>()
     private var link: AirLink? = null
     private var busy = false
     private val idle = Runnable { close() }
+
+    /**
+     * One queued operation, with the reply that is owed either way.
+     *
+     * The reply is held beside the work because dropping the queue -- which
+     * closing does -- has to answer what is in it. Clearing it silently left
+     * the screen that asked waiting on a result that was never coming.
+     */
+    private class Work(val reply: AirResult, val run: (AirLink) -> Unit)
 
     /**
      * Whether the band is linked. This asks the Bluetooth adapter rather than
@@ -97,10 +106,14 @@ internal object Band {
      */
     fun close() {
         handler.removeCallbacks(idle)
+        // Whatever was waiting is not going to happen, and the caller is owed
+        // an answer: silence here is a spinner that never stops.
+        val dropped = queue.toList()
         queue.clear()
         busy = false
         link?.let { runCatching { it.close() }.onFailure { e -> Log.w(TAG, "closing band link", e) } }
         link = null
+        dropped.forEach { it.reply.error("CLOSED", "The link to the band was closed.", null) }
     }
 
     private fun own(context: Context): AirLink =
@@ -136,7 +149,7 @@ internal object Band {
 
         handler.removeCallbacks(idle)
         val air = own(context)
-        val work: (AirLink) -> Unit = { held ->
+        val work = Work(reply) { held ->
             operation(held, object : AirResult {
                 override fun success(result: Any?) { done(); reply.success(result) }
                 override fun error(code: String, message: String?, details: Any?) {
@@ -146,13 +159,21 @@ internal object Band {
         }
         if (busy) { queue.addLast(work); return }
         busy = true
-        work(air)
+        work.run(air)
     }
 
     private fun done() {
-        val next = queue.removeFirstOrNull()
         val air = link
-        if (next != null && air != null) { next(air); return }
+        if (air == null) {
+            // The link went away under us, so everything still waiting is owed
+            // the same answer closing would have given it.
+            val dropped = queue.toList()
+            queue.clear()
+            busy = false
+            dropped.forEach { it.reply.error("CLOSED", "The link to the band was closed.", null) }
+            return
+        }
+        queue.removeFirstOrNull()?.let { it.run(air); return }
         busy = false
         // Holding the link open costs the band, and would be in the way of a
         // relay started a moment from now.

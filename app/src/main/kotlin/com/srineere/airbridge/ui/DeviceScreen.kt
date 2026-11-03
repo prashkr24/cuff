@@ -149,16 +149,9 @@ private fun BandCard() {
     var message by remember { mutableStateOf<String?>(null) }
     var buzz by remember { mutableStateOf(Buzz.Idle) }
 
-    fun sync() {
-        if (syncing) return
-        syncing = true
-        message = null
-        Band.isConnected(context, airResult(
-            onSuccess = { connected = it as? Boolean },
-            onError = { _, _ -> connected = null },
-        ))
-        // One at a time: the band holds a single session, so the signal read
-        // waits for the battery read rather than racing it.
+    // One at a time: the band holds a single session, so the signal read waits
+    // for the battery read rather than racing it.
+    fun readings() {
         Band.readBattery(context, airResult(
             onSuccess = { value ->
                 // The band answered, so it is reachable whatever the adapter
@@ -177,6 +170,19 @@ private fun BandCard() {
                 ))
             },
             onError = { code, detail -> syncing = false; message = reason(code, detail) },
+        ))
+    }
+
+    fun sync() {
+        if (syncing) return
+        syncing = true
+        message = null
+        // The adapter first, then the band. Firing both at once meant the
+        // adapter's answer could land second and put "Disconnected" back on a
+        // band that had just replied.
+        Band.isConnected(context, airResult(
+            onSuccess = { connected = it as? Boolean; readings() },
+            onError = { _, _ -> connected = null; readings() },
         ))
     }
 
@@ -201,6 +207,10 @@ private fun BandCard() {
         }
     }
     LaunchedEffect(Unit) { sync() }
+
+    // Both readings say when they were taken, so the card has to keep count
+    // of the time passing rather than freeze on the minute it was drawn.
+    val now = nowTicking()
 
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) {
 
@@ -278,14 +288,14 @@ private fun BandCard() {
                 icon = Icons.Outlined.BatteryStd,
                 label = "Battery",
                 value = battery?.let { "$it%" } ?: "\u2014",
-                detail = if (batteryAt == 0L) "Not checked yet" else "Checked ${since(batteryAt)}",
+                detail = if (batteryAt == 0L) "Not checked yet" else "Checked ${since(batteryAt, now)}",
                 modifier = Modifier.weight(1f),
             )
             Metric(
                 icon = Icons.Outlined.SignalCellularAlt,
                 label = "Signal",
                 value = rssi?.let { strength(it) } ?: "\u2014",
-                detail = rssi?.let { "$it dBm \u00b7 ${since(rssiAt)}" } ?: "Not checked yet",
+                detail = rssi?.let { "$it dBm \u00b7 ${since(rssiAt, now)}" } ?: "Not checked yet",
                 modifier = Modifier.weight(1f),
             )
         }
@@ -368,8 +378,8 @@ private fun strength(rssi: Int): String = when {
     else -> "Weak"
 }
 
-private fun since(atMillis: Long): String {
-    val delta = (System.currentTimeMillis() - atMillis).coerceAtLeast(0)
+private fun since(atMillis: Long, now: Long): String {
+    val delta = (now - atMillis).coerceAtLeast(0)
     val minutes = TimeUnit.MILLISECONDS.toMinutes(delta)
     val hours = TimeUnit.MILLISECONDS.toHours(delta)
     return when {
@@ -382,6 +392,9 @@ private fun since(atMillis: Long): String {
 
 private fun reason(code: String?, detail: String?): String = when (code) {
     "BUSY" -> "Busy delivering a notification; try again shortly"
+    // The one way a reading is dropped mid-flight: the relay started and took
+    // the band's single session for itself.
+    "CLOSED" -> "The relay took the band over; try again"
     "BLUETOOTH_PERMISSION" -> "Nearby devices permission is needed"
     "AIR_NOT_FOUND" -> "Pair your Air in Google Health first"
     "SILENT" -> "Your default vibration is silent"

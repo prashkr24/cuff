@@ -295,13 +295,17 @@ class CalendarRelayService : Service() {
     /**
      * Runs [work] against the band once nothing else holds it. [work] must
      * call [airDone] when its operation completes, however it ends.
+     *
+     * False when there is no link to run against, so that the caller can
+     * release what it has already taken. Returning silently left the wake
+     * lock held and the alert sitting in flight until the watchdog fired.
      */
-    private fun onAir(work: (AirLink) -> Unit) {
-        val link = air
-        if (link == null) return
-        if (airBusy) { airQueue.addLast(work); return }
+    private fun onAir(work: (AirLink) -> Unit): Boolean {
+        val link = air ?: return false
+        if (airBusy) { airQueue.addLast(work); return true }
         airBusy = true
         work(link)
+        return true
     }
 
     private fun airDone() {
@@ -410,6 +414,10 @@ class CalendarRelayService : Service() {
         record(nextId(), packageName, session.startedAt, "ring_started", match = match,
             callerId = callerId)
         refreshNotification()
+        // Nothing else buzzes during a ring, and a follow-up already scheduled
+        // would have. It keeps waiting; stopRing picks it up when the call is
+        // over.
+        handler.removeCallbacks(followUp)
         handler.postDelayed(ringWatch, RING_WATCH_MILLIS)
         sendRing()
     }
@@ -429,8 +437,13 @@ class CalendarRelayService : Service() {
         // Deliberately not queued: the queue is busy holding the ring, and
         // this is what releases it.
         runCatching { air?.stopRing() }
-        // Give Google Health the usual quiet window now that the ring is over.
-        coalescer.onFinished(System.currentTimeMillis())
+        // Give Google Health the usual quiet window now that the ring is over,
+        // and pick up anything that was waiting while it ran. Dropping this
+        // answer left those alerts waiting for a follow-up nobody scheduled.
+        val now = System.currentTimeMillis()
+        coalescer.onFinished(now)?.let {
+            if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now))
+        }
         refreshNotification()
     }
 
@@ -469,7 +482,7 @@ class CalendarRelayService : Service() {
             // Reaching the duration ends the ring without anyone asking.
             if (ring === session) stopRing("ring_finished")
         }
-        onAir { link ->
+        val sent = onAir { link ->
             link.ring(
                 intensity = session.match.preset.intensity,
                 gapMillis = session.settings.gapMillis.toLong(),
@@ -478,6 +491,7 @@ class CalendarRelayService : Service() {
                 result = airReply { finished(it) },
             )
         }
+        if (!sent) finished(RelayWorkerResult("failed", "WORKER_UNAVAILABLE"))
     }
 
     private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch,
@@ -516,6 +530,9 @@ class CalendarRelayService : Service() {
 
     private fun sendFollowUp() {
         if (stopping || !coalescer.hasFollowUp) return
+        // A ring started after this was scheduled. It keeps its hold and its
+        // place; stopRing schedules it again once the call is over.
+        if (ring != null) return
         val now = System.currentTimeMillis()
         val silence = RelayRuleStore.read(this).silence.reason(now)
         if (silence != null) { cancelWaiting(silence); return }
@@ -597,7 +614,7 @@ class CalendarRelayService : Service() {
         // session, so they land close enough together to read as a pattern,
         // and both play at the strength the rule asked for.
         val pulses = preset.pattern.pulses ?: 1
-        onAir { link ->
+        val sent = onAir { link ->
             if (pulses > 1) {
                 // A pattern is a short bounded ring: every pulse shares one
                 // session, so they land close enough together to read as one
@@ -626,6 +643,7 @@ class CalendarRelayService : Service() {
                 link.tap(preset.intensity, airReply { finished(it) })
             }
         }
+        if (!sent) finished(RelayWorkerResult("failed", "WORKER_UNAVAILABLE"))
     }
 
     /** Running commands and a waiting follow-up each hold the wake lock and watchdog. */
@@ -703,8 +721,11 @@ class CalendarRelayService : Service() {
         replies.forEach { it(RelayWorkerResult("failed", "SERVICE_STOPPED")) }
         ring = null
         handler.removeCallbacks(ringWatch)
-        unregisterReceiver(clockReceiver)
-        unregisterReceiver(userPresentReceiver)
+        // Guarded like the rest of this method: a receiver that never
+        // registered throws here, and taking onDestroy down with it loses
+        // every clean-up below.
+        runCatching { unregisterReceiver(clockReceiver) }
+        runCatching { unregisterReceiver(userPresentReceiver) }
         handler.removeCallbacks(silenceTick)
         handler.removeCallbacks(listenerWait)
         if (active === this) active = null
