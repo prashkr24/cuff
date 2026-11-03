@@ -7,6 +7,9 @@ import org.json.JSONObject
 internal object RelayRuleStore {
     const val DIALER = "com.google.android.dialer"
 
+    /** Compiled once; it is checked against every rule key on every write. */
+    private val PACKAGE_NAME = Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")
+
     private fun prefs(context: Context) = context.getSharedPreferences("relay_rules", Context.MODE_PRIVATE)
 
     @Synchronized fun read(context: Context): RelayRuleConfig {
@@ -144,7 +147,7 @@ internal object RelayRuleStore {
         require(!next.defaultPreset.callsOnly && next.apps.values.none { it.preset?.callsOnly == true }) {
             "Only calls can repeat."
         }
-        require(next.apps.keys.all { it != context.packageName && it.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")) })
+        require(next.apps.keys.all { it != context.packageName && it.matches(PACKAGE_NAME) })
         write(context, next)
         CalendarRelayService.active?.settingsChanged()
     }

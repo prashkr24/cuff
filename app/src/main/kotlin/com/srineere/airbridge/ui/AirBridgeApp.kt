@@ -1,5 +1,10 @@
 package com.srineere.airbridge.ui
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -20,9 +25,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
@@ -48,7 +58,9 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 
 @Composable
 fun AirBridgeApp() {
-    val state = rememberRelayState(LocalContext.current)
+    val context = LocalContext.current
+    WarmInstalledApps(context)
+    val state = rememberRelayState(context)
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination
@@ -176,6 +188,45 @@ fun AirBridgeApp() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Reads the installed apps off the main thread, and again when something is
+ * installed or removed.
+ *
+ * Without this the first screen that wants an app's name or icon pays for the
+ * whole list on the frame it is drawn, which on a phone with a hundred apps is
+ * several dropped frames before anything appears.
+ */
+@Composable
+private fun WarmInstalledApps(context: Context) {
+    val installed by InstalledApps.current.collectAsState()
+    LaunchedEffect(installed) {
+        if (installed == null) withContext(Dispatchers.IO) { InstalledApps.load(context) }
+    }
+    DisposableEffect(context) {
+        // Only while we are on screen. Installing something is the one thing
+        // that makes the list wrong, and it cannot happen while this is up
+        // without us being told.
+        val changes = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                InstalledApps.invalidate()
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            context.registerReceiver(changes, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(changes, filter)
+        }
+        onDispose { runCatching { context.unregisterReceiver(changes) } }
     }
 }
 

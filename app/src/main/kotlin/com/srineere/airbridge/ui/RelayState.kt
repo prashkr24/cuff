@@ -1,8 +1,6 @@
 package com.srineere.airbridge.ui
 
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.util.Base64
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -10,8 +8,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.RelayActivity
 import com.srineere.airbridge.RelayAppSelection
@@ -24,15 +20,6 @@ import com.srineere.airbridge.RelayRingSettings
 import com.srineere.airbridge.RelayRuleConfig
 import com.srineere.airbridge.RelayRuleStore
 import com.srineere.airbridge.SavedCaller
-
-/** One installed app, as the Apps screen needs it. */
-internal data class AppEntry(
-    val packageName: String,
-    val label: String,
-    val icon: ImageBitmap?,
-    val canCall: Boolean,
-    val namesCallers: Boolean,
-)
 
 /**
  * What a vibration screen is editing. Encoded into the route so the screen can
@@ -87,22 +74,20 @@ internal class RelayState(private val context: Context, private val invalidate: 
     val explainedOnlySaved: Boolean = context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
         .getBoolean("explained_only_saved", false)
 
-    val apps: List<AppEntry> by lazy {
-        RelayAppSelection.available(context).map { raw ->
-            AppEntry(
-                packageName = raw["packageName"].orEmpty(),
-                label = raw["label"].orEmpty(),
-                icon = raw["icon"]?.let { encoded ->
-                    runCatching {
-                        val bytes = Base64.decode(encoded, Base64.NO_WRAP)
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size).asImageBitmap()
-                    }.getOrNull()
-                },
-                canCall = raw["calls"] == "true",
-                namesCallers = raw["people"] == "true",
-            )
-        }
-    }
+    /**
+     * Held for the process, not for this instance: a new [RelayState] is built
+     * after every write, and rebuilding the installed-app list on each of them
+     * is what made the Apps screen stutter on every tap.
+     *
+     * Whatever has been read so far, and never a wait. The list is warmed off
+     * the main thread as the app opens; a screen drawn before it lands falls
+     * back to the package name for a frame, which is a better answer than
+     * freezing the first frame on a hundred binder calls.
+     */
+    val apps: List<AppEntry> get() = InstalledApps.current.value.orEmpty()
+
+    /** Whether [apps] is the real list yet, as against nothing read so far. */
+    val appsLoaded: Boolean get() = InstalledApps.current.value != null
 
     val history: List<RelayActivity> by lazy {
         // Only the moments worth showing: what actually reached the band.
@@ -121,8 +106,10 @@ internal class RelayState(private val context: Context, private val invalidate: 
     private fun changed() = invalidate()
 
     fun update(change: (RelayRuleConfig) -> RelayRuleConfig) {
+        // RelayRuleStore.update tells the relay itself; doing it again here
+        // made every switch re-read the config and rebuild the notification
+        // twice over.
         RelayRuleStore.update(context, change)
-        CalendarRelayService.active?.settingsChanged()
         changed()
     }
 
@@ -393,9 +380,13 @@ internal val LocalRelayState = staticCompositionLocalOf<RelayState> {
     error("No RelayState; wrap the screen in ProvideRelayState.")
 }
 
-/** Re-reads the stored rules whenever something writes to them. */
+/**
+ * Re-reads the stored rules whenever something writes to them, and again when
+ * the installed-app list is warmed or something is installed.
+ */
 @Composable
 internal fun rememberRelayState(context: Context): RelayState {
     var revision by remember { mutableIntStateOf(0) }
-    return remember(revision) { RelayState(context) { revision++ } }
+    val installed by InstalledApps.current.collectAsState()
+    return remember(revision, installed) { RelayState(context) { revision++ } }
 }

@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.srineere.airbridge.RelayAppRule
 import com.srineere.airbridge.RelayConversationPolicy
 import com.srineere.airbridge.ui.theme.extras
 
@@ -56,11 +57,27 @@ internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     var openOn by remember { mutableStateOf(true) }
     var openOff by remember { mutableStateOf(false) }
 
+    val apps = state.apps
+    val config = state.config
+    val dialer = state.dialer
+    // Read once. This is a getter that builds a map and a set every time, and
+    // it used to be read inside the partition below -- so once per app, on
+    // every frame.
+    val selected = config.selectedPackages
+
     // The dialer is not one of these. Calls own it, and a second switch for
     // the same setting is a pair of controls that will disagree.
-    val matching = state.apps
-        .filter { it.packageName != state.dialer && it.label.contains(query, ignoreCase = true) }
-    val (on, off) = matching.partition { it.packageName in state.config.selectedPackages }
+    val matching = remember(apps, query, dialer) {
+        apps.filter { it.packageName != dialer && it.label.contains(query, ignoreCase = true) }
+    }
+    val (on, off) = remember(matching, selected) {
+        matching.partition { it.packageName in selected }
+    }
+    // One pass over the saved callers, rather than a filter and a sort of all
+    // of them inside every row that is open.
+    val callers = remember(config.callers) {
+        config.callers.values.groupingBy { it.packageName }.eachCount()
+    }
 
     // A search whose matches sit inside a shut section looks broken, so
     // searching opens both. Off opens by itself when nothing is on yet, or
@@ -102,16 +119,32 @@ internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             if (on.isNotEmpty()) {
                 item("on") { SectionToggle("On", on.size, showOn) { openOn = !openOn } }
                 if (showOn) items(on, key = { "on:" + it.packageName }) { app ->
-                    AppRow(app, enabled = true, state = state, onOpen = onOpen)
+                    AppRow(
+                        app = app,
+                        enabled = true,
+                        rule = config.apps[app.packageName],
+                        callers = callers[app.packageName] ?: 0,
+                        onToggle = { state.setAppEnabled(app.packageName, it) },
+                        onOpen = onOpen,
+                    )
                 }
             }
             if (off.isNotEmpty()) {
                 item("off") { SectionToggle("Off", off.size, showOff) { openOff = !openOff } }
                 if (showOff) items(off, key = { "off:" + it.packageName }) { app ->
-                    AppRow(app, enabled = false, state = state, onOpen = onOpen)
+                    AppRow(
+                        app = app,
+                        enabled = false,
+                        rule = config.apps[app.packageName],
+                        callers = callers[app.packageName] ?: 0,
+                        onToggle = { state.setAppEnabled(app.packageName, it) },
+                        onOpen = onOpen,
+                    )
                 }
             }
-            if (matching.isEmpty()) {
+            // Only once there is a list to have matched against: before it
+            // lands, nothing matching is not the same as nothing found.
+            if (matching.isEmpty() && state.appsLoaded) {
                 item("none") {
                     Text(
                         "No app by that name.",
@@ -165,31 +198,48 @@ private fun SectionToggle(text: String, count: Int, open: Boolean, onToggle: () 
  * tapping the other.
  */
 @Composable
-private fun AppRow(app: AppEntry, enabled: Boolean, state: RelayState, onOpen: (String) -> Unit) {
+private fun AppRow(
+    app: AppEntry,
+    enabled: Boolean,
+    rule: RelayAppRule?,
+    callers: Int,
+    onToggle: (Boolean) -> Unit,
+    onOpen: (String) -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { state.setAppEnabled(app.packageName, !enabled) }
+            .clickable { onToggle(!enabled) }
             // The switch sets the height on its own, so the row adds almost
             // nothing: a long list of apps is mostly scrolling.
             .padding(horizontal = 20.dp, vertical = 1.dp),
     ) {
         AppIcon(app, size = 34)
         Text(app.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Switch(checked = enabled, onCheckedChange = { state.setAppEnabled(app.packageName, it) })
+        Switch(checked = enabled, onCheckedChange = onToggle)
     }
     if (enabled) {
-        AlertKinds(app, state, onOpen)
+        AlertKinds(app, rule, callers, onOpen)
         Spacer(Modifier.height(4.dp))
     }
 }
 
-/** The kinds of alert this app can produce, and what each one feels like. */
+/**
+ * The kinds of alert this app can produce, and what each one feels like.
+ *
+ * Takes the app's rule and its number of saved callers rather than the whole
+ * [RelayState]: that is a plain class, so a row holding one can never be
+ * skipped, and a screen of them all recomposed whenever anything was written.
+ */
 @Composable
-private fun AlertKinds(app: AppEntry, state: RelayState, onOpen: (String) -> Unit) {
-    val rule = state.config.apps[app.packageName]
+private fun AlertKinds(
+    app: AppEntry,
+    rule: RelayAppRule?,
+    callers: Int,
+    onOpen: (String) -> Unit,
+) {
     // Only apps that name a caller get a list of people; elsewhere a
     // per-person rule would be a promise we could not keep.
     val names = app.namesCallers || app.packageName in RelayConversationPolicy.packages
@@ -221,12 +271,11 @@ private fun AlertKinds(app: AppEntry, state: RelayState, onOpen: (String) -> Uni
                 },
             )
             if (names) {
-                val saved = state.callers(app.packageName)
                 AlertRow(
                     icon = Icons.Outlined.People,
                     title = "People",
-                    value = if (saved.isEmpty()) "Nobody yet"
-                        else "${saved.size} with their own rule",
+                    value = if (callers == 0) "Nobody yet"
+                        else "$callers with their own rule",
                     onClick = { onOpen("appcallers/" + app.packageName) },
                 )
             }
