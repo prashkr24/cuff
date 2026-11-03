@@ -82,6 +82,7 @@ fun SettingsRow(
     subtitle: String? = null,
     icon: ImageVector? = null,
     onClick: (() -> Unit)? = null,
+    leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -104,7 +105,8 @@ fun SettingsRow(
             .heightIn(min = 56.dp)
             .padding(horizontal = 20.dp, vertical = 10.dp),
     ) {
-        if (icon != null) {
+        if (leading != null) leading()
+        else if (icon != null) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier

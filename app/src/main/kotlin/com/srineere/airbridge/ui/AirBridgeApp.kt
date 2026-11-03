@@ -19,9 +19,16 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.NamedNavArgument
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -41,6 +48,7 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 
 @Composable
 fun AirBridgeApp() {
+    val state = rememberRelayState(LocalContext.current)
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination
@@ -82,30 +90,53 @@ fun AirBridgeApp() {
             }
         },
     ) { insets ->
-        NavHost(
-            navController = nav,
-            startDestination = Tab.Notifications.route,
-            modifier = Modifier.fillMaxSize().padding(insets),
-            // Tabs cross-fade; pushed screens slide, which is set per route.
-            enterTransition = { fadeIn(tween(180)) },
-            exitTransition = { fadeOut(tween(180)) },
-        ) {
-            composable(Tab.Notifications.route) { NotificationsScreen(onOpen = nav::navigate) }
-            composable(Tab.Device.route) { DeviceScreen(onOpen = nav::navigate) }
+        CompositionLocalProvider(LocalRelayState provides state) {
+            NavHost(
+                navController = nav,
+                startDestination = Tab.Notifications.route,
+                modifier = Modifier.fillMaxSize().padding(insets),
+                // Tabs cross-fade; pushed screens slide, set per route below.
+                enterTransition = { fadeIn(tween(180)) },
+                exitTransition = { fadeOut(tween(180)) },
+            ) {
+                composable(Tab.Notifications.route) { NotificationsScreen(onOpen = nav::navigate) }
+                composable(Tab.Device.route) { DeviceScreen(onOpen = nav::navigate) }
 
-            pushed("apps") { AppsScreen(onBack = nav::popBackStack) }
-            pushed("people") { PeopleScreen(onBack = nav::popBackStack) }
-            pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }
+                pushed("apps") { AppsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed("people") { PeopleScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }
+                pushed(
+                    route = "app/{packageName}",
+                    arguments = listOf(navArgument("packageName") { type = NavType.StringType }),
+                ) { entry ->
+                    AppDetailScreen(
+                        packageName = entry.arguments?.getString("packageName").orEmpty(),
+                        onBack = nav::popBackStack,
+                        onOpen = nav::navigate,
+                    )
+                }
+                pushed(
+                    route = "vibration/{target}",
+                    arguments = listOf(navArgument("target") { type = NavType.StringType }),
+                ) { entry ->
+                    VibrationScreen(
+                        target = VibrationTarget.decode(entry.arguments?.getString("target").orEmpty()),
+                        onBack = nav::popBackStack,
+                    )
+                }
+            }
         }
     }
 }
 
 /** A screen pushed over a tab: slides in from the trailing edge, back reverses it. */
-private fun androidx.navigation.NavGraphBuilder.pushed(
+private fun NavGraphBuilder.pushed(
     route: String,
-    content: @Composable () -> Unit,
+    arguments: List<NamedNavArgument> = emptyList(),
+    content: @Composable (NavBackStackEntry) -> Unit,
 ) = composable(
     route = route,
+    arguments = arguments,
     enterTransition = {
         slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, spring(stiffness = 420f))
     },
@@ -118,4 +149,4 @@ private fun androidx.navigation.NavGraphBuilder.pushed(
     popExitTransition = {
         slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, spring(stiffness = 420f))
     },
-) { Box(Modifier.fillMaxSize()) { content() } }
+) { entry -> Box(Modifier.fillMaxSize()) { content(entry) } }
