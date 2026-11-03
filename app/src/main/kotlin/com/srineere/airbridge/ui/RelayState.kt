@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -70,7 +71,6 @@ internal sealed interface VibrationTarget {
  */
 internal class RelayState(private val context: Context, private val invalidate: () -> Unit) {
     val config: RelayRuleConfig = RelayRuleStore.read(context)
-    val running: Boolean = CalendarRelayService.isRunning
     val outcome: String? = context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
         .getString("outcome", null)
 
@@ -217,6 +217,10 @@ internal class RelayState(private val context: Context, private val invalidate: 
         private val SHOWN_STAGES = setOf("verified", "failed", "ring_started", "ring_stopped")
     }
 }
+
+/** The relay's live up or down, as the service publishes it. */
+@Composable
+internal fun relayRunning(): Boolean = CalendarRelayService.running.collectAsState().value
 
 internal val LocalRelayState = staticCompositionLocalOf<RelayState> {
     error("No RelayState; wrap the screen in ProvideRelayState.")

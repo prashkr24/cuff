@@ -6,9 +6,9 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,22 +20,32 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BatteryStd
+import androidx.compose.material.icons.outlined.Bluetooth
+import androidx.compose.material.icons.outlined.BluetoothDisabled
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.SignalCellularAlt
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Vibration
+import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.CalendarRelayService
@@ -52,6 +63,8 @@ import com.srineere.airbridge.ui.theme.ThemeMode
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.ui.theme.isAvailable
 import dev.airpulse.fitbit_air.airResult
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun DeviceScreen(onOpen: (String) -> Unit) {
@@ -62,7 +75,7 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Device")
 
-        BandCard(state)
+        BandCard(running = relayRunning())
 
         SectionHeader("Appearance")
         Row(
@@ -116,106 +129,271 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
     }
 }
 
+/** Where Buzz the band is in its one short round trip. */
+private enum class Buzz { Idle, Sending, Sent }
+
 /**
  * The band's own state. Every read goes through the running relay, because the
  * relay owns the Bluetooth transport: a second link from the UI would fight it
- * for the same single session.
+ * for the same single session. Nothing here is live for the same reason, so
+ * every reading carries the moment it was taken.
  */
 @Composable
-private fun BandCard(state: RelayState) {
+private fun BandCard(running: Boolean) {
+    var connected by remember { mutableStateOf<Boolean?>(null) }
     var battery by remember { mutableStateOf<Int?>(null) }
+    var batteryAt by remember { mutableLongStateOf(0L) }
+    var rssi by remember { mutableStateOf<Int?>(null) }
+    var rssiAt by remember { mutableLongStateOf(0L) }
+    var syncing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var reading by remember { mutableStateOf(false) }
+    var buzz by remember { mutableStateOf(Buzz.Idle) }
 
-    fun refresh() {
+    fun sync() {
         val relay = CalendarRelayService.active
         if (relay == null) {
             message = "Start the relay to reach the band"
             return
         }
-        reading = true
+        if (syncing) return
+        syncing = true
+        message = null
+        relay.readConnection(airResult(
+            onSuccess = { connected = it as? Boolean },
+            onError = { _, _ -> connected = null },
+        ))
+        // One at a time: the band holds a single session, so the signal read
+        // waits for the battery read rather than racing it.
         relay.readBattery(airResult(
             onSuccess = { value ->
-                reading = false
                 battery = (value as? Map<*, *>)?.get("percent") as? Int
-                message = if (battery == null) "The band did not report a level" else null
+                batteryAt = System.currentTimeMillis()
+                relay.readSignal(airResult(
+                    onSuccess = { reading ->
+                        syncing = false
+                        rssi = (reading as? Map<*, *>)?.get("rssi") as? Int
+                        rssiAt = System.currentTimeMillis()
+                    },
+                    onError = { code, _ -> syncing = false; message = explain(code) },
+                ))
             },
-            onError = { code, _ ->
-                reading = false
-                message = when (code) {
-                    "BUSY" -> "Busy delivering a notification; try again shortly"
-                    "BLUETOOTH_PERMISSION" -> "Nearby devices permission is needed"
-                    "AIR_NOT_FOUND" -> "Pair your Air in Google Health first"
-                    else -> "Could not reach the band"
-                }
-            },
+            onError = { code, _ -> syncing = false; message = explain(code) },
         ))
     }
 
-    LaunchedEffect(state.running) { if (state.running) refresh() }
+    fun buzzBand() {
+        val relay = CalendarRelayService.active
+        if (relay == null) {
+            message = "Start the relay to reach the band"
+            return
+        }
+        if (buzz != Buzz.Idle) return
+        message = null
+        buzz = Buzz.Sending
+        runCatching {
+            relay.testPulse { result ->
+                buzz = if (result.stage == "verified") Buzz.Sent else Buzz.Idle
+                if (result.stage != "verified") message = explain(result.errorCode)
+            }
+        }.onFailure {
+            buzz = Buzz.Idle
+            message = it.message
+        }
+    }
 
-    Box(Modifier.padding(top = 10.dp)) {
-        AccentCard {
-            Column(Modifier.fillMaxWidth().padding(18.dp)) {
+    // "Sent" is a confirmation, not a state: it says its piece and goes.
+    LaunchedEffect(buzz) {
+        if (buzz == Buzz.Sent) {
+            delay(2_000)
+            buzz = Buzz.Idle
+        }
+    }
+    LaunchedEffect(running) { if (running) sync() }
+
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) {
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(52.dp).clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                Icon(
+                    Icons.Outlined.Watch,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "YOUR BAND",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text("Fitbit Air", style = MaterialTheme.typography.titleLarge)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 3.dp),
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Fitbit Air", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            message ?: when {
-                                reading -> "Reading…"
-                                battery != null -> "Connected"
-                                else -> "Not read yet"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
-                    battery?.let { percent ->
-                        Text("$percent%", style = MaterialTheme.typography.titleLarge)
-                    }
-                }
-
-                battery?.let { percent ->
-                    Box(
-                        Modifier
-                            .padding(top = 14.dp)
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(percent.coerceIn(0, 100) / 100f)
-                                .height(6.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.extras.positive)
-                        )
-                    }
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 16.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            runCatching { CalendarRelayService.active?.testPulse() }
-                                .onFailure { message = it.message }
+                    // A failure takes this line, so the readings never have to
+                    // carry an error beside a number that is no longer true.
+                    Icon(
+                        if (connected == true) Icons.Outlined.Bluetooth
+                        else Icons.Outlined.BluetoothDisabled,
+                        contentDescription = null,
+                        tint = if (connected == true) MaterialTheme.extras.positive
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Text(
+                        message ?: when {
+                            // Nothing can be asked of the band while the relay
+                            // is down, so say that rather than "unknown".
+                            !running -> "Start the relay to reach the band"
+                            connected == true -> "Connected"
+                            connected == false -> "Not connected"
+                            else -> "Connection unknown"
                         },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Outlined.Vibration, contentDescription = null)
-                        Text("  Buzz the band")
-                    }
-                    OutlinedButton(onClick = { refresh() }) { Text("Refresh") }
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            IconButton(onClick = { sync() }, enabled = !syncing) {
+                if (syncing) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(19.dp),
+                    )
+                } else {
+                    Icon(
+                        Icons.Outlined.Sync,
+                        contentDescription = "Check the band again",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(19.dp),
+                    )
                 }
             }
         }
+
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(vertical = 18.dp),
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Metric(
+                icon = Icons.Outlined.BatteryStd,
+                label = "Battery",
+                value = battery?.let { "$it%" } ?: "\u2014",
+                detail = if (batteryAt == 0L) "Not checked yet" else "Checked ${since(batteryAt)}",
+                modifier = Modifier.weight(1f),
+            )
+            Metric(
+                icon = Icons.Outlined.SignalCellularAlt,
+                label = "Signal",
+                value = rssi?.let { strength(it) } ?: "\u2014",
+                detail = rssi?.let { "$it dBm \u00b7 ${since(rssiAt)}" } ?: "Not checked yet",
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        OutlinedButton(
+            onClick = { buzzBand() },
+            modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
+        ) {
+            when (buzz) {
+                Buzz.Sending -> CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(17.dp),
+                )
+                Buzz.Sent -> Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Buzz.Idle -> Icon(Icons.Outlined.Vibration, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                when (buzz) {
+                    Buzz.Sending -> "  Sending\u2026"
+                    Buzz.Sent -> "  Sent"
+                    Buzz.Idle -> "  Buzz the band"
+                }
+            )
+        }
     }
+}
+
+@Composable
+private fun Metric(
+    icon: ImageVector,
+    label: String,
+    value: String?,
+    detail: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // A missing reading stays blank rather than showing a dash: at this
+        // size a dash draws a rule across the card, and the line underneath
+        // already says it has not been read. The height is held either way so
+        // the two tiles keep one baseline.
+        Box(Modifier.padding(top = 5.dp).height(34.dp), contentAlignment = Alignment.CenterStart) {
+            if (value != null) Text(value, style = MaterialTheme.typography.headlineSmall)
+        }
+        Text(
+            detail,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.extras.disabled,
+            modifier = Modifier.padding(top = 3.dp),
+        )
+    }
+}
+
+/** A proximity hint, not a measurement, so it is worded as one. */
+private fun strength(rssi: Int): String = when {
+    rssi >= -60 -> "Strong"
+    rssi >= -80 -> "Good"
+    else -> "Weak"
+}
+
+private fun since(atMillis: Long): String {
+    val delta = (System.currentTimeMillis() - atMillis).coerceAtLeast(0)
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(delta)
+    val hours = TimeUnit.MILLISECONDS.toHours(delta)
+    return when {
+        minutes < 1 -> "just now"
+        minutes < 60 -> "$minutes min ago"
+        hours < 24 -> "$hours hr ago"
+        else -> "${TimeUnit.MILLISECONDS.toDays(delta)} d ago"
+    }
+}
+
+private fun explain(code: String?): String = when (code) {
+    "BUSY" -> "Busy delivering a notification; try again shortly"
+    "BLUETOOTH_PERMISSION" -> "Nearby devices permission is needed"
+    "AIR_NOT_FOUND" -> "Pair your Air in Google Health first"
+    "NOT_RUNNING" -> "Start the relay to reach the band"
+    else -> "Could not reach the band"
 }
 
 /** What the Permissions row says without having to be opened. */

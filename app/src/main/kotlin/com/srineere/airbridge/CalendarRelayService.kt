@@ -1,5 +1,8 @@
 package com.srineere.airbridge
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import android.Manifest
 import android.bluetooth.BluetoothManager
 import android.content.pm.PackageManager
@@ -534,6 +537,17 @@ class CalendarRelayService : Service() {
         end()
     }
 
+    /**
+     * Whether the band is linked right now. Unlike the readings below this
+     * asks the adapter rather than the band, so it costs no session and does
+     * not queue behind a notification.
+     */
+    internal fun readConnection(reply: AirResult) {
+        val link = air
+        if (link == null) reply.error("NOT_RUNNING", "The relay is not running.", null)
+        else link.isAirConnected(reply)
+    }
+
     internal fun readBattery(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readBattery(r) }
     internal fun readSignal(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readSignalStrength(r) }
     internal fun readDeviceInfo(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readDeviceInfo(r) }
@@ -713,8 +727,21 @@ class CalendarRelayService : Service() {
 
     companion object {
         private var starting = false
+            set(value) { field = value; publishRunning() }
         private var cancelStart = false
         val isRunning: Boolean get() = active != null || starting
+
+        private val _running = MutableStateFlow(false)
+
+        /**
+         * Whether the relay is up, as something a screen can watch. A snapshot
+         * taken when the screen was built goes stale the moment the service
+         * stops itself -- which it does whenever it cannot run -- and leaves
+         * the screen claiming to relay something it is not.
+         */
+        val running: StateFlow<Boolean> = _running.asStateFlow()
+
+        private fun publishRunning() { _running.value = active != null || starting }
 
         private const val PREFS = "calendar_relay"
         private const val LISTENER_WAIT_MILLIS = 90_000L
@@ -769,7 +796,7 @@ class CalendarRelayService : Service() {
         private const val PAUSE = "calendar_relay.PAUSE"
         private const val RESUME = "calendar_relay.RESUME"
         var active: CalendarRelayService? = null
-            private set
+            private set(value) { field = value; publishRunning() }
 
         fun hasAccess(context: Context): Boolean {
             val expected = ComponentName(context, CalendarNotificationListener::class.java)

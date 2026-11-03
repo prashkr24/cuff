@@ -90,11 +90,12 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
     // Start cannot mean anything until Android has let us in, so when
     // something is missing the button goes there instead of failing.
     val context = LocalContext.current
+    val running = relayRunning()
     val blocking = remember(resumeTicks()) { blockingGrants(context) }
     val paused = state.config.silence.reason(System.currentTimeMillis()) != null
     val dot by animateColorAsState(
         when {
-            !state.running -> MaterialTheme.colorScheme.onSurfaceVariant
+            !running -> MaterialTheme.colorScheme.onSurfaceVariant
             paused || blocking > 0 -> MaterialTheme.extras.disabled
             else -> MaterialTheme.extras.positive
         },
@@ -112,7 +113,7 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         when {
-                            !state.running -> "Not running"
+                            !running -> "Not running"
                             paused -> "Paused"
                             else -> "Relaying"
                         },
@@ -124,7 +125,7 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
                             // has not let near Bluetooth reaches nothing.
                             blocking > 0 ->
                                 "$blocking thing${if (blocking == 1) "" else "s"} still to allow"
-                            state.running -> appsSummary(state)
+                            running -> appsSummary(state)
                             else -> state.outcome ?: "Start to relay to your Air"
                         },
                         style = MaterialTheme.typography.bodyMedium,
@@ -134,8 +135,8 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
                 OutlinedButton(
                     onClick = {
                         when {
-                            blocking > 0 && !state.running -> onOpen("permissions")
-                            !state.running -> state.start()
+                            blocking > 0 && !running -> onOpen("permissions")
+                            !running -> state.start()
                             paused -> state.pause(false)
                             else -> state.pause(true)
                         }
@@ -143,8 +144,8 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
                 ) {
                     Text(
                         when {
-                            blocking > 0 && !state.running -> "Allow"
-                            !state.running -> "Start"
+                            blocking > 0 && !running -> "Allow"
+                            !running -> "Start"
                             paused -> "Resume"
                             else -> "Pause"
                         }
