@@ -47,10 +47,67 @@ internal class RelayActivityBuffer(initial: List<RelayActivity> = emptyList()) {
 }
 
 internal object RelayHistory {
-    fun read(context: Context): List<RelayActivity> = runCatching {
-        val text = context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
-            .getString("history", "[]") ?: "[]"
-        val array = JSONArray(text)
+    private const val PREFS = "calendar_relay"
+    private const val KEY = "history"
+
+    /**
+     * The history once it has been read.
+     *
+     * Adding an entry used to mean parsing the hundred already stored and
+     * encoding all of them again. One relayed call records four times and a
+     * burst of messages more, each of them on the service's main looper while
+     * it was trying to buzz the band.
+     *
+     * The file is still written on every add -- a history that loses its last
+     * entry is worthless exactly when someone wants it -- but only the
+     * encoding is paid for now, and SharedPreferences already puts the disk
+     * write on a thread of its own.
+     *
+     * Safe to hold because the relay and the screens share one process; the
+     * manifest declares no other. It does mean a file changed from outside
+     * is not noticed until the process restarts.
+     */
+    private var held: RelayActivityBuffer? = null
+
+    @Synchronized
+    fun read(context: Context): List<RelayActivity> = loaded(context).snapshot()
+
+    @Synchronized
+    fun add(context: Context, entry: RelayActivity) {
+        val history = loaded(context)
+        history.add(entry)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY, encode(history.snapshot()).toString()).apply()
+    }
+
+    @Synchronized
+    fun clear(context: Context) {
+        held = RelayActivityBuffer()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).apply()
+    }
+
+    private fun loaded(context: Context): RelayActivityBuffer = held ?: RelayActivityBuffer(
+        // A file we cannot read is one we start again from, rather than one
+        // that stops the relay recording anything.
+        runCatching {
+            decode(JSONArray(
+                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "[]") ?: "[]"
+            ))
+        }.getOrDefault(emptyList())
+    ).also { held = it }
+
+    /** The on-device shape: [RelayActivity.toStored] for each entry. */
+    internal fun encode(entries: List<RelayActivity>): JSONArray {
+        val array = JSONArray()
+        entries.forEach { event ->
+            val objectValue = JSONObject()
+            event.toStored().forEach { (key, value) -> objectValue.put(key, value ?: JSONObject.NULL) }
+            array.put(objectValue)
+        }
+        return array
+    }
+
+    internal fun decode(array: JSONArray): List<RelayActivity> =
         (maxOf(0, array.length() - 100) until array.length()).map { i ->
             val value = array.getJSONObject(i)
             RelayActivity(value.getString("commandId"),
@@ -62,25 +119,6 @@ internal object RelayHistory {
                 if (value.isNull("preset")) null else value.getString("preset"),
                 if (value.isNull("callerId")) null else value.getString("callerId"))
         }
-    }.getOrDefault(emptyList())
-
-    fun add(context: Context, entry: RelayActivity) {
-        val buffer = RelayActivityBuffer(read(context))
-        buffer.add(entry)
-        val array = JSONArray()
-        buffer.snapshot().forEach { event ->
-            val objectValue = JSONObject()
-            event.toStored().forEach { (key, value) -> objectValue.put(key, value ?: JSONObject.NULL) }
-            array.put(objectValue)
-        }
-        context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
-            .edit().putString("history", array.toString()).apply()
-    }
-
-    fun clear(context: Context) {
-        context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
-            .edit().remove("history").apply()
-    }
 }
 
 internal data class RelayWorkerResult(val stage: String, val errorCode: String?) {

@@ -12,6 +12,28 @@ class RelayActivityTest {
         assertEquals("command-119", buffer.snapshot().last().commandId)
     }
 
+    // The buffer is now held in memory between adds, so what is encoded to the
+    // file and what is decoded back out have to stay the same thing: a drift
+    // between them would only show up as history that reads wrong after a
+    // restart, long after the change that caused it.
+    @Test fun theStoredHistorySurvivesARoundTrip() {
+        val entries = listOf(
+            RelayActivity("command-1", "com.whatsapp", "verified", 100, 20, preset = "one:3", callerId = "hash"),
+            RelayActivity("command-2", null, "failed", 200, null, "TIMEOUT"),
+        )
+        assertEquals(entries, RelayHistory.decode(RelayHistory.encode(entries)))
+    }
+
+    @Test fun theStoredHistoryKeepsOnlyTheNewestHundred() {
+        val entries = (0 until 120).map {
+            RelayActivity("command-$it", "com.whatsapp", "queued", it.toLong())
+        }
+        val back = RelayHistory.decode(RelayHistory.encode(entries))
+        assertEquals(100, back.size)
+        assertEquals("command-20", back.first().commandId)
+        assertEquals("command-119", back.last().commandId)
+    }
+
     @Test fun historyOnlyExposesMetadataFields() {
         val value = RelayActivity("command-1", "com.whatsapp", "verified", 100, 20).toMap()
         assertEquals(setOf("commandId", "sourcePackage", "stage", "atMillis", "latencyMillis", "errorCode", "preset"), value.keys)
