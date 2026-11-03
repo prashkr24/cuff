@@ -104,6 +104,7 @@ fun AirBridgeApp() {
 
                 pushed("apps") { AppsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("calls") { CallsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed("people") { PeopleScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("contacts") { ContactsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed(
                     route = "contacts/{source}",

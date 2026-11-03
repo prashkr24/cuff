@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +43,12 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
             subtitle = appsSummary(state),
             icon = Icons.Outlined.Apps,
             onClick = { onOpen("apps") },
+        )
+        SettingsRow(
+            title = "People",
+            subtitle = peopleSummary(state),
+            icon = Icons.Outlined.People,
+            onClick = { onOpen("people") },
         )
         if (state.history.isNotEmpty()) {
             SectionHeader("Recent")

@@ -79,14 +79,20 @@ fun ScreenTitle(title: String, subtitle: String? = null, onBack: (() -> Unit)? =
 
 @Composable
 fun SectionHeader(text: String, action: String? = null, onAction: (() -> Unit)? = null) = Row(
-    verticalAlignment = Alignment.Bottom,
-    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 22.dp, bottom = 2.dp),
+    // Centred, not bottom-aligned: a trailing button is a 48dp touch target
+    // whose label sits in the middle of it, so aligning the boxes' bottoms
+    // left the action floating a line above its own heading.
+    verticalAlignment = Alignment.CenterVertically,
+    modifier = Modifier.fillMaxWidth().padding(
+        start = 20.dp, end = 8.dp,
+        top = if (action == null) 22.dp else 12.dp, bottom = 2.dp,
+    ),
 ) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.weight(1f).padding(bottom = 2.dp),
+        modifier = Modifier.weight(1f),
     )
     if (action != null && onAction != null) {
         TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {

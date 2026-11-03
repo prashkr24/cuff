@@ -29,9 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** How many of a group the Calls screen shows before handing over to its list. */
-private const val PREVIEW = 3
-
 /**
  * A call is a kind of alert, not an app. The relay always knew that -- it
  * sorts every notification into a call or a message -- but the UI used to make
@@ -63,7 +60,8 @@ internal fun CallsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         AnimatedVisibility(visible = callsOn) {
             Column {
                 SettingsRow(
-                    title = "How calls ring",
+                    // Phone, because app calls have their own default now.
+                    title = "How phone calls ring",
                     subtitle = describe(state.config.defaultCallPreset),
                     icon = Icons.Outlined.Call,
                     onClick = { onOpen("vibration/" + VibrationTarget.DefaultCall.encode()) },
@@ -86,18 +84,14 @@ internal fun CallsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     },
                 )
 
-                // Above the groups, because this is how a rule gets made while
-                // they are only what has been made already.
+                // A shortcut, not a second home: the rules themselves live
+                // under People, because they hold for apps as well.
                 SettingsRow(
-                    title = "All contacts",
-                    subtitle = "Give someone a buzz before they ring",
+                    title = "People",
+                    subtitle = peopleSummary(state),
                     icon = Icons.Outlined.People,
-                    onClick = { onOpen("contacts") },
+                    onClick = { onOpen("people") },
                 )
-
-                CallerGroup.entries.forEach { group ->
-                    Group(group, onOpen)
-                }
             }
         }
 
@@ -172,22 +166,3 @@ private fun OnlySavedDialog(onCancel: () -> Unit, onConfirm: (Boolean) -> Unit) 
     )
 }
 
-/**
- * The first few of a group, with a way to the rest. The point of this screen
- * is to see at a glance who is different, not to scroll a directory.
- */
-@Composable
-private fun Group(group: CallerGroup, onOpen: (String) -> Unit) {
-    val state = LocalRelayState.current
-    val people = state.group(group)
-    if (people.isEmpty()) return
-
-    SectionHeader(
-        text = group.title,
-        action = if (people.size > PREVIEW) "View all ${people.size}" else null,
-        onAction = { onOpen("callers/${group.route}") },
-    )
-    people.take(PREVIEW).forEach { (id, caller) ->
-        CallerRow(id, caller, state, onOpen, forgettable = group != CallerGroup.Recent)
-    }
-}
