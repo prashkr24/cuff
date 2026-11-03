@@ -457,10 +457,12 @@ class CalendarRelayService : Service() {
         begin()
         refreshDeadline()
         inFlight[id] = session.packageName to session.startedAt
-        record(id, session.packageName, session.startedAt, "queued", match = session.match)
+        record(id, session.packageName, session.startedAt, "queued", match = session.match,
+            callerId = session.callerId)
         fun finished(result: RelayWorkerResult) {
             inFlight.remove(id)
-            record(id, session.packageName, session.startedAt, result.stage, result.errorCode, session.match)
+            record(id, session.packageName, session.startedAt, result.stage, result.errorCode,
+                session.match, session.callerId)
             Log.i(TAG, "ring result stage=${result.stage} code=${result.errorCode}")
             saveOutcome("Ring ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             end()

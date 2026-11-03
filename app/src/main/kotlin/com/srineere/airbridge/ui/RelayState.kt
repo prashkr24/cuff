@@ -375,7 +375,13 @@ internal class RelayState(private val context: Context, private val invalidate: 
         /** The address book, as identities. Read once; it rarely changes. */
         private var addressBook: Map<String, String>? = null
 
-        private val SHOWN_STAGES = setOf("verified", "failed", "ring_started", "ring_stopped")
+        /**
+         * What reached the band, and what did not. A ring also opens and
+         * closes, which the relay records because it has to know; but one
+         * phone call is one thing that happened, and the wearer did not feel
+         * it start, repeat and end as three separate events.
+         */
+        private val SHOWN_STAGES = setOf("verified", "failed")
     }
 }
 
