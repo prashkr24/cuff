@@ -22,7 +22,7 @@ android {
     defaultConfig {
         // Final: Play and GitHub releases share this ID; it can never change.
         applicationId = "com.srineere.airbridge"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 36
         versionCode = 24
         versionName = "0.3.0"
