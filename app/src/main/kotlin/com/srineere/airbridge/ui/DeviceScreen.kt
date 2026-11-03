@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Icon
@@ -89,6 +90,12 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
         }
 
         SectionHeader("Band")
+        SettingsRow(
+            title = "Permissions",
+            subtitle = permissionsSummary(),
+            icon = Icons.Outlined.Lock,
+            onClick = { onOpen("permissions") },
+        )
         SettingsRow(
             title = "Home screen widgets",
             subtitle = "Band battery and last buzz",
@@ -208,6 +215,18 @@ private fun BandCard(state: RelayState) {
                 }
             }
         }
+    }
+}
+
+/** What the Permissions row says without having to be opened. */
+@Composable
+private fun permissionsSummary(): String {
+    val context = LocalContext.current
+    val blocking = remember(resumeTicks()) { blockingGrants(context) }
+    return when (blocking) {
+        0 -> "Everything the relay needs is allowed"
+        1 -> "One thing still to allow"
+        else -> "$blocking things still to allow"
     }
 }
 

@@ -22,9 +22,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayPattern
 import com.srineere.airbridge.RelayPreset
@@ -39,7 +41,7 @@ internal fun NotificationsScreen(onOpen: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Notifications")
 
-        RelayStatusCard(state)
+        RelayStatusCard(state, onOpen)
 
         SectionHeader("Rules")
 
@@ -84,12 +86,16 @@ internal fun NotificationsScreen(onOpen: (String) -> Unit) {
 }
 
 @Composable
-private fun RelayStatusCard(state: RelayState) {
+private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
+    // Start cannot mean anything until Android has let us in, so when
+    // something is missing the button goes there instead of failing.
+    val context = LocalContext.current
+    val blocking = remember(resumeTicks()) { blockingGrants(context) }
     val paused = state.config.silence.reason(System.currentTimeMillis()) != null
     val dot by animateColorAsState(
         when {
             !state.running -> MaterialTheme.colorScheme.onSurfaceVariant
-            paused -> MaterialTheme.extras.disabled
+            paused || blocking > 0 -> MaterialTheme.extras.disabled
             else -> MaterialTheme.extras.positive
         },
         label = "relayDot",
@@ -113,7 +119,14 @@ private fun RelayStatusCard(state: RelayState) {
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        if (state.running) appsSummary(state) else (state.outcome ?: "Start to relay to your Air"),
+                        when {
+                            // Worth saying even while running: a relay Android
+                            // has not let near Bluetooth reaches nothing.
+                            blocking > 0 ->
+                                "$blocking thing${if (blocking == 1) "" else "s"} still to allow"
+                            state.running -> appsSummary(state)
+                            else -> state.outcome ?: "Start to relay to your Air"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 2.dp),
                     )
@@ -121,6 +134,7 @@ private fun RelayStatusCard(state: RelayState) {
                 OutlinedButton(
                     onClick = {
                         when {
+                            blocking > 0 && !state.running -> onOpen("permissions")
                             !state.running -> state.start()
                             paused -> state.pause(false)
                             else -> state.pause(true)
@@ -129,6 +143,7 @@ private fun RelayStatusCard(state: RelayState) {
                 ) {
                     Text(
                         when {
+                            blocking > 0 && !state.running -> "Allow"
                             !state.running -> "Start"
                             paused -> "Resume"
                             else -> "Pause"

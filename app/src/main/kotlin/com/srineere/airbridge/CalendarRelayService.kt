@@ -171,8 +171,35 @@ class CalendarRelayService : Service() {
         stopSelf()
     }
 
+    /**
+     * Posts the ongoing notification. Android gives a service started with
+     * startForegroundService about five seconds to do this and kills the whole
+     * app if it does not -- stopping ourselves first is not an excuse -- so
+     * every path through [onStartCommand] comes through here before it decides
+     * anything, including deciding to quit.
+     */
+    private fun enterForeground(): Boolean = try {
+        val manager = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
+            NotificationChannel(CHANNEL, "Notifications to Air", NotificationManager.IMPORTANCE_LOW)
+        )
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= 29)
+            startForeground(902, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        else startForeground(902, notification)
+        true
+    } catch (error: Exception) {
+        Log.w(TAG, "could not enter the foreground", error)
+        false
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         starting = false
+        if (!enterForeground() && air == null) {
+            saveOutcome("Android would not let the relay start. Allow notifications for Air Bridge, then start again.")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (cancelStart) {
             cancelStart = false
             saveOutcome("Relay stopped.")
@@ -209,21 +236,7 @@ class CalendarRelayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        try {
-            val manager = getSystemService(NotificationManager::class.java)
-            if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Notifications to Air", NotificationManager.IMPORTANCE_LOW)
-            )
-            val notification = buildNotification()
-            if (Build.VERSION.SDK_INT >= 29)
-                startForeground(902, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-            else startForeground(902, notification)
-            active = this
-        } catch (error: Exception) {
-            saveOutcome("Relay startup failed: ${error.javaClass.simpleName}")
-            stopSelf()
-            return START_NOT_STICKY
-        }
+        active = this
         // After a reboot or an OEM restart the system rebinds the listener a
         // moment after this service starts, so a listener that is not up yet
         // is worth waiting for rather than a reason to give up.
