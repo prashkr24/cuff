@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.ui.theme.extras
 
@@ -74,15 +76,46 @@ fun SectionHeader(text: String, action: String? = null, onAction: (() -> Unit)? 
     }
 }
 
-/** A card that holds a live state, tinted with the accent. */
+/**
+ * The card at the top of a screen that says whether something is on, and turns
+ * it on. The tint is how this app marks something live, so an off state wears
+ * the plain surface instead -- and both screens that have one share the
+ * padding rather than each guessing at it.
+ */
 @Composable
-fun AccentCard(content: @Composable () -> Unit) = Surface(
-    color = MaterialTheme.colorScheme.primaryContainer,
-    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    border = BorderStroke(1.dp, MaterialTheme.extras.accentOutline),
-    shape = RoundedCornerShape(16.dp),
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-) { content() }
+fun StatusToggle(title: String, live: Boolean, onToggle: (Boolean) -> Unit) {
+    Box(Modifier.padding(top = 10.dp)) {
+        Surface(
+            color = if (live) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = if (live) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(
+                1.dp,
+                if (live) MaterialTheme.extras.accentOutline
+                else MaterialTheme.colorScheme.outline,
+            ),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .padding(start = 18.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = live, onCheckedChange = onToggle)
+            }
+        }
+    }
+}
 
 /**
  * A tappable row. Presses settle with a spring rather than snapping, which is

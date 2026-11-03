@@ -1,30 +1,20 @@
 package com.srineere.airbridge.ui
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayPattern
@@ -96,65 +86,39 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
     val blocking = remember(resumeTicks()) { blockingGrants(context) }
     val paused = state.config.silence.reason(System.currentTimeMillis()) != null
 
-    val card: @Composable (@Composable () -> Unit) -> Unit =
-        // The tint is how this app marks something live, so an off relay does
-        // not get to wear it.
-        if (running) { body -> AccentCard { body() } }
-        else { body ->
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            ) { body() }
-        }
-
-    Box(Modifier.padding(top = 10.dp)) {
-        card {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
-            ) {
-                Text(
-                    when {
-                        // No subtext, so anything that has to be said is said
-                        // here or not at all.
-                        blocking > 0 && !running ->
-                            "$blocking thing${if (blocking == 1) "" else "s"} to allow"
-                        running && paused -> "Paused"
-                        running -> "Relaying"
-                        else -> "Not relaying"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = running,
-                    onCheckedChange = { wanted ->
-                        when {
-                            // It cannot start, so the switch takes you to the
-                            // reason instead of pretending to flip.
-                            wanted && blocking > 0 -> onOpen("permissions")
-                            wanted -> state.start()
-                            else -> state.stop()
-                        }
-                    },
-                )
+    StatusToggle(
+        title = when {
+            // No subtext, so anything that has to be said is said here or not
+            // at all.
+            blocking > 0 && !running -> "$blocking thing${if (blocking == 1) "" else "s"} to allow"
+            running && paused -> "Paused"
+            running -> "Relaying"
+            else -> "Not relaying"
+        },
+        live = running,
+        onToggle = { wanted ->
+            when {
+                // It cannot start, so the switch takes you to the reason
+                // instead of pretending to flip.
+                wanted && blocking > 0 -> onOpen("permissions")
+                wanted -> state.start()
+                else -> state.stop()
             }
-        }
-    }
+        },
+    )
 }
 
-/** What the Calls row says without being opened. */
+/**
+ * What the Calls row says without being opened: how a call rings, and the one
+ * exception worth knowing from here. Strength, and a count of people who
+ * merely buzz differently, belong on the screen itself -- a row that lists
+ * every setting is a worse copy of the screen behind it.
+ */
 private fun callsSummary(state: RelayState): String {
     if (!state.callsOn) return "Off"
-    val differ = state.config.callers.count { it.value.preset != null }
-    val ring = describe(state.config.defaultCallPreset)
-    return if (differ == 0) ring
-    else "$ring · $differ ${if (differ == 1) "person" else "people"} differ"
+    val ring = shape(state.config.defaultCallPreset)
+    val silenced = state.config.callers.count { it.value.preset?.silent == true }
+    return if (silenced == 0) ring else "$ring · $silenced silenced"
 }
 
 /** A count, not a list: the names were a worse copy of the Apps screen. */
@@ -164,15 +128,18 @@ private fun appsSummary(state: RelayState): String = when (val count = (state.co
     else -> "$count apps"
 }
 
+/** The pattern on its own, where there is no room for how hard it buzzes. */
+internal fun shape(preset: RelayPreset): String = when (preset.pattern) {
+    RelayPattern.SILENT -> "Silent"
+    RelayPattern.ONE -> "One pulse"
+    RelayPattern.TWO -> "Two pulses"
+    RelayPattern.RING -> "Rings until answered"
+}
+
 internal fun describe(preset: RelayPreset): String {
-    val shape = when (preset.pattern) {
-        RelayPattern.SILENT -> return "Silent"
-        RelayPattern.ONE -> "One pulse"
-        RelayPattern.TWO -> "Two pulses"
-        RelayPattern.RING -> "Rings until answered"
-    }
+    if (preset.pattern == RelayPattern.SILENT) return "Silent"
     val strength = if (preset.strength == RelayPreset.FULL_STRENGTH) "strong" else "light"
-    return "$shape · $strength"
+    return "${shape(preset)} · $strength"
 }
 
 private fun describeActivity(stage: String, errorCode: String?, preset: String?): String {
