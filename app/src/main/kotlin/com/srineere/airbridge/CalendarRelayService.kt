@@ -59,6 +59,7 @@ class CalendarRelayService : Service() {
     private class RingSession(
         val key: String,
         val packageName: String,
+        val callerId: String?,
         val match: RelayMatch,
         val startedAt: Long,
         /**
@@ -359,7 +360,7 @@ class CalendarRelayService : Service() {
             startRing(key, packageName, match, callerId)
             return
         }
-        submit(packageName, postedAt, match)
+        submit(packageName, postedAt, match, callerId = callerId)
     }
 
     /**
@@ -402,11 +403,12 @@ class CalendarRelayService : Service() {
         match: RelayMatch,
         callerId: String?,
     ) {
-        val session = RingSession(key, packageName, match, System.currentTimeMillis(), audioMode(),
-            RelayRuleStore.read(this).ringFor(packageName, callerId))
+        val session = RingSession(key, packageName, callerId, match, System.currentTimeMillis(),
+            audioMode(), RelayRuleStore.read(this).ringFor(packageName, callerId))
         ring = session
         Log.i(TAG, "ring start pkg=$packageName gap=${session.settings.gapMillis}ms max=${session.settings.maxSeconds}s mode=${session.startMode}")
-        record(nextId(), packageName, session.startedAt, "ring_started", match = match)
+        record(nextId(), packageName, session.startedAt, "ring_started", match = match,
+            callerId = callerId)
         refreshNotification()
         handler.postDelayed(ringWatch, RING_WATCH_MILLIS)
         sendRing()
@@ -420,7 +422,8 @@ class CalendarRelayService : Service() {
         lastRingStoppedAt = System.currentTimeMillis()
         lastRingTimedOut = reason == "ring_timeout"
         Log.i(TAG, "ring stop reason=$reason after=${System.currentTimeMillis() - session.startedAt}ms")
-        record(nextId(), session.packageName, session.startedAt, "ring_stopped", reason, session.match)
+        record(nextId(), session.packageName, session.startedAt, "ring_stopped", reason,
+            session.match, session.callerId)
         // Releases the held session; the in-flight ring call then completes on
         // its own and does its own bookkeeping.
         // Deliberately not queued: the queue is busy holding the ring, and
@@ -475,7 +478,8 @@ class CalendarRelayService : Service() {
         }
     }
 
-    private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch, completion: ((RelayWorkerResult) -> Unit)? = null) {
+    private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch,
+                       completion: ((RelayWorkerResult) -> Unit)? = null, callerId: String? = null) {
         val id = nextId()
         if (choices.size >= 256) {
             record(id, sbnPackage, postedAt, "queue_full")
@@ -484,14 +488,15 @@ class CalendarRelayService : Service() {
         }
         if (completion != null) previewReplies[id] = completion
         choices[id] = RelayBurstChoice(match, System.currentTimeMillis())
-        record(id, sbnPackage, postedAt, "detected", match = match)
+        record(id, sbnPackage, postedAt, "detected", match = match, callerId = callerId)
         val now = System.currentTimeMillis()
         when (val decision = coalescer.onAlert(id, now)) {
-            RelayCoalescer.Decision.DispatchNow -> dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match)
+            RelayCoalescer.Decision.DispatchNow ->
+                dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match, callerId)
             is RelayCoalescer.Decision.Merged -> {
                 if (!holdingFollowUp) { holdingFollowUp = true; begin() }
                 inFlight[id] = sbnPackage to postedAt
-                record(id, sbnPackage, postedAt, "merged", match = match)
+                record(id, sbnPackage, postedAt, "merged", match = match, callerId = callerId)
                 decision.scheduleAtMillis?.let { handler.postDelayed(followUp, maxOf(0, it - now)) }
             }
         }
@@ -565,17 +570,18 @@ class CalendarRelayService : Service() {
         }
     }
 
-    private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long, match: RelayMatch) {
+    private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long,
+                         match: RelayMatch, callerId: String? = null) {
         val preset = match.preset
         begin()
         refreshDeadline()
         inFlight[id] = sbnPackage to postedAt
-        record(id, sbnPackage, postedAt, "queued", match = match)
+        record(id, sbnPackage, postedAt, "queued", match = match, callerId = callerId)
         fun finished(result: RelayWorkerResult) {
             previewReplies.remove(id)?.invoke(result)
             choices.remove(id)
             inFlight.remove(id)
-            record(id, sbnPackage, postedAt, result.stage, result.errorCode, match)
+            record(id, sbnPackage, postedAt, result.stage, result.errorCode, match, callerId)
             saveOutcome("Haptic ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             val now = System.currentTimeMillis()
             coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
@@ -647,10 +653,10 @@ class CalendarRelayService : Service() {
     private fun nextId() = "relay-${System.currentTimeMillis()}-${++sequence}"
 
     private fun record(id: String, sbnPackage: String?, postedAt: Long, stage: String, code: String? = null,
-                       match: RelayMatch? = null) {
+                       match: RelayMatch? = null, callerId: String? = null) {
         val now = System.currentTimeMillis()
         RelayHistory.add(this, RelayActivity(id, sbnPackage, stage, now, maxOf(0, now - postedAt), code,
-            match?.preset?.id))
+            match?.preset?.id, callerId))
     }
 
     fun requestStop(reason: String) {

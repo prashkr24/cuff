@@ -73,9 +73,19 @@ internal fun ActivityRow(
     val context = LocalContext.current
     // The phone's own 12 or 24 hour habit, not this file's opinion of it.
     val clock = remember(context) { DateFormat.getTimeFormat(context) }
+    val app = state.apps.firstOrNull { it.packageName == entry.sourcePackage }
+    // The history holds only the identity hash, so the name is looked up
+    // here, from the same places a person's screen finds them. Someone who
+    // rang once before a restart is no longer nameable, and the app's own
+    // name stands in rather than a blank.
+    val who = entry.callerId?.let { state.caller(it)?.label }
     SettingsRow(
-        title = state.label(entry.sourcePackage),
-        subtitle = describeActivity(entry.stage, entry.errorCode, entry.preset),
+        title = who ?: state.label(entry.sourcePackage),
+        subtitle = listOfNotNull(
+            state.label(entry.sourcePackage).takeIf { who != null },
+            describeActivity(entry.stage, entry.errorCode, entry.preset),
+        ).joinToString(" · "),
+        leading = app?.let { { AppIcon(it, size = 34) } },
         trailing = {
             Column(horizontalAlignment = Alignment.End) {
                 Text(

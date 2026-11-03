@@ -18,6 +18,15 @@ class RelayActivityTest {
         assertEquals(20L, value["latencyMillis"])
     }
 
+    @Test fun theCallerIdentityStaysOnThePhone() {
+        val entry = RelayActivity("command-1", "com.whatsapp", "verified", 100, 20, callerId = "hash")
+        // The file remembers which person, so a list can name them later.
+        assertEquals("hash", entry.toStored()["callerId"])
+        // What leaves the app does not: a hash is not a name, but it is still
+        // per-person, and rows carrying it could be grouped by who called.
+        assertFalse(entry.toMap().containsKey("callerId"))
+    }
+
     @Test fun protocolCompletionIsExplicitAndUnknownRepliesFailClosed() {
         assertEquals("verified", RelayWorkerResult.decode(mapOf("status" to "completed")).stage)
         assertEquals("failed", RelayWorkerResult.decode("completed").stage)

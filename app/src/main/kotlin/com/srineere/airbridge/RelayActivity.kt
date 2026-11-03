@@ -5,8 +5,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Strictly metadata: no notification keys, text, sender names, or BLE identifiers.
- * [preset] is the chosen vibration, as an id.
+ * Strictly metadata: no notification keys, text, sender names, or BLE
+ * identifiers. [preset] is the chosen vibration, as an id.
+ *
+ * [callerId] is the same one-way identity the rules are keyed by, never a name
+ * or a number. A person's name is looked up from it when the screen is drawn,
+ * so nothing here ever holds who they are.
+ *
+ * It stays out of [toMap], which is what leaves the app: a hash is not a name,
+ * but it is still per-person, and a report carrying it would be a report whose
+ * rows can be grouped by who was calling. [toStored] is the on-device file.
  */
 internal data class RelayActivity(
     val commandId: String,
@@ -16,6 +24,7 @@ internal data class RelayActivity(
     val latencyMillis: Long? = null,
     val errorCode: String? = null,
     val preset: String? = null,
+    val callerId: String? = null,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "commandId" to commandId, "sourcePackage" to sourcePackage,
@@ -23,6 +32,9 @@ internal data class RelayActivity(
         "latencyMillis" to latencyMillis, "errorCode" to errorCode,
         "preset" to preset,
     )
+
+    /** What the on-device history file holds, which is one field more. */
+    fun toStored(): Map<String, Any?> = toMap() + ("callerId" to callerId)
 }
 
 internal class RelayActivityBuffer(initial: List<RelayActivity> = emptyList()) {
@@ -47,7 +59,8 @@ internal object RelayHistory {
                 if (value.isNull("latencyMillis")) null else value.getLong("latencyMillis"),
                 if (value.isNull("errorCode")) null else value.getString("errorCode"),
                 // Entries saved before these fields existed have neither key.
-                if (value.isNull("preset")) null else value.getString("preset"))
+                if (value.isNull("preset")) null else value.getString("preset"),
+                if (value.isNull("callerId")) null else value.getString("callerId"))
         }
     }.getOrDefault(emptyList())
 
@@ -57,7 +70,7 @@ internal object RelayHistory {
         val array = JSONArray()
         buffer.snapshot().forEach { event ->
             val objectValue = JSONObject()
-            event.toMap().forEach { (key, value) -> objectValue.put(key, value ?: JSONObject.NULL) }
+            event.toStored().forEach { (key, value) -> objectValue.put(key, value ?: JSONObject.NULL) }
             array.put(objectValue)
         }
         context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)

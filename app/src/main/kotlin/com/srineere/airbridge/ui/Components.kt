@@ -109,7 +109,7 @@ fun SectionHeader(text: String, action: String? = null, onAction: (() -> Unit)? 
  */
 @Composable
 fun StatusToggle(title: String, live: Boolean, onToggle: (Boolean) -> Unit) {
-    Box(Modifier.padding(top = 10.dp)) {
+    Box(Modifier.padding(top = 10.dp, bottom = 12.dp)) {
         Surface(
             color = if (live) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surfaceContainer,

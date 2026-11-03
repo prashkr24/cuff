@@ -4,6 +4,7 @@ import android.app.TimePickerDialog
 import android.content.Context
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -82,12 +83,23 @@ internal fun ScheduleScreen(onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
             ) {
-                OutlinedButton(onClick = { state.pauseUntil(now + 15 * MINUTE) }) { Text("15 min") }
-                OutlinedButton(onClick = { state.pauseUntil(now + 60 * MINUTE) }) { Text("1 hour") }
+                // Equal thirds: three lengths of the same choice should not
+                // be three different sizes of button.
+                OutlinedButton(
+                    onClick = { state.pauseUntil(now + 15 * MINUTE) },
+                    contentPadding = PaddingValues(4.dp),
+                    modifier = Modifier.weight(1f),
+                ) { Text("15 min", maxLines = 1) }
+                OutlinedButton(
+                    onClick = { state.pauseUntil(now + 60 * MINUTE) },
+                    contentPadding = PaddingValues(4.dp),
+                    modifier = Modifier.weight(1f),
+                ) { Text("1 hour", maxLines = 1) }
                 OutlinedButton(
                     onClick = { state.pauseUntil(-1) },
+                    contentPadding = PaddingValues(4.dp),
                     modifier = Modifier.weight(1f),
-                ) { Text("Until I resume") }
+                ) { Text("Indefinitely", maxLines = 1) }
             }
         }
 
