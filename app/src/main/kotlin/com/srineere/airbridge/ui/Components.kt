@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +30,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -35,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -130,6 +135,37 @@ fun StatusToggle(title: String, live: Boolean, onToggle: (Boolean) -> Unit) {
         }
     }
 }
+
+/**
+ * The one search field in this app. Every list long enough to need searching
+ * is long enough to need a way back out of the search, so the cross is part of
+ * the field rather than something each screen remembers to add.
+ */
+@Composable
+fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: String) = TextField(
+    value = value,
+    onValueChange = onValueChange,
+    singleLine = true,
+    placeholder = { Text(placeholder) },
+    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+    trailingIcon = {
+        // Only once there is something to clear: a cross in an empty field
+        // invites a tap that does nothing.
+        if (value.isNotEmpty()) {
+            IconButton(onClick = { onValueChange("") }) {
+                Icon(Icons.Outlined.Close, contentDescription = "Clear search")
+            }
+        }
+    },
+    colors = TextFieldDefaults.colors(
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        focusedIndicatorColor = Color.Transparent,
+        unfocusedIndicatorColor = Color.Transparent,
+    ),
+    shape = RoundedCornerShape(12.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+)
 
 /**
  * A tappable row. Presses settle with a spring rather than snapping, which is

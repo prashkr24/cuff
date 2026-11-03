@@ -12,17 +12,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,7 +23,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayContacts
@@ -45,7 +37,11 @@ import com.srineere.airbridge.ui.theme.extras
  * different person to each, so the list is too.
  */
 @Composable
-internal fun ContactsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
+internal fun ContactsScreen(
+    onBack: () -> Unit,
+    onOpen: (String) -> Unit,
+    initialSource: String? = null,
+) {
     val context = LocalContext.current
     val state = LocalRelayState.current
 
@@ -61,7 +57,12 @@ internal fun ContactsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             .filter { state.apps.any { app -> app.packageName == it } }
             .map { it to state.label(it) }
     }
-    var source by remember(sources) { mutableStateOf(sources.first().first) }
+    // Opened from one app's own callers, that app is the source being asked
+    // about; opened on its own, the phone is.
+    var source by remember(sources) {
+        mutableStateOf(sources.firstOrNull { it.first == initialSource }?.first
+            ?: sources.first().first)
+    }
     var query by remember { mutableStateOf("") }
 
     // Reading the address book is the slow part, so it happens once per source
@@ -112,29 +113,7 @@ internal fun ContactsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             }
         }
 
-        TextField(
-            value = query,
-            onValueChange = { query = it },
-            singleLine = true,
-            placeholder = { Text("Search contacts") },
-            trailingIcon = {
-                // Only once there is something to clear: a cross in an empty
-                // field invites a tap that does nothing.
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Clear search")
-                    }
-                }
-            },
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-            ),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-        )
+        SearchField(query, { query = it }, "Search contacts")
 
         // An address book runs to hundreds, so this is the one list here that
         // has to be lazy.

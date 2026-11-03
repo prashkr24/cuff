@@ -106,6 +106,16 @@ fun AirBridgeApp() {
                 pushed("calls") { CallsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("contacts") { ContactsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed(
+                    route = "contacts/{source}",
+                    arguments = listOf(navArgument("source") { type = NavType.StringType }),
+                ) { entry ->
+                    ContactsScreen(
+                        onBack = nav::popBackStack,
+                        onOpen = nav::navigate,
+                        initialSource = entry.arguments?.getString("source"),
+                    )
+                }
+                pushed(
                     route = "callers/{group}",
                     arguments = listOf(navArgument("group") { type = NavType.StringType }),
                 ) { entry ->
@@ -119,10 +129,10 @@ fun AirBridgeApp() {
                 pushed("permissions") { PermissionsScreen(onBack = nav::popBackStack) }
                 pushed("about") { AboutScreen(onBack = nav::popBackStack) }
                 pushed(
-                    route = "app/{packageName}",
+                    route = "appcallers/{packageName}",
                     arguments = listOf(navArgument("packageName") { type = NavType.StringType }),
                 ) { entry ->
-                    AppDetailScreen(
+                    AppCallersScreen(
                         packageName = entry.arguments?.getString("packageName").orEmpty(),
                         onBack = nav::popBackStack,
                         onOpen = nav::navigate,
