@@ -52,20 +52,13 @@ internal object Band {
     /**
      * One buzz in the shape a notification would get, so that trying it tells
      * you something true about what the band will do tonight.
+     *
+     * It deliberately ignores a pause and quiet hours. Those silence the
+     * relay's own decisions; this is the person in front of the screen asking
+     * for a buzz now, and refusing them with "could not reach the band" was
+     * both a refusal and a lie about the reason.
      */
     fun buzz(context: Context, reply: AirResult) {
-        val relay = CalendarRelayService.active
-        if (relay != null) {
-            // The relay knows about quiet hours and its own readiness, so when
-            // it is up it stays the one that decides.
-            runCatching {
-                relay.testPulse { result ->
-                    if (result.stage == "verified") reply.success(null)
-                    else reply.error(result.errorCode ?: "WORKER_ERROR", null, null)
-                }
-            }.onFailure { reply.error("NOT_READY", it.message, null) }
-            return
-        }
         val preset = RelayRuleStore.read(context).defaultPreset
         if (preset.silent) {
             reply.error("SILENT", "Your default vibration is silent.", null)

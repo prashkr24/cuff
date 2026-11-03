@@ -472,15 +472,6 @@ class CalendarRelayService : Service() {
         }
     }
 
-    internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {
-        check(ready && !stopping) { "Wait until the relay is listening." }
-        val config = RelayRuleStore.read(this)
-        check(config.silence.reason(System.currentTimeMillis()) == null) { "Resume the relay or leave quiet hours before trying a vibration." }
-        val selected = preset?.let { RelayPreset.parse(it) } ?: config.defaultPreset
-        require(!selected.silent && !selected.callsOnly) { "Choose a vibration to try." }
-        submit(null, System.currentTimeMillis(), RelayMatch(selected, 2), completion)
-    }
-
     private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch, completion: ((RelayWorkerResult) -> Unit)? = null) {
         val id = nextId()
         if (choices.size >= 256) {

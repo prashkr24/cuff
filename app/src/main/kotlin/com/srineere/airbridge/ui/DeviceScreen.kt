@@ -173,10 +173,10 @@ private fun BandCard() {
                         rssi = (reading as? Map<*, *>)?.get("rssi") as? Int
                         rssiAt = System.currentTimeMillis()
                     },
-                    onError = { code, _ -> syncing = false; message = explain(code) },
+                    onError = { code, detail -> syncing = false; message = reason(code, detail) },
                 ))
             },
-            onError = { code, _ -> syncing = false; message = explain(code) },
+            onError = { code, detail -> syncing = false; message = reason(code, detail) },
         ))
     }
 
@@ -188,8 +188,7 @@ private fun BandCard() {
             onSuccess = { buzz = Buzz.Sent },
             onError = { code, detail ->
                 buzz = Buzz.Idle
-                message = if (code == "SILENT" || code == "CALLS_ONLY") detail ?: explain(code)
-                else explain(code)
+                message = reason(code, detail)
             },
         ))
     }
@@ -381,12 +380,15 @@ private fun since(atMillis: Long): String {
     }
 }
 
-private fun explain(code: String?): String = when (code) {
+private fun reason(code: String?, detail: String?): String = when (code) {
     "BUSY" -> "Busy delivering a notification; try again shortly"
     "BLUETOOTH_PERMISSION" -> "Nearby devices permission is needed"
     "AIR_NOT_FOUND" -> "Pair your Air in Google Health first"
-    "NOT_RUNNING" -> "Start the relay to reach the band"
-    else -> "Could not reach the band"
+    "SILENT" -> "Your default vibration is silent"
+    "CALLS_ONLY" -> "Your default repeats until a call is answered"
+    // Anything we did not anticipate keeps what it said, rather than being
+    // flattened into a sentence about reach that may not be true.
+    else -> detail?.takeIf { it.isNotBlank() } ?: "Could not reach the band"
 }
 
 /** What the Permissions row says without having to be opened. */
