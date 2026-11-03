@@ -125,6 +125,47 @@ internal data class RelaySilence(
             else minute >= startMinute || minute < endMinute
         return if (quiet) "quiet_hours" else null
     }
+
+    /**
+     * When [reason] could next answer differently of its own accord, or null
+     * when it never will.
+     *
+     * The relay used to look every minute for the rest of its life, whether
+     * or not there was anything to find. Nothing here changes without a
+     * boundary to change at: a pause ends at its own end, a quiet window has
+     * two edges a day, and an indefinite pause and no quiet hours have none
+     * between them.
+     *
+     * Only the notification's wording rides on this. Every decision about
+     * whether to buzz asks [reason] against the clock at the time, so a
+     * wake-up that arrives late -- the handler's delay does not run down in
+     * deep sleep -- leaves the band behaving correctly and the text stale.
+     */
+    fun nextChange(now: Long, zone: TimeZone = TimeZone.getDefault()): Long? {
+        // A pause outranks the quiet, so while one runs the only thing that
+        // can change the answer is the pause reaching its end.
+        if (pauseUntil == -1L) return null
+        if (pauseUntil > now) return pauseUntil
+        if (!quietEnabled) return null
+        return minOf(nextAt(now, zone, startMinute), nextAt(now, zone, endMinute))
+    }
+
+    /**
+     * The next time it is [minuteOfDay] locally. Stepped by a day rather than
+     * by 24 hours, so the two clock changes a year do not move the boundary
+     * an hour off the wall clock the window was set against.
+     */
+    private fun nextAt(now: Long, zone: TimeZone, minuteOfDay: Int): Long {
+        val at = Calendar.getInstance(zone).apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, minuteOfDay / 60)
+            set(Calendar.MINUTE, minuteOfDay % 60)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (at.timeInMillis <= now) at.add(Calendar.DAY_OF_MONTH, 1)
+        return at.timeInMillis
+    }
 }
 
 internal data class RelayRuleConfig(

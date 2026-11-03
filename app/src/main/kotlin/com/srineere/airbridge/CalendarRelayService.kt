@@ -124,21 +124,31 @@ class CalendarRelayService : Service() {
         if (reason != null) cancelWaiting(reason)
         if (ready && reason != displayedSilence) {
             displayedSilence = reason
-            getSystemService(NotificationManager::class.java).notify(902, buildNotification())
+            getSystemService(NotificationManager::class.java).notify(902, buildNotification(reason))
         }
+        // Once, when the answer can actually change, rather than every minute
+        // for as long as the relay runs. Anything that edits the rules comes
+        // back through here, and so does a change of clock or timezone.
         handler.removeCallbacks(silenceTick)
         if (!stopping) {
-            val until = config.silence.pauseUntil
-            val delay = if (until > now) minOf(60_000L - now % 60_000L, until - now) else 60_000L - now % 60_000L
-            handler.postDelayed(silenceTick, maxOf(1L, delay))
+            config.silence.nextChange(now)?.let {
+                handler.postDelayed(silenceTick, maxOf(1L, it - now))
+            }
         }
     }
 
-    private fun buildNotification(): Notification {
+    /** The silence as it stands, for the paths that have not just read it. */
+    private fun currentSilence(): String? =
+        RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())
+
+    /**
+     * [silence] is passed in by anything that has just read the config, so
+     * that rewording the notification does not mean reading it twice.
+     */
+    private fun buildNotification(silence: String? = currentSilence()): Notification {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val stop = PendingIntent.getService(this, 0, Intent(this, CalendarRelayService::class.java).setAction(STOP), flags)
         val open = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java), flags)
-        val silence = RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())
         val pause = PendingIntent.getService(this, 2, Intent(this, CalendarRelayService::class.java)
             .setAction(if (silence == "paused") RESUME else PAUSE), flags)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)

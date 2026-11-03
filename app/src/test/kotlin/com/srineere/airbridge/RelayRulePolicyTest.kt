@@ -67,6 +67,44 @@ class RelayRulePolicyTest {
         assertNull(RelaySilence(startMinute = 0, endMinute = 0).reason(time(12)))
     }
     @Test(expected = IllegalArgumentException::class) fun `equal enabled times rejected`() { RelaySilence(quietEnabled = true, startMinute = 0, endMinute = 0) }
+
+    // The relay schedules one wake-up for this instead of looking every
+    // minute, so anything it fails to see coming is a notification that keeps
+    // saying the wrong thing until something else happens to disturb it.
+    @Test fun `nothing to wait for without a pause or a quiet window`() {
+        val utc = TimeZone.getTimeZone("UTC")
+        assertNull(RelaySilence().nextChange(time(12), utc))
+        // An indefinite pause ends when someone ends it, which comes through
+        // the rules and not through a clock.
+        assertNull(RelaySilence(-1).nextChange(time(12), utc))
+    }
+
+    @Test fun `a running pause waits for its own end and nothing else`() {
+        val utc = TimeZone.getTimeZone("UTC")
+        val now = time(12)
+        // Quiet hours are on, but paused outranks them, so the next thing
+        // that can change the answer is the pause running out.
+        val silence = RelaySilence(pauseUntil = now + 900_000, quietEnabled = true)
+        assertEquals(now + 900_000, silence.nextChange(now, utc))
+    }
+
+    @Test fun `a quiet window waits for whichever edge comes first`() {
+        val utc = TimeZone.getTimeZone("UTC")
+        // The shipped window: 22:00 to 07:00.
+        val silence = RelaySilence(quietEnabled = true)
+        assertEquals(time(22), silence.nextChange(time(12), utc))
+        // Inside the quiet, the next edge is the end -- tomorrow morning.
+        assertEquals(time(7) + 86_400_000, silence.nextChange(time(23), utc))
+        // And just before it ends, the end today.
+        assertEquals(time(7), silence.nextChange(time(6, 59), utc))
+    }
+
+    @Test fun `an expired pause falls through to the quiet window`() {
+        val utc = TimeZone.getTimeZone("UTC")
+        val now = time(12)
+        assertEquals(time(22), RelaySilence(now, quietEnabled = true).nextChange(now, utc))
+        assertNull(RelaySilence(now).nextChange(now, utc))
+    }
     @Test fun `silenced notifications advance duplicate baseline and are not replayed`() {
         val filter = CalendarAlertFilter(100, selectedPackages = setOf(whatsapp))
         assertTrue(filter.accept(whatsapp, "id", 101, 102, false, false, 101))
