@@ -11,7 +11,3 @@ captures/
 .cxx
 *.apk
 *.aab
-
-# Porting scratch: the Flutter shim, kept beside the module while its logic
-# moves into AirLink. Deleted once that is done.
-/air/FitbitAirPlugin.kt.reference
