@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,7 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.srineere.airbridge.CalendarRelayService
+import com.srineere.airbridge.Band
 import com.srineere.airbridge.ui.theme.Accent
 import com.srineere.airbridge.ui.theme.ThemeMode
 import com.srineere.airbridge.ui.theme.extras
@@ -69,13 +71,12 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun DeviceScreen(onOpen: (String) -> Unit) {
     val context = LocalContext.current
-    val state = LocalRelayState.current
     val appearance by AppSettings.appearance.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Device")
 
-        BandCard(running = relayRunning())
+        BandCard()
 
         SectionHeader("Appearance")
         Row(
@@ -133,13 +134,14 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
 private enum class Buzz { Idle, Sending, Sent }
 
 /**
- * The band's own state. Every read goes through the running relay, because the
- * relay owns the Bluetooth transport: a second link from the UI would fight it
- * for the same single session. Nothing here is live for the same reason, so
- * every reading carries the moment it was taken.
+ * The band's own state, which does not wait on the relay: [Band] borrows the
+ * relay's link when there is one and holds its own when there is not. Nothing
+ * here is live either way -- every reading costs a session with the band -- so
+ * each one carries the moment it was taken.
  */
 @Composable
-private fun BandCard(running: Boolean) {
+private fun BandCard() {
+    val context = LocalContext.current
     var connected by remember { mutableStateOf<Boolean?>(null) }
     var battery by remember { mutableStateOf<Int?>(null) }
     var batteryAt by remember { mutableLongStateOf(0L) }
@@ -150,25 +152,20 @@ private fun BandCard(running: Boolean) {
     var buzz by remember { mutableStateOf(Buzz.Idle) }
 
     fun sync() {
-        val relay = CalendarRelayService.active
-        if (relay == null) {
-            message = "Start the relay to reach the band"
-            return
-        }
         if (syncing) return
         syncing = true
         message = null
-        relay.readConnection(airResult(
+        Band.isConnected(context, airResult(
             onSuccess = { connected = it as? Boolean },
             onError = { _, _ -> connected = null },
         ))
         // One at a time: the band holds a single session, so the signal read
         // waits for the battery read rather than racing it.
-        relay.readBattery(airResult(
+        Band.readBattery(context, airResult(
             onSuccess = { value ->
                 battery = (value as? Map<*, *>)?.get("percent") as? Int
                 batteryAt = System.currentTimeMillis()
-                relay.readSignal(airResult(
+                Band.readSignal(context, airResult(
                     onSuccess = { reading ->
                         syncing = false
                         rssi = (reading as? Map<*, *>)?.get("rssi") as? Int
@@ -182,23 +179,17 @@ private fun BandCard(running: Boolean) {
     }
 
     fun buzzBand() {
-        val relay = CalendarRelayService.active
-        if (relay == null) {
-            message = "Start the relay to reach the band"
-            return
-        }
         if (buzz != Buzz.Idle) return
         message = null
         buzz = Buzz.Sending
-        runCatching {
-            relay.testPulse { result ->
-                buzz = if (result.stage == "verified") Buzz.Sent else Buzz.Idle
-                if (result.stage != "verified") message = explain(result.errorCode)
-            }
-        }.onFailure {
-            buzz = Buzz.Idle
-            message = it.message
-        }
+        Band.buzz(context, airResult(
+            onSuccess = { buzz = Buzz.Sent },
+            onError = { code, detail ->
+                buzz = Buzz.Idle
+                message = if (code == "SILENT" || code == "CALLS_ONLY") detail ?: explain(code)
+                else explain(code)
+            },
+        ))
     }
 
     // "Sent" is a confirmation, not a state: it says its piece and goes.
@@ -208,7 +199,7 @@ private fun BandCard(running: Boolean) {
             buzz = Buzz.Idle
         }
     }
-    LaunchedEffect(running) { if (running) sync() }
+    LaunchedEffect(Unit) { sync() }
 
     Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) {
 
@@ -252,9 +243,6 @@ private fun BandCard(running: Boolean) {
                     )
                     Text(
                         message ?: when {
-                            // Nothing can be asked of the band while the relay
-                            // is down, so say that rather than "unknown".
-                            !running -> "Start the relay to reach the band"
                             connected == true -> "Connected"
                             connected == false -> "Not connected"
                             else -> "Connection unknown"
@@ -317,11 +305,12 @@ private fun BandCard(running: Boolean) {
                 Buzz.Sent -> Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Buzz.Idle -> Icon(Icons.Outlined.Vibration, contentDescription = null, modifier = Modifier.size(18.dp))
             }
+            Spacer(Modifier.width(9.dp))
             Text(
                 when (buzz) {
-                    Buzz.Sending -> "  Sending\u2026"
-                    Buzz.Sent -> "  Sent"
-                    Buzz.Idle -> "  Buzz the band"
+                    Buzz.Sending -> "Sending\u2026"
+                    Buzz.Sent -> "Sent"
+                    Buzz.Idle -> "Buzz the band"
                 }
             )
         }

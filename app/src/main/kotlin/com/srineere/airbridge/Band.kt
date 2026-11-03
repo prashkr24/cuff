@@ -1,0 +1,165 @@
+package com.srineere.airbridge
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import dev.airpulse.fitbit_air.AirLink
+import dev.airpulse.fitbit_air.AirResult
+
+/**
+ * The app's way to the band.
+ *
+ * The Air holds one secure session at a time, which is why everything the
+ * relay sends goes through a single queue inside the service. That is a rule
+ * about the band, though, not about the service: when the relay is down there
+ * is nothing to collide with, and making someone turn on notification relaying
+ * before they can read their own battery is a toll, not a safeguard.
+ *
+ * So when the relay is up this borrows its link and its queue, and when it is
+ * not it holds a link of its own and lets it go again shortly after.
+ */
+internal object Band {
+
+    /** Long enough to cover a sync and then a buzz; short enough to let go. */
+    private const val IDLE_MILLIS = 20_000L
+    private const val TAG = "AirBridge"
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val queue = ArrayDeque<(AirLink) -> Unit>()
+    private var link: AirLink? = null
+    private var busy = false
+    private val idle = Runnable { close() }
+
+    /**
+     * Whether the band is linked. This asks the Bluetooth adapter rather than
+     * the band, so it costs no session and never waits behind one.
+     */
+    fun isConnected(context: Context, reply: AirResult) {
+        CalendarRelayService.active?.let { return it.readConnection(reply) }
+        own(context).isAirConnected(reply)
+    }
+
+    fun readBattery(context: Context, reply: AirResult) =
+        operate(context, reply) { air, r -> air.readBattery(r) }
+
+    fun readSignal(context: Context, reply: AirResult) =
+        operate(context, reply) { air, r -> air.readSignalStrength(r) }
+
+    /**
+     * One buzz in the shape a notification would get, so that trying it tells
+     * you something true about what the band will do tonight.
+     */
+    fun buzz(context: Context, reply: AirResult) {
+        val relay = CalendarRelayService.active
+        if (relay != null) {
+            // The relay knows about quiet hours and its own readiness, so when
+            // it is up it stays the one that decides.
+            runCatching {
+                relay.testPulse { result ->
+                    if (result.stage == "verified") reply.success(null)
+                    else reply.error(result.errorCode ?: "WORKER_ERROR", null, null)
+                }
+            }.onFailure { reply.error("NOT_READY", it.message, null) }
+            return
+        }
+        val preset = RelayRuleStore.read(context).defaultPreset
+        if (preset.silent) {
+            reply.error("SILENT", "Your default vibration is silent.", null)
+            return
+        }
+        if (preset.callsOnly) {
+            reply.error("CALLS_ONLY", "A repeat needs a call to stop it.", null)
+            return
+        }
+        val pulses = preset.pattern.pulses ?: 1
+        val at = System.currentTimeMillis()
+        val recorded = object : AirResult {
+            override fun success(result: Any?) {
+                record(context, at, "verified", null, preset.id)
+                reply.success(result)
+            }
+            override fun error(code: String, message: String?, details: Any?) {
+                record(context, at, "failed", code, preset.id)
+                reply.error(code, message, details)
+            }
+        }
+        // More than one pulse is a short bounded ring, exactly as the relay
+        // sends it: one session, so the pulses read as one shape.
+        if (pulses > 1) {
+            operate(context, recorded) { air, r ->
+                air.ring(preset.intensity, PATTERN_GAP_MILLIS, 20_000L, pulses, r)
+            }
+        } else {
+            operate(context, recorded) { air, r -> air.tap(preset.intensity, r) }
+        }
+    }
+
+    /**
+     * Drops our own link. The relay calls this before taking one of its own,
+     * because two sessions to one band is the thing none of this may do.
+     */
+    fun close() {
+        handler.removeCallbacks(idle)
+        queue.clear()
+        busy = false
+        link?.let { runCatching { it.close() }.onFailure { e -> Log.w(TAG, "closing band link", e) } }
+        link = null
+    }
+
+    private fun own(context: Context): AirLink =
+        link ?: AirLink(context.applicationContext).also { link = it }
+
+    private fun operate(
+        context: Context,
+        reply: AirResult,
+        operation: (AirLink, AirResult) -> Unit,
+    ) {
+        CalendarRelayService.active?.let { return it.readDeviceStatus(reply, operation) }
+
+        handler.removeCallbacks(idle)
+        val air = own(context)
+        val work: (AirLink) -> Unit = { held ->
+            operation(held, object : AirResult {
+                override fun success(result: Any?) { done(); reply.success(result) }
+                override fun error(code: String, message: String?, details: Any?) {
+                    done(); reply.error(code, message, details)
+                }
+            })
+        }
+        if (busy) { queue.addLast(work); return }
+        busy = true
+        work(air)
+    }
+
+    private fun done() {
+        val next = queue.removeFirstOrNull()
+        val air = link
+        if (next != null && air != null) { next(air); return }
+        busy = false
+        // Holding the link open costs the band, and would be in the way of a
+        // relay started a moment from now.
+        handler.postDelayed(idle, IDLE_MILLIS)
+    }
+
+    /** Recorded like any other buzz, so Recent reads the same either way. */
+    private fun record(context: Context, at: Long, stage: String, code: String?, preset: String) {
+        runCatching {
+            RelayHistory.add(
+                context,
+                RelayActivity(
+                    commandId = "band-$at",
+                    sourcePackage = null,
+                    stage = stage,
+                    atMillis = System.currentTimeMillis(),
+                    latencyMillis = System.currentTimeMillis() - at,
+                    errorCode = code,
+                    preset = preset,
+                ),
+            )
+        }
+    }
+
+    /** Spacing inside a fixed pattern, close enough to feel like one alert. */
+    private const val PATTERN_GAP_MILLIS = 300L
+}

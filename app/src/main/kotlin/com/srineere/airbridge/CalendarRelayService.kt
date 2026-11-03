@@ -270,6 +270,9 @@ class CalendarRelayService : Service() {
         try {
             saveOutcome("Starting notification relay…")
             check(hasAccess(this) && CalendarNotificationListener.connected)
+            // Only one session to the band, ever: if the UI is holding a link
+            // of its own, it lets go here.
+            Band.close()
             air = AirLink(applicationContext)
             filter = CalendarAlertFilter(
                 System.currentTimeMillis(),
@@ -552,7 +555,7 @@ class CalendarRelayService : Service() {
     internal fun readSignal(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readSignalStrength(r) }
     internal fun readDeviceInfo(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readDeviceInfo(r) }
 
-    private fun readDeviceStatus(reply: AirResult, operation: (AirLink, AirResult) -> Unit) {
+    internal fun readDeviceStatus(reply: AirResult, operation: (AirLink, AirResult) -> Unit) {
         if (!ready || stopping || pending != 0 || air == null) {
             reply.error("BUSY", "The relay is delivering a notification. Try again shortly.", null)
             return
