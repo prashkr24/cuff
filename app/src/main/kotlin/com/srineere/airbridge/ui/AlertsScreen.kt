@@ -1,7 +1,6 @@
 package com.srineere.airbridge.ui
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,30 +8,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayPattern
 import com.srineere.airbridge.RelayPreset
-import com.srineere.airbridge.ui.theme.extras
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -45,7 +41,7 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
 
         RelayStatusCard(state, onOpen)
 
-        SectionHeader("Rules")
+        SectionHeader("What gets through")
 
         SettingsRow(
             title = "Apps",
@@ -87,97 +83,76 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
     }
 }
 
+/**
+ * One switch, not three buttons. Start, Pause and Stop asked the wearer to
+ * hold a state machine in their head for something that is either relaying or
+ * not; pause survives as the notification's own action, where a fifteen minute
+ * silence is what is actually wanted.
+ */
 @Composable
 private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
-    // Start cannot mean anything until Android has let us in, so when
-    // something is missing the button goes there instead of failing.
     val context = LocalContext.current
     val running = relayRunning()
     val blocking = remember(resumeTicks()) { blockingGrants(context) }
     val paused = state.config.silence.reason(System.currentTimeMillis()) != null
-    val dot by animateColorAsState(
-        when {
-            !running -> MaterialTheme.colorScheme.onSurfaceVariant
-            paused || blocking > 0 -> MaterialTheme.extras.disabled
-            else -> MaterialTheme.extras.positive
-        },
-        label = "relayDot",
-    )
+
+    val card: @Composable (@Composable () -> Unit) -> Unit =
+        // The tint is how this app marks something live, so an off relay does
+        // not get to wear it.
+        if (running) { body -> AccentCard { body() } }
+        else { body ->
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            ) { body() }
+        }
 
     Box(Modifier.padding(top = 10.dp)) {
-        AccentCard {
+        card {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(9.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 15.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
             ) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
-                Column(Modifier.weight(1f)) {
-                    Text(
+                Text(
+                    when {
+                        // No subtext, so anything that has to be said is said
+                        // here or not at all.
+                        blocking > 0 && !running ->
+                            "$blocking thing${if (blocking == 1) "" else "s"} to allow"
+                        running && paused -> "Paused"
+                        running -> "Relaying"
+                        else -> "Not relaying"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = running,
+                    onCheckedChange = { wanted ->
                         when {
-                            !running -> "Not running"
-                            paused -> "Paused"
-                            else -> "Relaying"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        when {
-                            // Worth saying even while running: a relay Android
-                            // has not let near Bluetooth reaches nothing.
-                            blocking > 0 ->
-                                "$blocking thing${if (blocking == 1) "" else "s"} still to allow"
-                            running -> appsSummary(state)
-                            else -> state.outcome ?: "Start to relay to your Air"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        // Three app names wrap to three lines and shove the
-                        // buttons around; the row below says the same thing
-                        // with room to say it.
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                // Pause and Stop are not the same promise. Pause is the
-                // frequent one and comes back by itself, so it keeps the
-                // button; Stop is rare and survives a reboot, so it sits
-                // beside it as plain text: reachable, not easy to hit.
-                if (running) {
-                    TextButton(onClick = { state.stop() }) {
-                        Text("Stop", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                OutlinedButton(
-                    onClick = {
-                        when {
-                            blocking > 0 && !running -> onOpen("permissions")
-                            !running -> state.start()
-                            paused -> state.pause(false)
-                            else -> state.pause(true)
+                            // It cannot start, so the switch takes you to the
+                            // reason instead of pretending to flip.
+                            wanted && blocking > 0 -> onOpen("permissions")
+                            wanted -> state.start()
+                            else -> state.stop()
                         }
                     },
-                ) {
-                    Text(
-                        when {
-                            blocking > 0 && !running -> "Allow"
-                            !running -> "Start"
-                            paused -> "Resume"
-                            else -> "Pause"
-                        }
-                    )
-                }
+                )
             }
         }
     }
 }
 
-private fun appsSummary(state: RelayState): String {
-    val on = state.config.selectedPackages
-    if (on.isEmpty()) return "No apps chosen yet"
-    val names = on.take(3).map { state.label(it) }
-    val rest = on.size - names.size
-    return names.joinToString(", ") + if (rest > 0) " and $rest more" else ""
+/** A count, not a list: the names were a worse copy of the Apps screen. */
+private fun appsSummary(state: RelayState): String = when (val count = state.config.selectedPackages.size) {
+    0 -> "No apps chosen yet"
+    1 -> "1 app"
+    else -> "$count apps"
 }
 
 private fun peopleSummary(state: RelayState): String {
