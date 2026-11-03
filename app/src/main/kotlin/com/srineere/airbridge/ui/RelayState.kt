@@ -16,6 +16,7 @@ import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.RelayActivity
 import com.srineere.airbridge.RelayAppSelection
 import com.srineere.airbridge.RelayHistory
+import com.srineere.airbridge.RelayRecentCallers
 import com.srineere.airbridge.RelayAppRule
 import com.srineere.airbridge.RelayPreset
 import com.srineere.airbridge.RelayRingSettings
@@ -113,6 +114,16 @@ internal class RelayState(private val context: Context, private val invalidate: 
         changed()
     }
 
+    /**
+     * Whatever answers the phone here. Calls are a kind of alert rather than
+     * an app, so this package is never shown: the Calls screen owns it.
+     */
+    val dialer: String = RelayAppSelection.dialer(context)
+
+    val callsOn: Boolean get() = config.apps[dialer]?.enabled == true
+
+    fun setCallsOn(on: Boolean) = setAppEnabled(dialer, on)
+
     fun setAppEnabled(packageName: String, enabled: Boolean) = update { config ->
         val existing = config.apps[packageName]
         config.copy(apps = config.apps + (packageName to (existing?.copy(enabled = enabled)
@@ -153,7 +164,8 @@ internal class RelayState(private val context: Context, private val invalidate: 
                 )
             }
             is VibrationTarget.Caller -> {
-                val caller = config.callers[target.id] ?: return@update config
+                val caller = config.callers[target.id] ?: remember(target.id)
+                    ?: return@update config
                 config.copy(callers = config.callers + (target.id to caller.copy(preset = preset)))
             }
         }
@@ -176,12 +188,26 @@ internal class RelayState(private val context: Context, private val invalidate: 
                 config.copy(apps = config.apps + (target.packageName to rule.copy(ring = settings)))
             }
             is VibrationTarget.Caller -> {
-                val caller = config.callers[target.id] ?: return@update config
+                val caller = config.callers[target.id] ?: remember(target.id)
+                    ?: return@update config
                 config.copy(callers = config.callers + (target.id to caller.copy(ring = settings)))
             }
             else -> config.copy(ring = settings)
         }
     }
+
+    /**
+     * Everyone who has rung but has no rule yet. They live in memory rather
+     * than in the config, because remembering a stranger who rang once is not
+     * the same as deciding something about them.
+     */
+    val recent: List<Pair<String, SavedCaller>>
+        get() = RelayRecentCallers.all(config.callers.keys)
+            .map { it.id to SavedCaller(it.packageName, it.label, detail = it.detail) }
+
+    /** A recent caller, as the rule we would save for them. */
+    private fun remember(id: String): SavedCaller? =
+        recent.firstOrNull { it.first == id }?.second
 
     fun callers(packageName: String?): List<Pair<String, SavedCaller>> =
         config.callers.entries

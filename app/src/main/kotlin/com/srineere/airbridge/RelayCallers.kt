@@ -143,6 +143,11 @@ internal object RelayRecentCallers {
             mapOf("id" to it.key, "label" to it.value.label, "detail" to (it.value.detail ?: ""))
         }
 
+    /** Everyone who has rung since the relay started, newest first. */
+    @Synchronized
+    fun all(saved: Set<String>): List<RelayCallerIdentity.Caller> =
+        recent.values.reversed().filterNot { it.id in saved }
+
     @Synchronized
     fun clear() = recent.clear()
 }

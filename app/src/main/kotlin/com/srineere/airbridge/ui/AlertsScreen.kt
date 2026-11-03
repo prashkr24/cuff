@@ -13,7 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -44,16 +44,16 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
         SectionHeader("What gets through")
 
         SettingsRow(
+            title = "Calls",
+            subtitle = callsSummary(state),
+            icon = Icons.Outlined.Call,
+            onClick = { onOpen("calls") },
+        )
+        SettingsRow(
             title = "Apps",
             subtitle = appsSummary(state),
             icon = Icons.Outlined.Apps,
             onClick = { onOpen("apps") },
-        )
-        SettingsRow(
-            title = "People",
-            subtitle = peopleSummary(state),
-            icon = Icons.Outlined.People,
-            onClick = { onOpen("people") },
         )
         SettingsRow(
             title = "Everything else",
@@ -148,22 +148,20 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
     }
 }
 
+/** What the Calls row says without being opened. */
+private fun callsSummary(state: RelayState): String {
+    if (!state.callsOn) return "Off"
+    val differ = state.config.callers.count { it.value.preset != null }
+    val ring = describe(state.config.defaultCallPreset)
+    return if (differ == 0) ring
+    else "$ring · $differ ${if (differ == 1) "person" else "people"} differ"
+}
+
 /** A count, not a list: the names were a worse copy of the Apps screen. */
-private fun appsSummary(state: RelayState): String = when (val count = state.config.selectedPackages.size) {
+private fun appsSummary(state: RelayState): String = when (val count = (state.config.selectedPackages - state.dialer).size) {
     0 -> "No apps chosen yet"
     1 -> "1 app"
     else -> "$count apps"
-}
-
-private fun peopleSummary(state: RelayState): String {
-    val callers = state.config.callers
-    if (callers.isEmpty()) return "Everyone buzzes the same"
-    val silent = callers.values.count { it.preset?.silent == true }
-    val own = callers.size - silent
-    return buildList {
-        if (own > 0) add("$own with their own buzz")
-        if (silent > 0) add("$silent silenced")
-    }.joinToString(" · ")
 }
 
 internal fun describe(preset: RelayPreset): String {

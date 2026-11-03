@@ -103,7 +103,7 @@ fun AirBridgeApp() {
                 composable(Tab.Device.route) { DeviceScreen(onOpen = nav::navigate) }
 
                 pushed("apps") { AppsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
-                pushed("people") { PeopleScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed("calls") { CallsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }
                 pushed("permissions") { PermissionsScreen(onBack = nav::popBackStack) }
                 pushed("about") { AboutScreen(onBack = nav::popBackStack) }

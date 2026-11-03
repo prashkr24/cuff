@@ -241,5 +241,8 @@ private fun titleFor(target: VibrationTarget, state: RelayState): String = when 
     VibrationTarget.Default -> "Everything else"
     VibrationTarget.DefaultCall -> "Calls"
     is VibrationTarget.App -> if (target.calls) "Calls" else "Messages"
-    is VibrationTarget.Caller -> state.config.callers[target.id]?.label ?: "Caller"
+    // A caller who has only rung has no saved rule yet, but they do have a name.
+    is VibrationTarget.Caller -> state.config.callers[target.id]?.label
+        ?: state.recent.firstOrNull { it.first == target.id }?.second?.label
+        ?: "Caller"
 }

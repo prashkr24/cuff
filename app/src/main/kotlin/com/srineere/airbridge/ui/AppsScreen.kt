@@ -39,11 +39,22 @@ internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val state = LocalRelayState.current
     var query by remember { mutableStateOf("") }
 
-    val matching = state.apps.filter { it.label.contains(query, ignoreCase = true) }
+    // The dialer is not one of these. Calls own it, and a second switch for
+    // the same setting is a pair of controls that will disagree.
+    val matching = state.apps
+        .filter { it.packageName != state.dialer && it.label.contains(query, ignoreCase = true) }
     val (on, off) = matching.partition { it.packageName in state.config.selectedPackages }
 
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Apps", onBack = onBack)
+
+        Text(
+            "Your phone's own calls are set under Calls. These are the apps whose " +
+                "notifications buzz you.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
 
         TextField(
             value = query,
@@ -175,7 +186,7 @@ internal fun AppDetailScreen(packageName: String, onBack: () -> Unit, onOpen: (S
                     subtitle = if (saved.isEmpty()) "Nobody saved yet"
                         else "${saved.size} with their own rule",
                     icon = Icons.Outlined.People,
-                    onClick = { onOpen("people") },
+                    onClick = { onOpen("calls") },
                 )
                 if (packageName in RelayConversationPolicy.packages) {
                     Text(
