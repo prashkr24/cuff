@@ -1,6 +1,7 @@
 # Air Bridge — handover
 
-Written 3 November 2026, at commit `83b9083` on branch `native`.
+Written 3 November 2026, updated 4 November, at commit `b1cf70d` on branch
+`native`.
 
 Read this before touching the app. It is the state of play, the decisions that
 are settled, and the traps that have already cost time.
@@ -123,6 +124,21 @@ adb logcat -s AirBridge
   newline argument empties the file and *then* raises. It cost a file.
 - **Formatting time:** use `DateFormat.getTimeFormat(context)`, never a format
   string. A hardcoded `h:mm a` printed "10:24 pm" onto a 24-hour phone.
+- **The installed-app list is held for the process, in `InstalledApps`.** It is
+  expensive — every launcher entry, a `getPackageInfo` and a `TelecomManager`
+  call per app, and an icon to rasterise — so it is read once, off the main
+  thread, and invalidated when something is *installed*, not when a setting
+  changes. It used to hang off `RelayState`, which is replaced on every write,
+  and that is what made the Apps screen stutter on every tap. Anything that
+  moves it back, or reads it synchronously on a first frame, brings the
+  stutter back silently: the screen still works, it is just slow again.
+  `RelayState.apps` deliberately never waits — before the list lands it is
+  empty, and `appsLoaded` is how a screen tells that apart from "nothing
+  matched".
+- **Icons are `ImageBitmap`, not Base64.** The old path PNG-compressed each
+  icon and decoded it straight back, which was the Flutter channel showing
+  through. Several of the `List<Map<String, String>>` returns left in
+  `RelayContacts` and `RelayRecentCallers` are the same leftover.
 
 ## Design
 
