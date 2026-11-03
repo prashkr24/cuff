@@ -67,6 +67,19 @@ internal object RelayCallerIdentity {
         return hash("caller" + SEPARATOR + seed)
     }
 
+    /**
+     * A name an app wrote because it had none. Telegram fills an unnameable
+     * caller in as "___"; taken at face value every anonymous caller would
+     * share one identity, and a rule set on one of them would quietly apply
+     * to all the rest.
+     *
+     * Deliberately narrow -- only underscores. A name is whatever someone
+     * calls themselves, in any script, and guessing more broadly than the one
+     * sentinel actually seen would start throwing real names away.
+     */
+    internal fun isPlaceholderName(name: String): Boolean =
+        name.isNotEmpty() && name.all { it == '_' }
+
     @Suppress("DEPRECATION")
     private fun person(notification: Notification): Person? {
         if (Build.VERSION.SDK_INT < 28) return null
@@ -88,7 +101,8 @@ internal object RelayCallerIdentity {
         notification: Notification,
     ): Caller? {
         val person = person(notification)
-        val name = person?.name?.toString()?.takeIf { it.isNotBlank() }
+        val name = person?.name?.toString()
+            ?.takeIf { it.isNotBlank() && !isPlaceholderName(it) }
         val uri = person?.uri?.takeIf { it.isNotBlank() }
         // A dialer names the caller with a contacts lookup URI, not a number.
         // Resolving it is what lets a call and a contact agree on who they

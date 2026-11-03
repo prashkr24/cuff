@@ -74,7 +74,7 @@ internal object RelayAppSelection {
      * that never matches anything, which is worse than not offering one.
      */
     private fun namesCallers(context: Context) =
-        setOf(dialer(context), FALLBACK_DIALER, "com.whatsapp", "com.whatsapp.w4b")
+        setOf(dialer(context), FALLBACK_DIALER) + RelayContacts.NAMED_CALLERS
 
     /** An app that has actually named a caller has earned its list. */
     fun rememberNamesCallers(context: Context, packageName: String) {

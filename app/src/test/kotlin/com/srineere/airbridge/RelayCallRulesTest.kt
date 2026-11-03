@@ -241,6 +241,17 @@ class RelayCallRulesTest {
         )
     }
 
+    @Test fun `a name an app wrote because it had none is not an identity`() {
+        // Telegram's own sentinel for a caller it cannot name.
+        assertTrue(RelayCallerIdentity.isPlaceholderName("___"))
+        assertTrue(RelayCallerIdentity.isPlaceholderName("_"))
+        // Real names, in any script, are left alone.
+        assertFalse(RelayCallerIdentity.isPlaceholderName("Priya"))
+        assertFalse(RelayCallerIdentity.isPlaceholderName("\u0905\u092E\u0932"))
+        assertFalse(RelayCallerIdentity.isPlaceholderName("a_b"))
+        assertFalse(RelayCallerIdentity.isPlaceholderName(""))
+    }
+
     @Test fun `a saved caller's own vibration outranks the app's`() {
         val config = withCallers(mapOf("alice" to SavedCaller(dialer, "Alice", RelayPreset.DOUBLE)))
         val match = config.match(dialer, emptySet(), RelayAlertKind.CALL, "alice")

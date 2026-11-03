@@ -67,12 +67,22 @@ internal object RelayContacts {
     }
 
     /**
-     * Apps that name a caller rather than number them. WhatsApp attaches only
-     * a display name, which is the contact's own name, so a contact can be
-     * matched by name. That is weaker than a number: renaming the contact
-     * breaks the rule, and two people with one name cannot be told apart.
+     * Apps that name a caller rather than number them. WhatsApp and Telegram
+     * both attach only a display name, which is the contact's own name, so a
+     * contact can be matched by name. That is weaker than a number: renaming
+     * the contact breaks the rule, and two people with one name cannot be
+     * told apart.
+     *
+     * Telegram's incoming call is a `CallStyle` notification carrying a
+     * `Person` built with `setName` alone -- the same shape WhatsApp posts.
+     * Forks are left out because they are separate code; one that does name
+     * its callers earns its list the first time it rings, through
+     * [RelayAppSelection.rememberNamesCallers].
      */
-    val NAMED_CALLERS = setOf("com.whatsapp", "com.whatsapp.w4b")
+    val NAMED_CALLERS = setOf(
+        "com.whatsapp", "com.whatsapp.w4b",
+        "org.telegram.messenger", "org.telegram.messenger.web",
+    )
 
     fun list(context: Context, packageName: String = "com.google.android.dialer"):
         List<Map<String, String>> {
