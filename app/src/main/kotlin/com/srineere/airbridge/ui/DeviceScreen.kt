@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.BluetoothDisabled
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.SignalCellularAlt
 import androidx.compose.material.icons.outlined.Sync
@@ -92,15 +93,14 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
             }
         }
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
         ) {
-            Text("Accent", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Accent.entries.filter { it.isAvailable }.forEach { accent ->
-                    AccentDot(accent, appearance.accent == accent) { AppSettings.setAccent(context, accent) }
-                }
+            Spacer(Modifier.weight(1f))
+            Accent.entries.filter { it.isAvailable }.forEach { accent ->
+                AccentDot(accent, appearance.accent == accent) { AppSettings.setAccent(context, accent) }
             }
+            Spacer(Modifier.weight(1f))
         }
 
         SectionHeader("Band")
@@ -117,13 +117,11 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
             onClick = { onOpen("widgets") },
         )
 
-        SectionHeader("About")
-        Text(
-            "Air Bridge 0.3.0\n\nBuilt on the fitbit_air protocol work by Thore Koritzius. " +
-                "Nothing you see here leaves your phone.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        SettingsRow(
+            title = "About",
+            subtitle = "Your band, this app, and how they talk",
+            icon = Icons.Outlined.Info,
+            onClick = { onOpen("about") },
         )
 
         Box(Modifier.padding(bottom = 28.dp))
@@ -163,6 +161,10 @@ private fun BandCard() {
         // waits for the battery read rather than racing it.
         Band.readBattery(context, airResult(
             onSuccess = { value ->
+                // The band answered, so it is reachable whatever the adapter
+                // said, and whatever an earlier attempt complained about.
+                connected = true
+                message = null
                 battery = (value as? Map<*, *>)?.get("percent") as? Int
                 batteryAt = System.currentTimeMillis()
                 Band.readSignal(context, airResult(
@@ -220,14 +222,12 @@ private fun BandCard() {
                 )
             }
             Column(Modifier.weight(1f)) {
-                Text(
-                    "YOUR BAND",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text("Fitbit Air", style = MaterialTheme.typography.titleLarge)
+                Text("Fitbit Air", style = MaterialTheme.typography.headlineSmall)
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    // A failure takes this line and can run to two, so the
+                    // glyph sits on the first line rather than floating in
+                    // the middle of the block.
+                    verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(top = 3.dp),
                 ) {
@@ -239,13 +239,14 @@ private fun BandCard() {
                         contentDescription = null,
                         tint = if (connected == true) MaterialTheme.extras.positive
                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp),
+                        modifier = Modifier.padding(top = 3.dp).size(15.dp),
                     )
                     Text(
                         message ?: when {
                             connected == true -> "Connected"
-                            connected == false -> "Not connected"
-                            else -> "Connection unknown"
+                            connected == false -> "Disconnected"
+                            syncing -> "Checking…"
+                            else -> "Disconnected"
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -270,12 +271,10 @@ private fun BandCard() {
             }
         }
 
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.padding(vertical = 18.dp),
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            modifier = Modifier.padding(top = 22.dp),
+        ) {
             Metric(
                 icon = Icons.Outlined.BatteryStd,
                 label = "Battery",
@@ -314,6 +313,11 @@ private fun BandCard() {
                 }
             )
         }
+
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(top = 22.dp),
+        )
     }
 }
 
@@ -415,6 +419,8 @@ private fun AccentDot(accent: Accent, selected: Boolean, onClick: () -> Unit) {
         Accent.Green -> Color(0xFF5BD6A8)
         Accent.Violet -> Color(0xFFB9A8E8)
         Accent.Amber -> Color(0xFFE8C48F)
+        Accent.Rose -> Color(0xFFE8A6B4)
+        Accent.Slate -> Color(0xFFA8B6C8)
     }
     val ring by animateColorAsState(
         if (selected) fill else MaterialTheme.colorScheme.outline,

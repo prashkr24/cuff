@@ -106,6 +106,7 @@ fun AirBridgeApp() {
                 pushed("people") { PeopleScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }
                 pushed("permissions") { PermissionsScreen(onBack = nav::popBackStack) }
+                pushed("about") { AboutScreen(onBack = nav::popBackStack) }
                 pushed(
                     route = "app/{packageName}",
                     arguments = listOf(navArgument("packageName") { type = NavType.StringType }),

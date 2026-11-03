@@ -39,6 +39,8 @@ android {
 
     buildFeatures {
         compose = true
+        // About shows the version; reading it from here keeps one source.
+        buildConfig = true
     }
 
     sourceSets {

@@ -101,6 +101,36 @@ internal val AmberLight = AccentColors(
     containerOutline = Color(0xFFE3CFAC),
 )
 
+internal val RoseDark = AccentColors(
+    primary = Color(0xFFE8A6B4),
+    onPrimary = Color(0xFF2E141C),
+    container = Color(0xFF351F26),
+    onContainer = Color(0xFFF6D3DB),
+    containerOutline = Color(0xFF59333F),
+)
+internal val RoseLight = AccentColors(
+    primary = Color(0xFFA33A58),
+    onPrimary = Color(0xFFFFFFFF),
+    container = Color(0xFFF9E4E9),
+    onContainer = Color(0xFF4B1424),
+    containerOutline = Color(0xFFEDC5CF),
+)
+
+internal val SlateDark = AccentColors(
+    primary = Color(0xFFA8B6C8),
+    onPrimary = Color(0xFF161D26),
+    container = Color(0xFF212A33),
+    onContainer = Color(0xFFD6DEE8),
+    containerOutline = Color(0xFF3A4654),
+)
+internal val SlateLight = AccentColors(
+    primary = Color(0xFF445468),
+    onPrimary = Color(0xFFFFFFFF),
+    container = Color(0xFFE7ECF2),
+    onContainer = Color(0xFF1E2831),
+    containerOutline = Color(0xFFCAD4DF),
+)
+
 /**
  * Colours Material 3 has no role for. [positive] is "this is working" — the
  * relay dot, a battery bar, a resting rate trending the right way.

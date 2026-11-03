@@ -46,6 +46,9 @@ internal object Band {
     fun readSignal(context: Context, reply: AirResult) =
         operate(context, reply) { air, r -> air.readSignalStrength(r) }
 
+    fun readDeviceInfo(context: Context, reply: AirResult) =
+        operate(context, reply) { air, r -> air.readDeviceInfo(r) }
+
     /**
      * One buzz in the shape a notification would get, so that trying it tells
      * you something true about what the band will do tonight.
@@ -110,12 +113,33 @@ internal object Band {
     private fun own(context: Context): AirLink =
         link ?: AirLink(context.applicationContext).also { link = it }
 
+    /** How long to keep waiting out a band that is busy with something else. */
+    private const val RETRY_MILLIS = 1_500L
+    private const val RETRIES = 3
+
     private fun operate(
         context: Context,
         reply: AirResult,
+        attempt: Int = 0,
         operation: (AirLink, AirResult) -> Unit,
     ) {
-        CalendarRelayService.active?.let { return it.readDeviceStatus(reply, operation) }
+        CalendarRelayService.active?.let { relay ->
+            // The relay refuses while it is mid-delivery, and one screen
+            // opening after another is enough to collide with its own earlier
+            // read. Waiting a moment is a better answer than handing that
+            // race to the person holding the phone.
+            return relay.readDeviceStatus(object : AirResult {
+                override fun success(result: Any?) = reply.success(result)
+                override fun error(code: String, message: String?, details: Any?) {
+                    if (code == "BUSY" && attempt < RETRIES) {
+                        handler.postDelayed(
+                            { operate(context, reply, attempt + 1, operation) },
+                            RETRY_MILLIS,
+                        )
+                    } else reply.error(code, message, details)
+                }
+            }, operation)
+        }
 
         handler.removeCallbacks(idle)
         val air = own(context)

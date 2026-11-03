@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -106,7 +107,7 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
         AccentCard {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(13.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 15.dp),
             ) {
                 Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
@@ -131,6 +132,15 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 2.dp),
                     )
+                }
+                // Pause and Stop are not the same promise. Pause is the
+                // frequent one and comes back by itself, so it keeps the
+                // button; Stop is rare and survives a reboot, so it sits
+                // beside it as plain text: reachable, not easy to hit.
+                if (running) {
+                    TextButton(onClick = { state.stop() }) {
+                        Text("Stop", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 OutlinedButton(
                     onClick = {

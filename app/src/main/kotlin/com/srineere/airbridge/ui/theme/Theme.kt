@@ -24,7 +24,7 @@ enum class ThemeMode { Light, Dark, System }
  * The accent swatches on Device. [Dynamic] follows the wallpaper and is only
  * offered on Android 12 and up, where the platform can supply it.
  */
-enum class Accent { Dynamic, Cyan, Green, Violet, Amber }
+enum class Accent { Dynamic, Cyan, Green, Violet, Amber, Rose, Slate }
 
 val Accent.isAvailable: Boolean
     get() = this != Accent.Dynamic || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -39,6 +39,8 @@ private fun accentColors(accent: Accent, dark: Boolean): AccentColors = when (ac
     Accent.Green -> if (dark) GreenDark else GreenLight
     Accent.Violet -> if (dark) VioletDark else VioletLight
     Accent.Amber -> if (dark) AmberDark else AmberLight
+    Accent.Rose -> if (dark) RoseDark else RoseLight
+    Accent.Slate -> if (dark) SlateDark else SlateLight
     // Dynamic never reaches here: it is resolved from the platform below, and
     // falls back to Cyan on the versions that cannot supply it.
     Accent.Cyan, Accent.Dynamic -> if (dark) CyanDark else CyanLight
