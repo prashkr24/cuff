@@ -6,6 +6,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -13,6 +19,7 @@ import androidx.compose.runtime.remember
 import android.text.format.DateFormat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayActivity
@@ -74,6 +81,7 @@ internal fun ActivityRow(
     // The phone's own 12 or 24 hour habit, not this file's opinion of it.
     val clock = remember(context) { DateFormat.getTimeFormat(context) }
     val app = state.apps.firstOrNull { it.packageName == entry.sourcePackage }
+    val glyph = glyphFor(entry.sourcePackage, state.dialer)
     // The history holds only the identity hash, so the name is looked up
     // here, from the same places a person's screen finds them. Someone who
     // rang once before a restart is no longer nameable, and the app's own
@@ -85,7 +93,12 @@ internal fun ActivityRow(
             state.label(entry.sourcePackage).takeIf { who != null },
             describeActivity(entry.stage, entry.errorCode, entry.preset),
         ).joinToString(" · "),
-        leading = app?.let { { AppIcon(it, size = 34) } },
+        // A drawn glyph for the things every phone has, so a list of alerts
+        // reads as one list rather than a row of launcher icons shouting in
+        // four different palettes. Anything else keeps its own icon, which is
+        // the only way to tell one chat app from another at a glance.
+        icon = glyph,
+        leading = if (glyph != null) null else app?.let { { AppIcon(it, size = 34) } },
         trailing = {
             Column(horizontalAlignment = Alignment.End) {
                 Text(
@@ -103,6 +116,23 @@ internal fun ActivityRow(
             }
         },
     )
+}
+
+/**
+ * The stock apps, by what they are rather than by who makes them: the package
+ * name is the only clue available here, and every maker's dialer still has
+ * "dialer" in it.
+ */
+private fun glyphFor(packageName: String?, dialer: String): ImageVector? {
+    val name = packageName ?: return null
+    return when {
+        name == dialer || "dialer" in name || "telecom" in name -> Icons.Outlined.Call
+        "calendar" in name -> Icons.Outlined.CalendarMonth
+        "messaging" in name || ".mms" in name || ".sms" in name -> Icons.Outlined.ChatBubbleOutline
+        "deskclock" in name || "alarm" in name -> Icons.Outlined.Alarm
+        name.substringAfterLast('.') == "gm" || "mail" in name -> Icons.Outlined.MailOutline
+        else -> null
+    }
 }
 
 /** The day it happened, named where a name is clearer than a date. */
