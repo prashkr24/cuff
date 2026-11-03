@@ -1,10 +1,14 @@
 package com.srineere.airbridge.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Alarm
@@ -12,6 +16,8 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Vibration
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +25,8 @@ import androidx.compose.runtime.remember
 import android.text.format.DateFormat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -81,7 +89,7 @@ internal fun ActivityRow(
     // The phone's own 12 or 24 hour habit, not this file's opinion of it.
     val clock = remember(context) { DateFormat.getTimeFormat(context) }
     val app = state.apps.firstOrNull { it.packageName == entry.sourcePackage }
-    val glyph = glyphFor(entry.sourcePackage, state.dialer)
+    val badge = badgeFor(entry.sourcePackage, state.dialer)
     // The history holds only the identity hash, so the name is looked up
     // here, from the same places a person's screen finds them. Someone who
     // rang once before a restart is no longer nameable, and the app's own
@@ -93,12 +101,16 @@ internal fun ActivityRow(
             state.label(entry.sourcePackage).takeIf { who != null },
             describeActivity(entry.stage, entry.errorCode, entry.preset),
         ).joinToString(" · "),
-        // A drawn glyph for the things every phone has, so a list of alerts
+        // A drawn badge for the things every phone has, so a list of alerts
         // reads as one list rather than a row of launcher icons shouting in
-        // four different palettes. Anything else keeps its own icon, which is
-        // the only way to tell one chat app from another at a glance.
-        icon = glyph,
-        leading = if (glyph != null) null else app?.let { { AppIcon(it, size = 34) } },
+        // four different palettes. Its own colour, not the accent: these name
+        // what kind of thing happened, and a column of identical green tiles
+        // would say nothing that the words beside them do not.
+        leading = when {
+            badge != null -> ({ Badge(badge) })
+            app != null -> ({ AppIcon(app, size = 34) })
+            else -> null
+        },
         trailing = {
             Column(horizontalAlignment = Alignment.End) {
                 Text(
@@ -119,19 +131,62 @@ internal fun ActivityRow(
 }
 
 /**
+ * A drawn stand-in for an app, with a colour of its own.
+ *
+ * Deliberately outside the theme palette. Everything else in this app is one
+ * accent because it is all one setting; this list is a record of different
+ * kinds of thing, and the colour is the fastest way to read which.
+ */
+private class AppBadge(
+    val icon: ImageVector,
+    private val darkTile: Long, private val darkInk: Long,
+    private val lightTile: Long, private val lightInk: Long,
+) {
+    fun tile(dark: Boolean) = Color(if (dark) darkTile else lightTile)
+    fun ink(dark: Boolean) = Color(if (dark) darkInk else lightInk)
+}
+
+private val CALL = AppBadge(Icons.Outlined.Call, 0xFF1F3B2F, 0xFF7FE0B2, 0xFFD7F0E2, 0xFF1D5B3C)
+private val CHAT = AppBadge(Icons.Outlined.ChatBubbleOutline, 0xFF26303A, 0xFF9FD6E8, 0xFFD9ECF5, 0xFF1A4E63)
+private val DATE = AppBadge(Icons.Outlined.CalendarMonth, 0xFF332B22, 0xFFE8C48F, 0xFFF6E7CE, 0xFF6B4A17)
+private val WAKE = AppBadge(Icons.Outlined.Alarm, 0xFF2B2433, 0xFFCFA8E8, 0xFFEADDF5, 0xFF4C2E63)
+private val POST = AppBadge(Icons.Outlined.MailOutline, 0xFF3A2326, 0xFFE89FA6, 0xFFF8DFE2, 0xFF6B2730)
+/** A buzz this app asked for itself, which belongs to no app at all. */
+private val SELF = AppBadge(Icons.Outlined.Vibration, 0xFF1E262B, 0xFF9FD6E8, 0xFFE2EAEF, 0xFF2A4C5B)
+
+/**
  * The stock apps, by what they are rather than by who makes them: the package
  * name is the only clue available here, and every maker's dialer still has
  * "dialer" in it.
  */
-private fun glyphFor(packageName: String?, dialer: String): ImageVector? {
-    val name = packageName ?: return null
+private fun badgeFor(packageName: String?, dialer: String): AppBadge? {
+    val name = packageName ?: return SELF
     return when {
-        name == dialer || "dialer" in name || "telecom" in name -> Icons.Outlined.Call
-        "calendar" in name -> Icons.Outlined.CalendarMonth
-        "messaging" in name || ".mms" in name || ".sms" in name -> Icons.Outlined.ChatBubbleOutline
-        "deskclock" in name || "alarm" in name -> Icons.Outlined.Alarm
-        name.substringAfterLast('.') == "gm" || "mail" in name -> Icons.Outlined.MailOutline
+        name == dialer || "dialer" in name || "telecom" in name -> CALL
+        "calendar" in name -> DATE
+        "messaging" in name || ".mms" in name || ".sms" in name -> CHAT
+        "deskclock" in name || "alarm" in name -> WAKE
+        name.substringAfterLast('.') == "gm" || "mail" in name -> POST
         else -> null
+    }
+}
+
+@Composable
+private fun Badge(badge: AppBadge) {
+    val dark = isSystemInDarkTheme()
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(badge.tile(dark)),
+    ) {
+        Icon(
+            badge.icon,
+            contentDescription = null,
+            tint = badge.ink(dark),
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
