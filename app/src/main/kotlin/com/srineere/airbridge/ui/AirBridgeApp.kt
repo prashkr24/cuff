@@ -39,10 +39,10 @@ import com.srineere.airbridge.ui.theme.extras
 
 /**
  * The tabs. Health is designed but not built, so the bar carries two for now
- * and the app opens on Notifications.
+ * and the app opens on Alerts.
  */
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
-    Notifications("notifications", "Notifications", Icons.Outlined.Vibration),
+    Alerts("alerts", "Alerts", Icons.Outlined.Vibration),
     Device("device", "Device", Icons.Outlined.Watch),
 }
 
@@ -93,13 +93,13 @@ fun AirBridgeApp() {
         CompositionLocalProvider(LocalRelayState provides state) {
             NavHost(
                 navController = nav,
-                startDestination = Tab.Notifications.route,
+                startDestination = Tab.Alerts.route,
                 modifier = Modifier.fillMaxSize().padding(insets),
                 // Tabs cross-fade; pushed screens slide, set per route below.
                 enterTransition = { fadeIn(tween(180)) },
                 exitTransition = { fadeOut(tween(180)) },
             ) {
-                composable(Tab.Notifications.route) { NotificationsScreen(onOpen = nav::navigate) }
+                composable(Tab.Alerts.route) { AlertsScreen(onOpen = nav::navigate) }
                 composable(Tab.Device.route) { DeviceScreen(onOpen = nav::navigate) }
 
                 pushed("apps") { AppsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }

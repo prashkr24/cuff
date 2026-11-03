@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayPattern
@@ -35,12 +36,12 @@ import com.srineere.airbridge.ui.theme.extras
 import java.util.concurrent.TimeUnit
 
 @Composable
-internal fun NotificationsScreen(onOpen: (String) -> Unit) {
+internal fun AlertsScreen(onOpen: (String) -> Unit) {
     val state = LocalRelayState.current
     val config = state.config
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle("Notifications")
+        ScreenTitle("Alerts")
 
         RelayStatusCard(state, onOpen)
 
@@ -130,6 +131,11 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
                             else -> state.outcome ?: "Start to relay to your Air"
                         },
                         style = MaterialTheme.typography.bodyMedium,
+                        // Three app names wrap to three lines and shove the
+                        // buttons around; the row below says the same thing
+                        // with room to say it.
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }

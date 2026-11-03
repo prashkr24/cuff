@@ -5,17 +5,32 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.telecom.TelecomManager
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 
 /** Host-app preferences, deliberately separate from the device-control package. */
 internal object RelayAppSelection {
     private const val DEFAULT_APP = "com.google.android.calendar"
-    private const val DEFAULT_DIALER = "com.google.android.dialer"
+    private const val FALLBACK_DIALER = "com.google.android.dialer"
 
+    /**
+     * Whatever actually answers the phone here. Hard-coding Google's dialer
+     * was right on one phone and wrong on every Samsung, Xiaomi and OnePlus.
+     */
+    fun dialer(context: Context): String = runCatching {
+        context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage
+    }.getOrNull()?.takeIf { it.isNotBlank() } ?: FALLBACK_DIALER
+
+    /**
+     * What a fresh install relays. The phone is in here because a relay whose
+     * headline is "ring until answered" that ignores calls out of the box is
+     * not a default, it is a trap: nothing on screen says the one alert you
+     * most wanted is the one not selected.
+     */
     fun selected(context: Context): Set<String> = context
         .getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
-        .getStringSet("selected_apps", setOf(DEFAULT_APP))!!.toSet()
+        .getStringSet("selected_apps", setOf(dialer(context), DEFAULT_APP))!!.toSet()
 
     fun save(context: Context, packages: Set<String>) {
         require(packages.size <= 64 && packages.all {
@@ -58,7 +73,8 @@ internal object RelayAppSelection {
      * people. An app that rings without naming the caller would give a list
      * that never matches anything, which is worse than not offering one.
      */
-    private val namesCallers = setOf(DEFAULT_DIALER, "com.whatsapp", "com.whatsapp.w4b")
+    private fun namesCallers(context: Context) =
+        setOf(dialer(context), FALLBACK_DIALER, "com.whatsapp", "com.whatsapp.w4b")
 
     /** An app that has actually named a caller has earned its list. */
     fun rememberNamesCallers(context: Context, packageName: String) {
@@ -107,7 +123,7 @@ internal object RelayAppSelection {
                 "packageName" to app.key,
                 "label" to app.value,
                 "calls" to (app.key in rang || canReceiveCalls(context, app.key)).toString(),
-                "people" to (app.key in namesCallers || app.key in named).toString(),
+                "people" to (app.key in namesCallers(context) || app.key in named).toString(),
             )
             runCatching {
                 val icon = manager.getApplicationIcon(app.key)
