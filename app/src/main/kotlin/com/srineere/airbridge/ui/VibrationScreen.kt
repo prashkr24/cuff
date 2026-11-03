@@ -46,6 +46,7 @@ internal fun VibrationScreen(target: VibrationTarget, onBack: () -> Unit) {
     val state = LocalRelayState.current
     val current = state.preset(target) ?: state.inherited(target)
     val callsOnly = target is VibrationTarget.DefaultCall ||
+        target is VibrationTarget.DefaultAppCall ||
         (target is VibrationTarget.App && target.calls) ||
         target is VibrationTarget.Caller
 
@@ -254,7 +255,8 @@ internal fun Segment(
 
 private fun titleFor(target: VibrationTarget, state: RelayState): String = when (target) {
     VibrationTarget.Default -> "Everything else"
-    VibrationTarget.DefaultCall -> "Calls"
+    VibrationTarget.DefaultCall -> "Phone calls"
+    VibrationTarget.DefaultAppCall -> "App calls"
     is VibrationTarget.App -> if (target.calls) "Calls" else "Messages"
     is VibrationTarget.Caller -> state.caller(target.id)?.label ?: "Caller"
 }

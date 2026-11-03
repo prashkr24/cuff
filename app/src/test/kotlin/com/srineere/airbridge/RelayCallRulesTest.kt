@@ -80,11 +80,21 @@ class RelayCallRulesTest {
     }
 
     @Test fun `a muted call preset drops the alert rather than ringing silently`() {
-        val config = RelayRuleConfig(
-            defaultCallPreset = RelayPreset.MUTE,
-            apps = mapOf("com.whatsapp" to RelayAppRule(true)),
+        // Each default mutes only what it covers: muting the phone leaves an
+        // app's calls alone, and muting apps leaves the phone's alone.
+        val quietApps = RelayRuleConfig(
+            defaultAppCallPreset = RelayPreset.MUTE,
+            apps = mapOf("com.whatsapp" to RelayAppRule(true), dialer to RelayAppRule(true)),
         )
-        assertNull(config.match("com.whatsapp", emptySet(), RelayAlertKind.CALL))
+        assertNull(quietApps.match("com.whatsapp", emptySet(), RelayAlertKind.CALL, dialer = dialer))
+        assertNotNull(quietApps.match(dialer, emptySet(), RelayAlertKind.CALL, dialer = dialer))
+
+        val quietPhone = quietApps.copy(
+            defaultCallPreset = RelayPreset.MUTE,
+            defaultAppCallPreset = RelayPreset.RING,
+        )
+        assertNull(quietPhone.match(dialer, emptySet(), RelayAlertKind.CALL, dialer = dialer))
+        assertNotNull(quietPhone.match("com.whatsapp", emptySet(), RelayAlertKind.CALL, dialer = dialer))
     }
 
     @Test fun `a disabled app stays silent for calls too`() {
@@ -206,6 +216,30 @@ class RelayCallRulesTest {
         callers = callers,
         onlySavedCallers = onlySaved,
     )
+
+    @Test fun `an app's call falls back to the app call default, not the phone's`() {
+        val config = RelayRuleConfig(
+            defaultCallPreset = RelayPreset.RING,
+            defaultAppCallPreset = RelayPreset.DOUBLE,
+            apps = mapOf(dialer to RelayAppRule(true), "com.whatsapp" to RelayAppRule(true)),
+        )
+        // The phone keeps its own ring; an app that has said nothing takes the
+        // app default instead of borrowing the phone's.
+        assertEquals(
+            RelayPreset.RING,
+            config.match(dialer, emptySet(), RelayAlertKind.CALL, dialer = dialer)?.preset,
+        )
+        assertEquals(
+            RelayPreset.DOUBLE,
+            config.match("com.whatsapp", emptySet(), RelayAlertKind.CALL, dialer = dialer)?.preset,
+        )
+        // An app's own call rule still beats both.
+        val set = config.copy(apps = config.apps + ("com.whatsapp" to RelayAppRule(true, callPreset = RelayPreset.LOW)))
+        assertEquals(
+            RelayPreset.LOW,
+            set.match("com.whatsapp", emptySet(), RelayAlertKind.CALL, dialer = dialer)?.preset,
+        )
+    }
 
     @Test fun `a saved caller's own vibration outranks the app's`() {
         val config = withCallers(mapOf("alice" to SavedCaller(dialer, "Alice", RelayPreset.DOUBLE)))

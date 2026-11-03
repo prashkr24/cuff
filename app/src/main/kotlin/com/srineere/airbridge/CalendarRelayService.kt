@@ -334,7 +334,10 @@ class CalendarRelayService : Service() {
             return
         }
         val config = RelayRuleStore.read(this)
-        val match = config.match(packageName, conversationIds, kind, callerId)
+        val match = config.match(
+            packageName, conversationIds, kind, callerId,
+            dialer = RelayAppSelection.dialer(this),
+        )
         if (match == null) {
             Log.i(TAG, "dropped pkg=$packageName kind=$kind by=rule (silent or app off)")
             record(nextId(), packageName, postedAt, "filtered")

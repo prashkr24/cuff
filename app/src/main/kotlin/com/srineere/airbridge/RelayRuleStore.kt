@@ -33,7 +33,7 @@ internal object RelayRuleStore {
     /** [legacy] holds version 1's separately stored saved chats and "Selected" flag. */
     internal fun decode(json: JSONObject, legacy: Pair<Map<String, SavedChat>, Boolean>? = null): RelayRuleConfig {
         val version = json.getInt("version")
-        require(version in 2..4 || (version == 1 && legacy != null))
+        require(version in 2..5 || (version == 1 && legacy != null))
         val apps = json.getJSONObject("apps")
         val chats = json.getJSONObject("chats")
         val quiet = json.getJSONObject("silence")
@@ -41,10 +41,16 @@ internal object RelayRuleStore {
         val ring = json.optJSONObject("ring")
         // Saved callers arrived in version 4; older settings have none.
         val callers = json.optJSONObject("callers")
+        // Before version 5 one value served the phone and every app that
+        // rings. Carrying it into both leaves every existing setting as it
+        // was, so nothing starts buzzing differently after an update.
+        val calls = if (json.isNull("defaultCallPreset")) RelayPreset.RING
+            else RelayPreset.parse(json.getString("defaultCallPreset"))
         return RelayRuleConfig(
             defaultPreset = RelayPreset.parse(json.getString("defaultPreset")),
-            defaultCallPreset = if (json.isNull("defaultCallPreset")) RelayPreset.RING
-                else RelayPreset.parse(json.getString("defaultCallPreset")),
+            defaultCallPreset = calls,
+            defaultAppCallPreset = if (json.isNull("defaultAppCallPreset")) calls
+                else RelayPreset.parse(json.getString("defaultAppCallPreset")),
             apps = apps.keys().asSequence().associateWith { key ->
                 val value = apps.getJSONObject(key)
                 val ownRing = value.optJSONObject("ring")
@@ -113,9 +119,10 @@ internal object RelayRuleStore {
                     JSONObject().put("gapMillis", it.gapMillis).put("maxSeconds", it.maxSeconds)
                 } ?: JSONObject.NULL))
         }
-        val json = JSONObject().put("version", 4).put("defaultPreset", config.defaultPreset.id)
+        val json = JSONObject().put("version", 5).put("defaultPreset", config.defaultPreset.id)
             .put("callers", callers).put("onlySavedCallers", config.onlySavedCallers)
             .put("defaultCallPreset", config.defaultCallPreset.id)
+            .put("defaultAppCallPreset", config.defaultAppCallPreset.id)
             .put("apps", apps).put("chats", chats).put("everyoneElseSilent", config.everyoneElseSilent)
             .put("silence", JSONObject().put("pauseUntil", s.pauseUntil).put("quietEnabled", s.quietEnabled)
                 .put("startMinute", s.startMinute).put("endMinute", s.endMinute))
@@ -146,6 +153,7 @@ internal object RelayRuleStore {
         val c = read(context)
         return mapOf("defaultPreset" to c.defaultPreset.id,
             "defaultCallPreset" to c.defaultCallPreset.id,
+            "defaultAppCallPreset" to c.defaultAppCallPreset.id,
             "ringGapMillis" to c.ring.gapMillis, "ringMaxSeconds" to c.ring.maxSeconds,
             "apps" to c.apps.mapValues { (_, r) ->
                 mapOf("enabled" to r.enabled, "preset" to r.preset?.id,

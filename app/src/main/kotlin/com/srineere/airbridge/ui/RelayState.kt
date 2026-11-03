@@ -41,12 +41,14 @@ internal data class AppEntry(
 internal sealed interface VibrationTarget {
     data object Default : VibrationTarget
     data object DefaultCall : VibrationTarget
+    data object DefaultAppCall : VibrationTarget
     data class App(val packageName: String, val calls: Boolean) : VibrationTarget
     data class Caller(val id: String) : VibrationTarget
 
     fun encode(): String = when (this) {
         Default -> "default"
         DefaultCall -> "defaultCall"
+        DefaultAppCall -> "defaultAppCall"
         is App -> "app|$packageName|${if (calls) "call" else "message"}"
         is Caller -> "caller|$id"
     }
@@ -56,6 +58,7 @@ internal sealed interface VibrationTarget {
             val parts = raw.split('|')
             return when (parts.firstOrNull()) {
                 "defaultCall" -> DefaultCall
+                "defaultAppCall" -> DefaultAppCall
                 "app" -> App(parts.getOrElse(1) { "" }, parts.getOrNull(2) == "call")
                 "caller" -> Caller(parts.drop(1).joinToString("|"))
                 else -> Default
@@ -142,6 +145,7 @@ internal class RelayState(private val context: Context, private val invalidate: 
     fun preset(target: VibrationTarget): RelayPreset? = when (target) {
         VibrationTarget.Default -> config.defaultPreset
         VibrationTarget.DefaultCall -> config.defaultCallPreset
+        VibrationTarget.DefaultAppCall -> config.defaultAppCallPreset
         is VibrationTarget.App ->
             if (target.calls) config.apps[target.packageName]?.callPreset
             else config.apps[target.packageName]?.preset
@@ -152,8 +156,9 @@ internal class RelayState(private val context: Context, private val invalidate: 
     fun inherited(target: VibrationTarget): RelayPreset = when (target) {
         VibrationTarget.Default -> config.defaultPreset
         VibrationTarget.DefaultCall -> config.defaultCallPreset
+        VibrationTarget.DefaultAppCall -> config.defaultAppCallPreset
         is VibrationTarget.App ->
-            if (target.calls) config.defaultCallPreset else config.defaultPreset
+            if (target.calls) config.defaultAppCallPreset else config.defaultPreset
         is VibrationTarget.Caller -> {
             val caller = config.callers[target.id]
             config.apps[caller?.packageName]?.callPreset ?: config.defaultCallPreset
@@ -164,6 +169,7 @@ internal class RelayState(private val context: Context, private val invalidate: 
         when (target) {
             VibrationTarget.Default -> config.copy(defaultPreset = preset)
             VibrationTarget.DefaultCall -> config.copy(defaultCallPreset = preset)
+            VibrationTarget.DefaultAppCall -> config.copy(defaultAppCallPreset = preset)
             is VibrationTarget.App -> {
                 val rule = config.apps[target.packageName]
                     ?: RelayAppRule(enabled = true)

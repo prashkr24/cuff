@@ -131,7 +131,15 @@ internal data class RelayRuleConfig(
     // The Air has two strengths; a notification you want to feel uses the
     // stronger one, and a call never uses anything else.
     val defaultPreset: RelayPreset = RelayPreset.HIGH,
+    /** The phone's own ring. */
     val defaultCallPreset: RelayPreset = RelayPreset.RING,
+    /**
+     * What an app's call rings like when the app has said nothing. Separate
+     * from the phone's because a Discord call and a phone call are not the
+     * same event; before this they shared one value, so telling them apart
+     * meant setting every app by hand.
+     */
+    val defaultAppCallPreset: RelayPreset = RelayPreset.RING,
     val apps: Map<String, RelayAppRule> = emptyMap(),
     val chats: Map<String, SavedChat> = emptyMap(),
     val silence: RelaySilence = RelaySilence(),
@@ -157,6 +165,9 @@ internal data class RelayRuleConfig(
         identities: Set<String>,
         kind: RelayAlertKind = RelayAlertKind.MESSAGE,
         callerId: String? = null,
+        // Which package answers the phone is a runtime fact, so it is passed
+        // in rather than assumed: plenty of people do not use Google's dialer.
+        dialer: String = RelayRuleStore.DIALER,
     ): RelayMatch? {
         val app = apps[packageName]?.takeIf { it.enabled } ?: return null
         if (kind == RelayAlertKind.CALL) {
@@ -167,7 +178,8 @@ internal data class RelayRuleConfig(
             // to anyone: that would drop every call from an app that does not
             // say who is calling, which is not what the setting promises.
             if (onlySavedCallers && caller == null && callerId != null) return null
-            val preset = caller?.preset ?: app.callPreset ?: defaultCallPreset
+            val preset = caller?.preset ?: app.callPreset
+                ?: if (packageName == dialer) defaultCallPreset else defaultAppCallPreset
             // A caller's own rule outranks the app's.
             return if (preset.silent) null else RelayMatch(preset, if (caller != null) 3 else 2)
         }

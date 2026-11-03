@@ -7,11 +7,13 @@ import org.json.JSONObject
 class RelayRuleStoreTest {
     @Test fun `settings round trip preserves inheritance mute pause and quiet window`() {
         val expected = RelayRuleConfig(RelayPreset.DOUBLE, RelayPreset.MUTE,
-            mapOf("com.whatsapp" to RelayAppRule(true, RelayPreset.LOW, RelayPreset.RING),
+            defaultAppCallPreset = RelayPreset.LOW,
+            apps = mapOf("com.whatsapp" to RelayAppRule(true, RelayPreset.LOW, RelayPreset.RING),
                 "com.calendar" to RelayAppRule(false)),
-            mapOf("private-chat-hash" to SavedChat("com.whatsapp", "Chat", "name", RelayPreset.MUTE),
+            chats = mapOf("private-chat-hash" to SavedChat("com.whatsapp", "Chat", "name", RelayPreset.MUTE),
                 "other-hash" to SavedChat("com.whatsapp.w4b", "Shop")),
-            RelaySilence(-1, true, 540, 1020), ring = RelayRingSettings(450, 120), everyoneElseSilent = true)
+            silence = RelaySilence(-1, true, 540, 1020),
+            ring = RelayRingSettings(450, 120), everyoneElseSilent = true)
         val actual = RelayRuleStore.decode(JSONObject(RelayRuleStore.encode(expected).toString()))
         assertEquals(expected, actual)
         assertNull(actual.apps["com.calendar"]!!.preset)
@@ -19,8 +21,17 @@ class RelayRuleStoreTest {
         assertTrue(actual.apps["com.whatsapp"]!!.enabled)
     }
     @Test(expected = IllegalArgumentException::class) fun `newer schema is not treated as an empty default`() {
-        val json = RelayRuleStore.encode(RelayRuleConfig()).put("version", 5)
+        val json = RelayRuleStore.encode(RelayRuleConfig()).put("version", 6)
         RelayRuleStore.decode(json)
+    }
+    @Test fun `settings saved before apps had their own call default keep one ring for both`() {
+        val before = RelayRuleStore.encode(RelayRuleConfig(defaultCallPreset = RelayPreset.DOUBLE)).apply {
+            put("version", 4)
+            remove("defaultAppCallPreset")
+        }
+        val after = RelayRuleStore.decode(before)
+        assertEquals(RelayPreset.DOUBLE, after.defaultCallPreset)
+        assertEquals(RelayPreset.DOUBLE, after.defaultAppCallPreset)
     }
     @Test fun `configs saved before calls could ring decode with the shipped call defaults`() {
         val legacy = RelayRuleStore.encode(RelayRuleConfig(RelayPreset.LOW)).apply {

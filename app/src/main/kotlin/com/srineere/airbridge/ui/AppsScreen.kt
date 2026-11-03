@@ -1,5 +1,6 @@
 package com.srineere.airbridge.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,12 +53,21 @@ import com.srineere.airbridge.ui.theme.extras
 internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val state = LocalRelayState.current
     var query by remember { mutableStateOf("") }
+    var openOn by remember { mutableStateOf(true) }
+    var openOff by remember { mutableStateOf(false) }
 
     // The dialer is not one of these. Calls own it, and a second switch for
     // the same setting is a pair of controls that will disagree.
     val matching = state.apps
         .filter { it.packageName != state.dialer && it.label.contains(query, ignoreCase = true) }
     val (on, off) = matching.partition { it.packageName in state.config.selectedPackages }
+
+    // A search whose matches sit inside a shut section looks broken, so
+    // searching opens both. Off opens by itself when nothing is on yet, or
+    // the screen would greet a new phone with nothing at all.
+    val searching = query.isNotEmpty()
+    val showOn = openOn || searching
+    val showOff = openOff || searching || on.isEmpty()
 
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Apps", onBack = onBack)
@@ -69,28 +80,34 @@ internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
         )
 
-        // What an app buzzes like before anyone says otherwise, the way Calls
-        // owns the ring every call inherits. It is also the answer to every
-        // "Default" below, so it belongs on the same screen as them.
+        // What an app does before anyone says otherwise. These are the answer
+        // to every "Default" below, so they belong on the same screen as them,
+        // and there are two because an app's call is not an app's message.
         SettingsRow(
             title = "How apps buzz",
             subtitle = describe(state.config.defaultPreset),
             icon = Icons.Outlined.Vibration,
             onClick = { onOpen("vibration/" + VibrationTarget.Default.encode()) },
         )
+        SettingsRow(
+            title = "How app calls ring",
+            subtitle = describe(state.config.defaultAppCallPreset),
+            icon = Icons.Outlined.Call,
+            onClick = { onOpen("vibration/" + VibrationTarget.DefaultAppCall.encode()) },
+        )
 
         SearchField(query, { query = it }, "Search apps")
 
         LazyColumn(Modifier.fillMaxSize()) {
             if (on.isNotEmpty()) {
-                item("on") { SectionHeader("On") }
-                items(on, key = { "on:" + it.packageName }) { app ->
+                item("on") { SectionToggle("On", on.size, showOn) { openOn = !openOn } }
+                if (showOn) items(on, key = { "on:" + it.packageName }) { app ->
                     AppRow(app, enabled = true, state = state, onOpen = onOpen)
                 }
             }
             if (off.isNotEmpty()) {
-                item("off") { SectionHeader("Off") }
-                items(off, key = { "off:" + it.packageName }) { app ->
+                item("off") { SectionToggle("Off", off.size, showOff) { openOff = !openOff } }
+                if (showOff) items(off, key = { "off:" + it.packageName }) { app ->
                     AppRow(app, enabled = false, state = state, onOpen = onOpen)
                 }
             }
@@ -106,6 +123,39 @@ internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             }
             item("tail") { Box(Modifier.padding(bottom = 24.dp)) }
         }
+    }
+}
+
+/**
+ * A section heading that opens and shuts, carrying its count so a shut one
+ * still says how much is inside.
+ *
+ * Open or shut is a view, not a setting: it lasts while the screen is open and
+ * is forgotten when it closes, because a section that stays shut across
+ * launches is a section whose contents quietly stop existing.
+ */
+@Composable
+private fun SectionToggle(text: String, count: Int, open: Boolean, onToggle: () -> Unit) {
+    val turn by animateFloatAsState(if (open) 90f else 0f, label = "caret")
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(start = 20.dp, end = 14.dp, top = 18.dp, bottom = 2.dp),
+    ) {
+        Text(
+            "${text.uppercase()} \u00b7 $count",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = if (open) "Collapse" else "Expand",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.rotate(turn),
+        )
     }
 }
 
