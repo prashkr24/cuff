@@ -12,6 +12,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -94,11 +95,17 @@ fun AirBridgeTheme(
     val context = LocalContext.current
     val wallpaper = accent == Accent.Dynamic && Accent.Dynamic.isAvailable
 
-    val scheme = when {
-        wallpaper && dark -> dynamicDarkColorScheme(context)
-        wallpaper -> dynamicLightColorScheme(context)
-        dark -> darkScheme(accentColors(accent, dark = true))
-        else -> lightScheme(accentColors(accent, dark = false))
+    // Remembered because LocalColorScheme is static: a fresh instance on every
+    // recomposition invalidates every composable that reads a colour, which is
+    // all of them. The wallpaper schemes are the expensive ones to build, and
+    // none of the four changes unless one of these three does.
+    val scheme = remember(wallpaper, dark, accent, context) {
+        when {
+            wallpaper && dark -> dynamicDarkColorScheme(context)
+            wallpaper -> dynamicLightColorScheme(context)
+            dark -> darkScheme(accentColors(accent, dark = true))
+            else -> lightScheme(accentColors(accent, dark = false))
+        }
     }
 
     val view = LocalView.current
@@ -111,9 +118,11 @@ fun AirBridgeTheme(
         }
     }
 
-    val extras = (if (dark) DarkExtras else LightExtras).copy(
-        accentOutline = if (wallpaper) scheme.outline else accentColors(accent, dark).containerOutline,
-    )
+    val extras = remember(wallpaper, dark, accent, scheme) {
+        (if (dark) DarkExtras else LightExtras).copy(
+            accentOutline = if (wallpaper) scheme.outline else accentColors(accent, dark).containerOutline,
+        )
+    }
 
     CompositionLocalProvider(LocalAirExtras provides extras) {
         MaterialTheme(
