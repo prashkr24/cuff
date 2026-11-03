@@ -72,12 +72,12 @@ internal object RelayContacts {
      * matched by name. That is weaker than a number: renaming the contact
      * breaks the rule, and two people with one name cannot be told apart.
      */
-    private val namedCallers = setOf("com.whatsapp", "com.whatsapp.w4b")
+    val NAMED_CALLERS = setOf("com.whatsapp", "com.whatsapp.w4b")
 
     fun list(context: Context, packageName: String = "com.google.android.dialer"):
         List<Map<String, String>> {
         if (!granted(context)) return emptyList()
-        if (packageName in namedCallers) return byName(context, packageName)
+        if (packageName in NAMED_CALLERS) return byName(context, packageName)
         val found = linkedMapOf<String, Pair<String, String>>()
         runCatching {
             context.contentResolver.query(

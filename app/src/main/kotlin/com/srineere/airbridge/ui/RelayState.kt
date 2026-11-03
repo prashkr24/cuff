@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.RelayActivity
 import com.srineere.airbridge.RelayAppSelection
+import com.srineere.airbridge.RelayContacts
 import com.srineere.airbridge.RelayHistory
 import com.srineere.airbridge.RelayRecentCallers
 import com.srineere.airbridge.RelayAppRule
@@ -205,15 +206,70 @@ internal class RelayState(private val context: Context, private val invalidate: 
         get() = RelayRecentCallers.all(config.callers.keys)
             .map { it.id to SavedCaller(it.packageName, it.label, detail = it.detail) }
 
-    /** A recent caller, as the rule we would save for them. */
-    private fun remember(id: String): SavedCaller? =
-        recent.firstOrNull { it.first == id }?.second
+    /**
+     * The phone's own address book, so a rule can be made before someone's
+     * first call. Asked per app because identity differs: the dialer names a
+     * caller by number, WhatsApp only by display name.
+     */
+    fun contacts(packageName: String): List<Pair<String, SavedCaller>> =
+        RelayContacts.list(context, packageName).map { row ->
+            val id = row["id"].orEmpty()
+            val saved = config.callers[id] ?: SavedCaller(
+                packageName = packageName,
+                label = row["label"].orEmpty(),
+                detail = row["detail"]?.takeIf { it.isNotBlank() },
+            )
+            known[id] = saved.copy(preset = null, ring = null)
+            id to saved
+        }
+
+    /**
+     * Someone we can name: saved, heard ringing, or read from the address
+     * book. Anything that puts a person on screen has to be able to find
+     * them again, or their own screen opens calling them "Caller".
+     */
+    fun caller(id: String): SavedCaller? = config.callers[id]
+        ?: recent.firstOrNull { it.first == id }?.second
+        ?: known[id]
+
+    private fun remember(id: String): SavedCaller? = caller(id)
+
+    /**
+     * Puts someone back on the default rather than freezing today's default
+     * onto them, which is what picking its current shape by hand would do.
+     */
+    fun clearPreset(target: VibrationTarget) = update { config ->
+        when (target) {
+            is VibrationTarget.Caller -> config.copy(callers = config.callers - target.id)
+            is VibrationTarget.App -> {
+                val rule = config.apps[target.packageName] ?: return@update config
+                config.copy(
+                    apps = config.apps + (target.packageName to
+                        if (target.calls) rule.copy(callPreset = null) else rule.copy(preset = null))
+                )
+            }
+            else -> config
+        }
+    }
 
     fun callers(packageName: String?): List<Pair<String, SavedCaller>> =
         config.callers.entries
             .filter { packageName == null || it.value.packageName == packageName }
             .sortedBy { it.value.label.lowercase() }
             .map { it.key to it.value }
+
+    /** The people in one of the three groups the Calls screen shows. */
+    fun group(group: CallerGroup): List<Pair<String, SavedCaller>> {
+        val saved = config.callers.entries.sortedBy { it.value.label.lowercase() }
+            .map { it.key to it.value }
+        return when (group) {
+            CallerGroup.Own -> saved.filter { it.second.preset?.silent == false }
+            CallerGroup.Silenced -> saved.filter { it.second.preset?.silent == true }
+            // Saved-but-unchanged and never-saved both mean "uses the
+            // default", so they read as one list.
+            CallerGroup.Recent -> saved.filter { it.second.preset == null } + recent
+        }
+    }
 
     fun forgetCaller(id: String) = update { it.copy(callers = it.callers - id) }
 
@@ -240,6 +296,13 @@ internal class RelayState(private val context: Context, private val invalidate: 
     }
 
     companion object {
+        /**
+         * People we have put on screen but not written down. Held here rather
+         * than in the config so that naming someone is not the same as
+         * deciding something about them.
+         */
+        private val known = mutableMapOf<String, SavedCaller>()
+
         private val SHOWN_STAGES = setOf("verified", "failed", "ring_started", "ring_stopped")
     }
 }

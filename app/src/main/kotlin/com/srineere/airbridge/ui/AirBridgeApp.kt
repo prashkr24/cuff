@@ -104,6 +104,17 @@ fun AirBridgeApp() {
 
                 pushed("apps") { AppsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("calls") { CallsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed("contacts") { ContactsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed(
+                    route = "callers/{group}",
+                    arguments = listOf(navArgument("group") { type = NavType.StringType }),
+                ) { entry ->
+                    CallerListScreen(
+                        group = CallerGroup.of(entry.arguments?.getString("group")),
+                        onBack = nav::popBackStack,
+                        onOpen = nav::navigate,
+                    )
+                }
                 pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }
                 pushed("permissions") { PermissionsScreen(onBack = nav::popBackStack) }
                 pushed("about") { AboutScreen(onBack = nav::popBackStack) }

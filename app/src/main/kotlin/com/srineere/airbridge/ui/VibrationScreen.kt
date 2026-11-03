@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -120,6 +121,20 @@ internal fun VibrationScreen(target: VibrationTarget, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
                 )
+            }
+        }
+
+        // Picking the default's current shape by hand freezes it onto this
+        // target; following the default is a different thing, and the only
+        // way back out of a rule.
+        val own = state.preset(target) != null &&
+            (target is VibrationTarget.Caller || target is VibrationTarget.App)
+        AnimatedVisibility(visible = own) {
+            TextButton(
+                onClick = { state.clearPreset(target); onBack() },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text("Use the default instead")
             }
         }
 
@@ -241,8 +256,5 @@ private fun titleFor(target: VibrationTarget, state: RelayState): String = when 
     VibrationTarget.Default -> "Everything else"
     VibrationTarget.DefaultCall -> "Calls"
     is VibrationTarget.App -> if (target.calls) "Calls" else "Messages"
-    // A caller who has only rung has no saved rule yet, but they do have a name.
-    is VibrationTarget.Caller -> state.config.callers[target.id]?.label
-        ?: state.recent.firstOrNull { it.first == target.id }?.second?.label
-        ?: "Caller"
+    is VibrationTarget.Caller -> state.caller(target.id)?.label ?: "Caller"
 }

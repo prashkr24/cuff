@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,12 +57,22 @@ fun ScreenTitle(title: String, onBack: (() -> Unit)? = null) {
 }
 
 @Composable
-fun SectionHeader(text: String) = Text(
-    text = text.uppercase(),
-    style = MaterialTheme.typography.labelLarge,
-    color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 2.dp),
-)
+fun SectionHeader(text: String, action: String? = null, onAction: (() -> Unit)? = null) = Row(
+    verticalAlignment = Alignment.Bottom,
+    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 22.dp, bottom = 2.dp),
+) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.weight(1f).padding(bottom = 2.dp),
+    )
+    if (action != null && onAction != null) {
+        TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
+            Text(action, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
 
 /** A card that holds a live state, tinted with the accent. */
 @Composable
