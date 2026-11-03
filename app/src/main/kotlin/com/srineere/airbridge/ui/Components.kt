@@ -40,9 +40,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.ui.theme.extras
 
-/** A screen title, with a back arrow when the screen was pushed over a tab. */
+/**
+ * A screen title, with a back arrow when the screen was pushed over a tab, and
+ * room under it for the one fact that says which of two same-named things this
+ * screen is about.
+ */
 @Composable
-fun ScreenTitle(title: String, onBack: (() -> Unit)? = null) {
+fun ScreenTitle(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(
@@ -54,7 +58,17 @@ fun ScreenTitle(title: String, onBack: (() -> Unit)? = null) {
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
             }
         }
-        Text(title, style = MaterialTheme.typography.headlineSmall)
+        Column {
+            Text(title, style = MaterialTheme.typography.headlineSmall)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
     }
 }
 

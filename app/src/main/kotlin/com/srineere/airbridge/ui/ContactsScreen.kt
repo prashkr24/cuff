@@ -140,7 +140,10 @@ internal fun ContactsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         // has to be lazy.
         LazyColumn(Modifier.weight(1f)) {
             items(shown, key = { it.first }) { (id, caller) ->
-                CallerRow(id, caller, state, onOpen, forgettable = false, showSource = false)
+                CallerRow(
+                    id, caller, state, onOpen,
+                    forgettable = false, showSource = false, showNumber = true,
+                )
             }
             item {
                 Text(

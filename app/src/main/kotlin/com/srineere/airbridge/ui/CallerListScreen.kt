@@ -88,6 +88,7 @@ internal fun CallerRow(
     onOpen: (String) -> Unit,
     forgettable: Boolean = true,
     showSource: Boolean = true,
+    showNumber: Boolean = false,
 ) {
     val preset = caller.preset
     SettingsRow(
@@ -96,6 +97,10 @@ internal fun CallerRow(
             // Only worth saying where a list mixes sources; a screen already
             // filtered to one would just repeat its own chip on every row.
             state.label(caller.packageName).takeIf { showSource },
+            // A contact with two numbers is two entries with one name, and
+            // only one of them will ever ring. Kept to the address book and
+            // to a person's own screen rather than scattered over the tab.
+            caller.detail?.takeIf { showNumber && it.isNotBlank() },
             preset?.let { describe(it) } ?: "Uses the default",
         ).joinToString(" · "),
         leading = { Initial(caller.label, silent = preset?.silent == true) },

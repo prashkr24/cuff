@@ -50,7 +50,7 @@ internal fun VibrationScreen(target: VibrationTarget, onBack: () -> Unit) {
         target is VibrationTarget.Caller
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle(titleFor(target, state), onBack = onBack)
+        ScreenTitle(titleFor(target, state), numberFor(target, state), onBack = onBack)
 
         SectionHeader("Pattern")
         RelayPattern.entries
@@ -257,4 +257,14 @@ private fun titleFor(target: VibrationTarget, state: RelayState): String = when 
     VibrationTarget.DefaultCall -> "Calls"
     is VibrationTarget.App -> if (target.calls) "Calls" else "Messages"
     is VibrationTarget.Caller -> state.caller(target.id)?.label ?: "Caller"
+}
+
+/**
+ * Which number this rule is for, under the name. A contact can hold two, and
+ * the rule only ever covers the one that was tapped -- without this the two
+ * screens are identical and the wrong one gets edited.
+ */
+private fun numberFor(target: VibrationTarget, state: RelayState): String? {
+    if (target !is VibrationTarget.Caller) return null
+    return state.caller(target.id)?.detail?.takeIf { it.isNotBlank() }
 }
