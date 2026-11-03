@@ -1,35 +1,49 @@
 name: CI
 
+# The native app: compile it, run both modules' tests, and lint it.
+#
+# Lint is not optional here. Every API-level portability bug looks the same --
+# invisible on the one phone it was written on, fatal on someone else's -- and
+# the only one found so far was found by lint, not by use.
 on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  flutter:
+  app:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: subosito/flutter-action@v2
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The band's transport is checked in as prebuilt .so files for arm64,
+      # armeabi-v7a and x86_64, so there is no NDK step: CI compiles Kotlin
+      # against them and never rebuilds them. Changing them is a deliberate
+      # act, done by hand, and tool/native/build.py reproduces them.
+      - name: Assemble
+        run: ./gradlew :app:assembleDebug --console=plain
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest :air:testDebugUnitTest --console=plain
+
+      # minSdk is 28 and the app is built against 36, so this is what stands
+      # between the two. It fails the build on an error, which is the point.
+      - name: Lint
+        run: ./gradlew :app:lintDebug --console=plain
+
+      - name: Keep the lint report
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          channel: stable
-          cache: true
-      # Validate before Flutter updates the example SDK-pinned lockfile.
-      - run: dart pub publish --dry-run
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-      - run: flutter test
-        working-directory: example
-      - run: flutter build apk --release
-        working-directory: example
-      - run: ./gradlew :app:testReleaseUnitTest :fitbit_air:testDebugUnitTest --console=plain
-        working-directory: example/android
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fitbit-air-calendar-demo
-          path: example/build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+          name: lint-results
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
