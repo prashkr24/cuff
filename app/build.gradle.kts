@@ -68,6 +68,12 @@ android {
         }
         release {
             resValue("string", "app_name", "Air Bridge")
+            // Debug stays unminified, so what is installed on the phone during
+            // development is never what R8 produced. See proguard-rules.pro
+            // for the one part of this app it cannot reason about.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             val release = signingConfigs.getByName("release")
             signingConfig = if (release.storeFile != null) release else signingConfigs.getByName("debug")
         }
