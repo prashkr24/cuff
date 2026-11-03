@@ -78,7 +78,7 @@ internal fun ActivityRow(
     // here, from the same places a person's screen finds them. Someone who
     // rang once before a restart is no longer nameable, and the app's own
     // name stands in rather than a blank.
-    val who = entry.callerId?.let { state.caller(it)?.label }
+    val who = entry.callerId?.let { state.callerLabel(it) }
     SettingsRow(
         title = who ?: state.label(entry.sourcePackage),
         subtitle = listOfNotNull(

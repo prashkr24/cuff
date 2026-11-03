@@ -249,6 +249,33 @@ internal class RelayState(private val context: Context, private val invalidate: 
     private fun remember(id: String): SavedCaller? = caller(id)
 
     /**
+     * A name for an identity, falling back to the address book.
+     *
+     * Without that fallback a name only lasts as long as the relay does:
+     * someone who rang but was never given a rule is held in memory alone, so
+     * yesterday's activity would forget who it was about. The book is read
+     * once per process and only when something is still unnamed.
+     */
+    fun callerLabel(id: String): String? = caller(id)?.label ?: fromBook(id)
+
+    private fun fromBook(id: String): String? {
+        val book = addressBook ?: buildAddressBook().also { addressBook = it }
+        return book[id]
+    }
+
+    private fun buildAddressBook(): Map<String, String> {
+        if (!RelayContacts.granted(context)) return emptyMap()
+        val sources = listOf(dialer) + RelayContacts.NAMED_CALLERS
+        return sources.flatMap { packageName ->
+            RelayContacts.list(context, packageName).mapNotNull { row ->
+                val id = row["id"]?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val label = row["label"]?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                id to label
+            }
+        }.toMap()
+    }
+
+    /**
      * Puts someone back on the default rather than freezing today's default
      * onto them, which is what picking its current shape by hand would do.
      */
@@ -344,6 +371,9 @@ internal class RelayState(private val context: Context, private val invalidate: 
          * deciding something about them.
          */
         private val known = mutableMapOf<String, SavedCaller>()
+
+        /** The address book, as identities. Read once; it rarely changes. */
+        private var addressBook: Map<String, String>? = null
 
         private val SHOWN_STAGES = setOf("verified", "failed", "ring_started", "ring_stopped")
     }
