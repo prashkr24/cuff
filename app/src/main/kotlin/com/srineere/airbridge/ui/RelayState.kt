@@ -315,11 +315,25 @@ internal class RelayState(private val context: Context, private val invalidate: 
         changed()
     }
 
-    fun pause(paused: Boolean) = update { config ->
+    /**
+     * Quiet on the wrist until this moment. -1 means until it is resumed by
+     * hand, 0 means not paused at all.
+     */
+    fun pauseUntil(atMillis: Long) = update { config ->
+        config.copy(silence = config.silence.copy(pauseUntil = atMillis))
+    }
+
+    fun setQuiet(enabled: Boolean) = update { config ->
+        config.copy(silence = config.silence.copy(quietEnabled = enabled))
+    }
+
+    /**
+     * Both ends at once, because the rules refuse a window that ends when it
+     * starts and setting one end at a time would walk through that state.
+     */
+    fun setQuietWindow(startMinute: Int, endMinute: Int) = update { config ->
         config.copy(
-            silence = config.silence.copy(
-                pauseUntil = if (paused) System.currentTimeMillis() + 900_000 else 0,
-            )
+            silence = config.silence.copy(startMinute = startMinute, endMinute = endMinute)
         )
     }
 

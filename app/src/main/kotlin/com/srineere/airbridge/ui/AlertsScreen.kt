@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +30,15 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
         ScreenTitle("Alerts")
 
         RelayStatusCard(state, onOpen)
+
+        // Under the switch, because both answer the same question at
+        // different lengths: off for good, quiet for the night.
+        SettingsRow(
+            title = "Schedule",
+            subtitle = scheduleSummary(state),
+            icon = Icons.Outlined.Schedule,
+            onClick = { onOpen("schedule") },
+        )
 
         SectionHeader("What gets through")
 

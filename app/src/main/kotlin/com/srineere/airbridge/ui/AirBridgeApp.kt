@@ -106,6 +106,7 @@ fun AirBridgeApp() {
                 pushed("calls") { CallsScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("people") { PeopleScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
                 pushed("activity") { ActivityScreen(onBack = nav::popBackStack) }
+                pushed("schedule") { ScheduleScreen(onBack = nav::popBackStack) }
                 pushed(
                     route = "person/{id}",
                     arguments = listOf(navArgument("id") { type = NavType.StringType }),
