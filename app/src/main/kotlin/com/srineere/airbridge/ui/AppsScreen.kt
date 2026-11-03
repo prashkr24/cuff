@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -66,6 +67,16 @@ internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        )
+
+        // What an app buzzes like before anyone says otherwise, the way Calls
+        // owns the ring every call inherits. It is also the answer to every
+        // "Default" below, so it belongs on the same screen as them.
+        SettingsRow(
+            title = "How apps buzz",
+            subtitle = describe(state.config.defaultPreset),
+            icon = Icons.Outlined.Vibration,
+            onClick = { onOpen("vibration/" + VibrationTarget.Default.encode()) },
         )
 
         SearchField(query, { query = it }, "Search apps")
@@ -150,8 +161,11 @@ private fun AlertKinds(app: AppEntry, state: RelayState, onOpen: (String) -> Uni
                 title = "Notifications",
                 // Silent here is what makes "calls only" possible: the app
                 // stays on, so its calls still ring.
-                value = rule?.preset?.let { describe(it) }
-                    ?: "Default: ${describe(state.config.defaultPreset)}",
+                //
+                // Inheriting says so and stops: repeating the default's shape
+                // on every app made a screen of apps look like a screen of
+                // decisions, when most of them are the same one.
+                value = rule?.preset?.let { describe(it) } ?: "Default",
                 onClick = {
                     onOpen("vibration/" + VibrationTarget.App(app.packageName, calls = false).encode())
                 },
@@ -170,8 +184,7 @@ private fun AlertKinds(app: AppEntry, state: RelayState, onOpen: (String) -> Uni
                 AlertRow(
                     icon = Icons.Outlined.Call,
                     title = "Calls",
-                    value = rule?.callPreset?.let { describe(it) }
-                        ?: "Default: ${describe(state.config.defaultCallPreset)}",
+                    value = rule?.callPreset?.let { describe(it) } ?: "Default",
                     onClick = {
                         onOpen("vibration/" + VibrationTarget.App(app.packageName, calls = true).encode())
                     },

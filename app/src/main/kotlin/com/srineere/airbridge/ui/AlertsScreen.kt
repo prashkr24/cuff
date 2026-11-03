@@ -9,7 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Call
-import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit
 @Composable
 internal fun AlertsScreen(onOpen: (String) -> Unit) {
     val state = LocalRelayState.current
-    val config = state.config
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Alerts")
@@ -45,13 +43,6 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
             icon = Icons.Outlined.Apps,
             onClick = { onOpen("apps") },
         )
-        SettingsRow(
-            title = "Everything else",
-            subtitle = describe(config.defaultPreset),
-            icon = Icons.Outlined.Vibration,
-            onClick = { onOpen("vibration/" + VibrationTarget.Default.encode()) },
-        )
-
         if (state.history.isNotEmpty()) {
             SectionHeader("Recent")
             state.history.forEach { entry ->
