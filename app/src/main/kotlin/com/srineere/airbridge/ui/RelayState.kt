@@ -76,6 +76,14 @@ internal class RelayState(private val context: Context, private val invalidate: 
     val outcome: String? = context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
         .getString("outcome", null)
 
+    /**
+     * Whether the warning behind Only these people ring has been put away for
+     * good. Chrome rather than a relay rule, so it sits beside the outcome and
+     * not in the config the service reads.
+     */
+    val explainedOnlySaved: Boolean = context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
+        .getBoolean("explained_only_saved", false)
+
     val apps: List<AppEntry> by lazy {
         RelayAppSelection.available(context).map { raw ->
             AppEntry(
@@ -274,6 +282,13 @@ internal class RelayState(private val context: Context, private val invalidate: 
     fun forgetCaller(id: String) = update { it.copy(callers = it.callers - id) }
 
     fun setOnlySavedCallers(only: Boolean) = update { it.copy(onlySavedCallers = only) }
+
+    /** Taken only when the switch is actually turned on, not when it is cancelled. */
+    fun rememberOnlySavedExplained() {
+        context.getSharedPreferences("calendar_relay", Context.MODE_PRIVATE)
+            .edit().putBoolean("explained_only_saved", true).apply()
+        changed()
+    }
 
     // ----------------------------------------------------------------- relay
 
