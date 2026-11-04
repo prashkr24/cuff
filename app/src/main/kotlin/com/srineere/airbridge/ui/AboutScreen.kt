@@ -33,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.Band
+import com.srineere.airbridge.CrashLog
+import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.BuildConfig
 import dev.airpulse.fitbit_air.airResult
 
@@ -180,6 +182,7 @@ internal fun AboutScreen(onBack: () -> Unit) {
                 "and the firmware the Air is running."
         )
         ReportDetails(info)
+        ErrorLog()
 
         SectionHeader("How it reaches the band")
         Note(
@@ -251,6 +254,66 @@ private fun ReportDetails(info: Map<*, *>?) {
         modifier = Modifier.padding(horizontal = 12.dp),
     ) {
         Text(if (copied) "Copied" else "Copy these details")
+    }
+}
+
+/**
+ * What the app has recorded going wrong, and the one way it leaves the phone.
+ *
+ * The section is absent when there is nothing in it. A permanently visible
+ * "0 errors" teaches people to stop reading the line, and the first time it
+ * says 1 they will not notice.
+ *
+ * Send hands the text to Android's share sheet rather than posting it
+ * anywhere: the person picks where it goes and sees what they are sending,
+ * which is the only version of this that keeps the promise two sections
+ * above -- that nothing leaves the phone unless you choose.
+ */
+@Composable
+private fun ErrorLog() {
+    val context = LocalContext.current
+    // Re-read on resume: a crash in the relay can land while this screen is
+    // sitting open behind it.
+    val resumes = resumeTicks()
+    var cleared by remember { mutableIntStateOf(0) }
+    val entries = remember(resumes, cleared) { CrashLog.read(context) }
+    if (entries.isEmpty()) return
+
+    Note(
+        "This app has recorded " + (if (entries.size == 1) "one error" else "${entries.size} errors") +
+            ". They are kept on this phone and sent nowhere unless you send them. " +
+            "Each one is a time, the app and phone versions, and where in the code it " +
+            "happened — no readings, no names, nothing from your notifications."
+    )
+    // The newest is the one being asked about; the rest are context.
+    Text(
+        entries.last().lineSequence().take(2).joinToString("\n"),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.extras.disabled,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+    )
+    Row {
+        TextButton(
+            onClick = {
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, "Air Bridge ${BuildConfig.VERSION_NAME} — error log")
+                    .putExtra(Intent.EXTRA_TEXT, CrashLog.asText(context))
+                runCatching {
+                    context.startActivity(
+                        Intent.createChooser(send, "Send the error log")
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            },
+            modifier = Modifier.padding(horizontal = 12.dp),
+        ) { Text("Send these") }
+        TextButton(
+            onClick = {
+                CrashLog.clear(context)
+                cleared++
+            },
+        ) { Text("Clear") }
     }
 }
 

@@ -115,6 +115,9 @@ class CalendarRelayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // onCreate, not onStartCommand: the five-second startForeground rule
+        // means nothing may come before enterForeground() there.
+        CrashLog.install(this)
         val filter = IntentFilter().apply { addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED) }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(clockReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         else @Suppress("DEPRECATION") registerReceiver(clockReceiver, filter)
