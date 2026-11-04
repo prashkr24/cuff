@@ -43,8 +43,14 @@ private class Face(
 )
 
 private sealed interface Chart {
-    /** Equal-width columns: the only chart Glance draws without a bitmap. */
-    class Bars(val values: List<Float>) : Chart
+    /**
+     * Equal-width columns: the only chart Glance draws without a bitmap.
+     *
+     * [blankZeros] is for a series whose slots exist whether or not they
+     * hold a reading -- the hours of today. A gap there means "nothing was
+     * recorded then", which is not the same claim as a bar of zero height.
+     */
+    class Bars(val values: List<Float>, val blankZeros: Boolean = false) : Chart
 
     /** A night, in proportion. Keeps the sleep palette whatever colour the tile is. */
     class Stages(val parts: List<Pair<Float, SleepStage>>) : Chart
@@ -140,13 +146,25 @@ private fun DrawFace(
                     Meter(it, innerWidth(padding), tint, colours.track, height = 4.dp)
                 }
                 Grow()
-                DrawChart(face.chart, colour, colours, height = 30.dp, width = innerWidth(padding))
+                DrawChart(
+                    face.chart, colour, colours,
+                    // What is left under the figure, rather than a constant
+                    // that is right in one cell and wrong in every other.
+                    height = (innerHeight(padding).value - SQUARE_ABOVE_CHART)
+                        .coerceIn(20f, 72f).dp,
+                    width = innerWidth(padding),
+                )
             }
 
             WidgetSize.Wide, WidgetSize.Tall -> {
                 Head(face, tint, colours, showTrends)
                 Gap(6.dp)
-                val chartHeight = if (size == WidgetSize.Tall) 110.dp else 70.dp
+                // All of it. A cap here was what left a field of empty card
+                // under the chart: a launcher's 4x4 is taller than the 300dp
+                // the face was drawn for, and a widget should spend the
+                // space it was given.
+                val chartHeight = (innerHeight(padding).value - WIDE_ABOVE_CHART)
+                    .coerceIn(44f, 400f).dp
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     Column(modifier = GlanceModifier.width(FIGURE_COLUMN)) {
                         FigureAndUnit(face, if (size == WidgetSize.Tall) 30 else 25, colours)
@@ -214,7 +232,13 @@ private fun DrawChart(
 ) {
     when (chart) {
         null -> Unit
-        is Chart.Bars -> Bars(chart.values, colours.tile(colour), colours.tileDim(colour), height)
+        is Chart.Bars -> Bars(
+            chart.values,
+            colours.tile(colour),
+            colours.tileDim(colour),
+            height,
+            blankZeros = chart.blankZeros,
+        )
         is Chart.Stages -> Stripe(
             chart.parts.map { (share, stage) -> share to colours.sleepStage(stage) },
             height = height.value.coerceAtMost(STRIPE_MAX).dp,
@@ -264,7 +288,7 @@ private fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 figure = latest.toString(),
                 unit = "bpm",
                 sub = "$low–$high today",
-                chart = Chart.Bars(samples.byHour()),
+                chart = Chart.Bars(samples.byHour(), blankZeros = true),
             )
         }
 
@@ -429,6 +453,12 @@ private fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
 // ------------------------------------------------------------------ pieces
 
 private const val STRIPE_MAX = 14f
+
+/** The kicker, the figure and its two lines, above a square's chart. */
+private const val SQUARE_ABOVE_CHART = 78f
+
+/** The kicker and its gap: the rest of a wide card is the chart's row. */
+private const val WIDE_ABOVE_CHART = 26f
 private val FIGURE_COLUMN = 96.dp
 
 private fun List<Reading>.tail(count: Int): List<Float> =
@@ -444,13 +474,16 @@ private fun List<Reading>.tail(count: Int): List<Float> =
 private fun List<com.srineere.airbridge.health.HeartSample>.byHour(): List<Float> {
     if (isEmpty()) return emptyList()
     val calendar = java.util.Calendar.getInstance()
-    val byHour = sortedBy { it.atMillis }.groupBy {
+    val byHour = groupBy {
         calendar.timeInMillis = it.atMillis
         calendar.get(java.util.Calendar.HOUR_OF_DAY)
     }
-    val first = byHour.keys.min()
-    val last = byHour.keys.max()
-    return (first..last).map { hour -> byHour[hour]?.maxOf { it.bpm }?.toFloat() ?: 0f }
+    // The whole day, always: twenty-four slots, most of them empty at
+    // breakfast. Binning only the hours that hold a reading drew three
+    // columns the width of a thumb at two in the morning, which says nothing
+    // about a day. Three thin columns at the left of twenty-four says it is
+    // early, which is the true thing about that chart.
+    return (0..23).map { hour -> byHour[hour]?.maxOf { it.bpm }?.toFloat() ?: 0f }
 }
 
 /** Last night in proportion, or null for a night written as one block. */

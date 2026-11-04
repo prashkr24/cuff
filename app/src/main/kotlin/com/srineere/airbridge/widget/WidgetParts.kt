@@ -107,6 +107,10 @@ internal fun ColumnScope.Grow() = Spacer(GlanceModifier.defaultWeight())
  * on every resize rather than assumed from the declared size.
  */
 @Composable
+internal fun innerHeight(padding: Dp): Dp =
+    (LocalSize.current.height.value - padding.value * 2).coerceAtLeast(1f).dp
+
+@Composable
 internal fun innerWidth(padding: Dp): Dp =
     (LocalSize.current.width.value - padding.value * 2).coerceAtLeast(1f).dp
 
@@ -126,6 +130,7 @@ internal fun Bars(
     height: Dp,
     highlightLast: Boolean = true,
     gap: Dp = 3.dp,
+    blankZeros: Boolean = false,
 ) {
     if (values.isEmpty()) return
     val top = values.maxOrNull()?.takeIf { it > 0f } ?: 1f
@@ -135,6 +140,14 @@ internal fun Bars(
     ) {
         values.forEachIndexed { index, value ->
             if (index > 0) Spacer(GlanceModifier.width(gap))
+            // An hour with no reading keeps its slot and draws nothing. The
+            // slot is the point: three readings on a day that is two hours
+            // old should be three narrow bars at the left of a day, not
+            // three slabs filling the card.
+            if (blankZeros && value <= 0f) {
+                Spacer(GlanceModifier.defaultWeight())
+                return@forEachIndexed
+            }
             val tall = (height.value * (value / top)).coerceAtLeast(MIN_BAR).dp
             Box(
                 modifier = GlanceModifier

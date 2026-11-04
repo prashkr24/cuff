@@ -4,8 +4,6 @@ import android.content.Context
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
@@ -34,17 +32,21 @@ import kotlin.math.roundToInt
 class AirWidget : GlanceAppWidget() {
 
     /**
-     * Responsive rather than Exact.
+     * Exact, which costs a recomposition per resize and is worth it.
      *
-     * Exact asks for a recomposition on every resize and, below API 31, only
-     * learns the cell when the user lets go. Responsive pre-renders the five
-     * sizes this app actually declares and lets the launcher choose, which
-     * also means [LocalSize] is one of five known values rather than
-     * whatever a particular launcher believes a cell is.
+     * Responsive looked cheaper: pre-render the five declared sizes and let
+     * the launcher pick. But then [LocalSize] is the size we *declared*, not
+     * the cell we were given, and launchers hand out cells that are nothing
+     * like either -- a 4x4 here came back as a card half again as tall as
+     * the 300dp the layout had been measured for. The RemoteViews stretches,
+     * the composition does not, and the result is a widget with its content
+     * crushed into the top third and a field of empty card beneath it.
+     *
+     * Exact reports the real cell, so every height below can be arithmetic
+     * on it rather than a constant that is right at one size and wrong at
+     * the rest.
      */
-    override val sizeMode = SizeMode.Responsive(
-        WidgetSize.entries.map { DpSize(it.minWidth.dp, it.minHeight.dp) }.toSet(),
-    )
+    override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
