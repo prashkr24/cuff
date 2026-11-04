@@ -1,7 +1,10 @@
 package com.srineere.airbridge.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,16 +92,53 @@ internal fun AboutScreen(onBack: () -> Unit) {
         SectionHeader("This app")
         Fact("Air Bridge", BuildConfig.VERSION_NAME)
         Note(
-            "Two halves. It sends the notifications you choose to your wrist, with the buzz " +
-                "you choose, for the people you choose — which the Air cannot do on its own, " +
-                "because its motor is built for alarms and nothing else. And it reads the " +
-                "readings your band has already taken, and draws them."
+            "The Air is screenless and ships with no notification support: its motor fires " +
+                "for alarms and Smart Wake and nothing else. Air Bridge drives that motor, so " +
+                "your phone's calls and notifications reach your wrist — and it reads back the " +
+                "readings the band has already taken, and draws them."
         )
         Note(
-            "The Health tab is the half you open it to see. The relay runs whether or not " +
-                "anyone is looking."
+            "Two halves, and they are independent. The relay runs whether or not anyone is " +
+                "looking; the Health tab is the half you open it to see, which is why the app " +
+                "opens on it."
         )
-        Link(context, "Source on GitHub", "https://github.com/srineere/air-bridge")
+
+        SectionHeader("Alerts")
+        Note(
+            "Every app you enable gets its own vibration, and a separate one for calls if it " +
+                "can ring. A caller can have their own vibration too, or be blocked — " +
+                "separately for phone calls and for WhatsApp calls, because a person is a " +
+                "different person in each."
+        )
+        Note(
+            "A call rings until it stops ringing: answered, declined, missed or timed out. " +
+                "Patterns and strength are chosen apart from each other — one pulse, two, a " +
+                "ring, or silence, at either of the Air's two strengths."
+        )
+        Note(
+            "Quiet hours, a pause, and a Stop button in the relay's own notification. Quiet " +
+                "hours beat everything, including a person with a rule of their own."
+        )
+
+        SectionHeader("The Health tab")
+        Note(
+            "A grid of tiles you arrange — five sizes, reordered, resized, recoloured or " +
+                "taken off — each carrying a trend measured in its own units. Behind every " +
+                "tile is a screen: heart rate, resting heart rate, sleep, steps, energy in " +
+                "against out, workouts, HRV, the vitals, and nutrition."
+        )
+        Note(
+            "Sleep is scored against your own nights rather than a recommended figure, so 70 " +
+                "means \"like your usual\" and not \"adequate\" — and the score is never shown " +
+                "without the four parts it stands on. Nothing else here is scored, because a " +
+                "number invented on top of a measurement is a claim this app will not make."
+        )
+        Note(
+            "A live heart rate you ask for is the one figure no reader can produce, because " +
+                "it is a measurement rather than a number already written. And the band can " +
+                "buzz you from your own activity: once when you cross the step goal, and " +
+                "hourly when an active hour falls short."
+        )
 
         SectionHeader("Your readings")
         Note(
@@ -131,6 +171,15 @@ internal fun AboutScreen(onBack: () -> Unit) {
                 "So there is no colour-coding alerts, and no tapping to silence one."
         )
 
+        SectionHeader("Reporting a problem")
+        Note(
+            "Unofficial and unsupported — but a good report is still worth making, and most " +
+                "faults here come down to a version. Say what the band did or failed to do, " +
+                "and include the four lines below: the app, this phone, its Android version, " +
+                "and the firmware the Air is running."
+        )
+        ReportDetails(info)
+
         SectionHeader("How it reaches the band")
         Note(
             "The Air has no public way in. Air Bridge speaks the transport Fitbit's own app " +
@@ -156,6 +205,54 @@ internal fun AboutScreen(onBack: () -> Unit) {
         )
 
         Box(Modifier.padding(bottom = 28.dp))
+    }
+}
+
+/**
+ * The four lines a report needs, gathered and copied in one tap.
+ *
+ * Asking someone to find their Android version and their band's firmware is
+ * asking for a report without them in it. The firmware is already on this
+ * screen, so the only new work is putting it somewhere it can be pasted.
+ */
+@Composable
+private fun ReportDetails(info: Map<*, *>?) {
+    val context = LocalContext.current
+    var copied by remember { mutableStateOf(false) }
+
+    fun field(key: String): String? = (info?.get(key) as? String)?.takeIf { it.isNotBlank() }
+    val firmware = field("firmware")
+
+    val lines = listOf(
+        "Air Bridge ${BuildConfig.VERSION_NAME}",
+        "${Build.MANUFACTURER} ${Build.MODEL}",
+        "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+        // Said plainly rather than left out: a report with no firmware is
+        // different from one where the band was out of range, and only the
+        // person sending it knows which.
+        "Band firmware " + (firmware ?: "not read"),
+    )
+
+    lines.forEach { line ->
+        Text(
+            line,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+        )
+    }
+
+    TextButton(
+        onClick = {
+            val clipboard = context.getSystemService(ClipboardManager::class.java)
+            runCatching {
+                clipboard?.setPrimaryClip(ClipData.newPlainText("Air Bridge", lines.joinToString("\n")))
+                copied = true
+            }
+        },
+        modifier = Modifier.padding(horizontal = 12.dp),
+    ) {
+        Text(if (copied) "Copied" else "Copy these details")
     }
 }
 
