@@ -471,11 +471,44 @@ survive as widget designs.
   Each needs its `READ_*` in both `HealthConnect.readPermissions` and the
   manifest. Granting them is by hand on this phone; `pm grant` is blocked.
 
-## Widgets: designed, not built
+## Widgets
 
-Twenty-three artboards on the canvas in four families -- the app's own tiles,
-a score reading, rings and summaries, and the band itself. Nothing is built.
-The dependencies are already in `app/build.gradle.kts` (`glance-appwidget`
+Eighteen of them are built and on the home screen: all thirteen Health kinds
+and five band faces, in `widget/`. Rings, dials, paper, type-alone, the three
+with buttons, and stacks are designed and not built.
+
+**The shape of it.** Five `AppWidgetProvider`s, one per cell size
+(`WidgetSize`), all backed by one `AirWidget : GlanceAppWidget`. Each has
+`android:configure` pointing at `WidgetConfigActivity`, which Android
+launches on drop and which *is* the catalogue; nothing is placed until it
+returns `RESULT_OK`. `WidgetStore` keeps one row per `appWidgetId` in
+`air_health`, beside the tile layout, because a widget's colour is its
+tile's colour and two stores could disagree about that.
+
+**Three things that cost real time, and will again if they are undone:**
+
+- **A widget provider has to be `exported="true"`.** Declared `false`, all
+  five appeared in `dumpsys appwidget` and never once in the launcher's
+  picker: the system resolves `APPWIDGET_UPDATE` against installed receivers
+  and skips the ones it cannot see. Symptom and cause look unrelated.
+- **Every provider needs a `previewImage`.** Several launchers leave one out
+  of the picker entirely without it, and the fallback -- inflating
+  `initialLayout` -- is an empty loading view for a Glance widget.
+- **Redraw by id, never `updateAll`.** `updateAll` resolves through Glance's
+  own receiver index, which is built once a receiver has run in this process.
+  Right after the configuration activity places the *first* widget it finds
+  nothing, and the widget sits there still showing the "tap to choose" face
+  it composed before the choice was stored. `liveIds()` asks the launcher,
+  which always knows.
+
+**`loadHealthData`** is a plain function in `HealthState.kt` rather than a
+method, so the widgets and the tab share one read. Two readers would be two
+sets of arithmetic drifting apart, and a tile whose trend differs from its
+widget's is the kind of bug nobody reports because nobody believes it. The
+widgets ask for 14 days, not the tab's 30: the longest window any face draws
+is a fortnight.
+
+The dependencies were already in `app/build.gradle.kts` (`glance-appwidget`
 1.1.1, `glance-material3`, `work-runtime-ktx`).
 
 **What Glance can and cannot draw.** Read from the 1.1.1 jars, not from
@@ -518,7 +551,7 @@ measuring tile (no animation, no per-second push, and the band cannot be held
 open from a home screen) and the hypnogram (sixty offset boxes would compose
 and would be a grey smear under 150 dp).
 
-**Three pick sheets** sit after those four families, and they are the ones to
+**Three pick sheets** sit on the canvas after those four families, and they are the ones to
 read first: `WidgetPickTiles` (all thirteen Health kinds at Square and Wide),
 `WidgetPickBand` (twelve band and relay widgets, including the three with
 buttons) and `WidgetPickStyles` (seventeen faces across four borrowed
