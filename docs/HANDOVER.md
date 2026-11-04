@@ -251,6 +251,53 @@ quarter hour for the rest of the day. Settings live in `air_health.xml`, apart
 from `relay_rules.xml`, because nothing there changes how a notification is
 matched and so should not be able to break it.
 
+## Where a reading comes from
+
+Added 4 November 2026, and it fixed a bug that had been running the whole time.
+
+**Nothing in the app filtered by `DataOrigin`.** Every `ReadRecordsRequest` and
+every aggregate carried a time range and nothing else, and Health Connect reads
+an absent `dataOriginFilter` as *every* origin. That is mostly what this app
+wants — it is why the Health tab already works with any writer, Pixel Watch,
+Garmin, Samsung or Polar, without a line of code, and why another app's food
+appears in the log. For steps it was wrong.
+
+**This phone writes its own steps.** Confirmed on the device, not assumed: the
+enumeration logs two writers, `com.fitbit.FitbitMobile` and
+`com.android.healthconnect.phone.je61914f407b237fb9a2a17063132118b`. The second
+is the platform's **synthetic package name** for the built-in counter. Both
+were being added together. Measured on 4 November: a seven-day average of
+**6,402 unfiltered against 5,319 from the band alone**, about twenty per cent,
+and **two of the seven days "met" the 7,500 goal on steps the band never
+counted**. That is the early goal buzz the handover had listed as unwitnessed.
+
+So steps — and nothing else — are read from chosen sources. `HealthSources`
+enumerates who writes; `SourceChoice` is the stored answer, defaulting to
+`Wearables`, every writer but the phone; the Goals screen names what it found
+and lets anybody disagree. Three things in there are load-bearing:
+
+- **The phone is recognised by `PackageManager` never having heard of it**, plus
+  the documented `"android"` case. The synthetic name is device-specific and
+  matches no installed app, so it cannot be recognised by name.
+  `getCurrentDeviceDataSource()` would name it properly but is a framework API
+  outside the pinned Jetpack library.
+- **An empty filter is not an empty result.** Health Connect reads an empty
+  `dataOriginFilter` as every origin, so "exclude the only writer there is" can
+  never be handed to it as an empty set — it would return exactly what it was
+  meant to exclude. `resolveSources` returns null for "do not filter" and an
+  empty set for "nothing", and every read short-circuits on the second. There
+  is a test that says so, and it is the test to keep.
+- **Do not enumerate by reading records.** `readRecords(StepsRecord::class)`
+  throws `IllegalArgumentException: startTime must be before endTime` **from
+  inside the library's own converter** on this phone: Health Connect stores
+  zero-duration step records and `StepsRecord`'s constructor rejects them, so
+  there is nothing a caller can do. `AggregationResult.dataOrigins` answers the
+  same question in one call and never builds a record. It cost a build to find
+  and it will cost another if this is ever rewritten.
+
+Everything else stays unfiltered, deliberately. Nutrition in particular: a
+meal logged in MyFitnessPal is a meal eaten, and the food log should show it.
+
 ## Invariants — do not break these quietly
 
 1. **The history file holds no names.** `RelayActivity.toMap()` is what leaves

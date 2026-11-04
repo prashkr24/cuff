@@ -19,6 +19,7 @@ import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import androidx.health.connect.client.request.AggregateRequest
@@ -179,8 +180,13 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         fun allowed(type: KClass<out Record>): Boolean =
             HealthPermission.getReadPermission(type) in granted
 
+        // Steps are the one metric read from chosen writers rather than from
+        // all of them, because the phone counts its own and adding those to
+        // the band's counts one walk twice. Resolved once for the whole read.
+        val stepOrigins = stepOrigins(context, client)
+
         val steps = if (allowed(StepsRecord::class)) {
-            dailyTotals(client, StepsRecord.COUNT_TOTAL, from, today) { it.toDouble() }
+            dailyTotals(client, StepsRecord.COUNT_TOTAL, from, today, stepOrigins) { it.toDouble() }
         } else {
             emptyList()
         }
@@ -283,7 +289,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             emptyList()
         }
         val stepsHourly = if (allowed(StepsRecord::class)) {
-            hourlyTotals(client, StepsRecord.COUNT_TOTAL, today) { it.toDouble() }
+            hourlyTotals(client, StepsRecord.COUNT_TOTAL, today, stepOrigins) { it.toDouble() }
         } else {
             emptyList()
         }
@@ -444,11 +450,17 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         val now = Instant.now()
         val hourStart = now.atZone(zone).truncatedTo(java.time.temporal.ChronoUnit.HOURS).toInstant()
 
+        // The figure the band buzzes at. Unfiltered, this counted the phone's
+        // own pedometer alongside the band and crossed the goal early.
+        val origins = stepOrigins(context, client)
+        if (origins.filtersToNothing()) return 0L to 0L
+
         val day = guard("steps today") {
             client.aggregate(
                 AggregateRequest(
                     metrics = setOf(StepsRecord.COUNT_TOTAL),
                     timeRangeFilter = TimeRangeFilter.between(startOfDay, now),
+                    dataOriginFilter = origins.toDataOrigins(),
                 ),
             )[StepsRecord.COUNT_TOTAL]
         } ?: 0L
@@ -458,11 +470,27 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
                 AggregateRequest(
                     metrics = setOf(StepsRecord.COUNT_TOTAL),
                     timeRangeFilter = TimeRangeFilter.between(hourStart, now),
+                    dataOriginFilter = origins.toDataOrigins(),
                 ),
             )[StepsRecord.COUNT_TOTAL]
         } ?: 0L
 
         return day to hour
+    }
+
+    /**
+     * The packages steps are counted from, or null to count them all.
+     *
+     * Enumeration is cached for the process, so the quarter-hourly poll in
+     * the relay service pays for it about twice a day.
+     */
+    private suspend fun stepOrigins(context: Context, client: HealthConnectClient): Set<String>? {
+        val choice = HealthSettings.stepSource(context)
+        // Only one choice needs to know who is writing; the other two answer
+        // without a read, and the common case is cheap.
+        if (choice is SourceChoice.Only) return setOf(choice.packageName)
+        if (choice == SourceChoice.Everything) return null
+        return resolveSources(choice, HealthSources.stepWriters(context, client))
     }
 
     /**
@@ -476,23 +504,28 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         metric: AggregateMetric<T>,
         from: LocalDate,
         to: LocalDate,
+        origins: Set<String>? = null,
         asDouble: (T) -> Double,
-    ): List<Reading> = guard("daily aggregate") {
-        client.aggregateGroupByPeriod(
-            AggregateGroupByPeriodRequest(
-                metrics = setOf(metric),
-                timeRangeFilter = TimeRangeFilter.between(
-                    from.atStartOfDay(),
-                    to.plusDays(1).atStartOfDay(),
+    ): List<Reading> {
+        if (origins.filtersToNothing()) return emptyList()
+        return guard("daily aggregate") {
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(metric),
+                    timeRangeFilter = TimeRangeFilter.between(
+                        from.atStartOfDay(),
+                        to.plusDays(1).atStartOfDay(),
+                    ),
+                    timeRangeSlicer = Period.ofDays(1),
+                    dataOriginFilter = origins.toDataOrigins(),
                 ),
-                timeRangeSlicer = Period.ofDays(1),
-            ),
-        ).mapNotNull { bucket ->
-            bucket.result[metric]?.let { value ->
-                Reading(bucket.startTime.toLocalDate().toEpochDay(), asDouble(value))
+            ).mapNotNull { bucket ->
+                bucket.result[metric]?.let { value ->
+                    Reading(bucket.startTime.toLocalDate().toEpochDay(), asDouble(value))
+                }
             }
-        }
-    }.orEmpty()
+        }.orEmpty()
+    }
 
     /** One figure for one day. */
     /**
@@ -506,14 +539,17 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         client: HealthConnectClient,
         metric: AggregateMetric<T>,
         day: LocalDate,
+        origins: Set<String>? = null,
         convert: (T) -> Double,
     ): List<Double> = guard("read hourly ${metric.metricKey}") {
+        if (origins.filtersToNothing()) return List(24) { 0.0 }
         val start = day.atStartOfDay(zone).toInstant()
         val buckets = client.aggregateGroupByDuration(
             AggregateGroupByDurationRequest(
                 metrics = setOf(metric),
                 timeRangeFilter = TimeRangeFilter.between(start, start.plus(Duration.ofDays(1))),
                 timeRangeSlicer = Duration.ofHours(1),
+                dataOriginFilter = origins.toDataOrigins(),
             ),
         )
         val hours = DoubleArray(24)
@@ -529,7 +565,9 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         client: HealthConnectClient,
         metric: AggregateMetric<T>,
         day: LocalDate,
+        origins: Set<String>? = null,
     ): T? = guard("day total") {
+        if (origins.filtersToNothing()) return null
         client.aggregate(
             AggregateRequest(
                 metrics = setOf(metric),
@@ -537,6 +575,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
                     day.atStartOfDay(zone).toInstant(),
                     day.plusDays(1).atStartOfDay(zone).toInstant(),
                 ),
+                dataOriginFilter = origins.toDataOrigins(),
             ),
         )[metric]
     }
@@ -546,7 +585,9 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         type: KClass<T>,
         from: LocalDate,
         to: LocalDate,
+        origins: Set<String>? = null,
     ): List<T> = guard("read ${type.simpleName}") {
+        if (origins.filtersToNothing()) return emptyList()
         val rows = mutableListOf<T>()
         var token: String? = null
         do {
@@ -557,6 +598,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
                         from.atStartOfDay(zone).toInstant(),
                         to.plusDays(1).atStartOfDay(zone).toInstant(),
                     ),
+                    dataOriginFilter = origins.toDataOrigins(),
                     pageToken = token,
                 ),
             )
@@ -614,6 +656,20 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             segments = segments,
         )
     }
+
+    /**
+     * Whether this filter means "nothing", as opposed to "everything".
+     *
+     * Health Connect reads an empty `dataOriginFilter` as *every* origin, so
+     * an empty set handed to it does the opposite of what it says. A caller
+     * that genuinely has no permitted source — every writer excluded — has to
+     * short-circuit instead, which is what every read above does. Null is the
+     * honest way to say "do not filter".
+     */
+    private fun Set<String>?.filtersToNothing(): Boolean = this != null && isEmpty()
+
+    private fun Set<String>?.toDataOrigins(): Set<DataOrigin> =
+        this?.map { DataOrigin(it) }?.toSet() ?: emptySet()
 
     private inline fun <T> guard(what: String, block: () -> T): T? =
         try {

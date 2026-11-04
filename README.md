@@ -28,6 +28,11 @@ break it without warning.
 The other half of the app, and the reason it wants Google Health at all: the
 Air's readings land in Health Connect, and this reads them back out.
 
+Because it reads Health Connect rather than the band, it is not really
+Air-specific: anything whose app writes there — a Pixel Watch, Garmin,
+Samsung, Polar, Oura — fills most of these screens too. The Air-only parts are
+the Device tab, the alerts, and the live heart rate reading.
+
 - **A grid you arrange.** Tiles in five sizes — S, M, W, L and XL — across a
   six-column row, reordered, resized, recoloured or taken off. Each carries a
   trend: the newest third of its window against the oldest, in that tile's own
@@ -40,6 +45,10 @@ Air's readings land in Health Connect, and this reads them back out.
   can produce, because it is a measurement you ask for rather than a number
   already written. It holds the Air's single session while it runs, so alerts
   queue behind it, and it stops itself after two minutes.
+- **Steps counted once.** Your phone counts its own steps and writes them to
+  Health Connect beside the band's. Added together they make one walk into two
+  and the goal buzzes early, so by default the phone's are left out — Goals
+  names every source it found and lets you choose otherwise.
 - **Buzzes from your own activity.** One when you cross the step goal, and an
   hourly nudge when an active hour falls short. Both go through the relay, so
   neither can reach your wrist while it is off.

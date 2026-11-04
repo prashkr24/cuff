@@ -209,9 +209,15 @@ internal fun HealthStepsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         SectionHeader("Buzz me")
         StepBuzzRows(onOpen)
 
+        // This said Health Connect kept one count when the band and the phone
+        // both wrote. It does not -- an unfiltered read returns every writer
+        // and adds them, which is what this app did until 4 November 2026 and
+        // why the goal used to buzz early. The filtering is ours, and saying
+        // so is the difference between a caveat and a claim.
         Text(
-            "Health Connect keeps one step count even when the Air and the phone " +
-                "both counted. This is the figure it reports, not the two added up.",
+            "Your phone counts steps of its own and writes them here too. These " +
+                "figures come from the sources set under Goals — by default the " +
+                "band and not the phone, so one walk is counted once.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.extras.disabled,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),

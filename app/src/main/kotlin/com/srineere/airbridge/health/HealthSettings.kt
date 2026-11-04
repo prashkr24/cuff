@@ -24,6 +24,7 @@ object HealthSettings {
     private const val KEY_NUDGE_HOUR = "nudge_fired_hour"
     private const val KEY_TILES = "tiles"
     private const val KEY_TRENDS = "show_trends"
+    private const val KEY_STEP_SOURCE = "step_source"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -97,6 +98,23 @@ object HealthSettings {
 
     fun writeShowTrends(context: Context, show: Boolean) {
         prefs(context).edit().putBoolean(KEY_TRENDS, show).apply()
+    }
+
+    /**
+     * Which writers the step figures are counted from.
+     *
+     * Defaults to [SourceChoice.Wearables] rather than to everything, which
+     * is a deliberate change in behaviour: the phone writes its own steps and
+     * counting them alongside the band's double-counts a walk. Nobody is
+     * asked, because there is a right answer for a band owner; the Goals
+     * screen is where anybody who disagrees says so.
+     */
+    fun stepSource(context: Context): SourceChoice =
+        SourceChoice.decode(prefs(context).getString(KEY_STEP_SOURCE, null))
+
+    fun writeStepSource(context: Context, choice: SourceChoice) {
+        prefs(context).edit().putString(KEY_STEP_SOURCE, SourceChoice.encode(choice)).apply()
+        HealthSources.forget()
     }
 
     fun recordNudgeFired(context: Context, day: Long, hour: Int) {

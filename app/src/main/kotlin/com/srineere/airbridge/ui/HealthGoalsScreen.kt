@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -18,7 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,9 +32,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.health.Goals
+import com.srineere.airbridge.health.HealthConnect
 import com.srineere.airbridge.health.HealthSettings
+import com.srineere.airbridge.health.HealthSource
+import com.srineere.airbridge.health.HealthSources
+import com.srineere.airbridge.health.SourceChoice
 import com.srineere.airbridge.health.StepGoalSettings
 import com.srineere.airbridge.ui.theme.extras
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -91,6 +101,7 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
             onLess = { save(goals.copy(steps = (goals.steps - 500).coerceAtLeast(500))) },
             onMore = { save(goals.copy(steps = goals.steps + 500)) },
         )
+        StepSourcePicker()
 
         SectionHeader("Sleep")
         GoalRow(
@@ -221,6 +232,115 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
  * nudged occasionally, and a keyboard for "8,500" is three taps more than
  * the thing deserves.
  */
+/**
+ * Which writers the step figures are counted from.
+ *
+ * It sits under the step goal because that is the number it changes, and
+ * because the goal is what goes wrong when it is set badly: the band buzzes
+ * at a figure reached by a walk counted twice.
+ *
+ * The list is whatever has actually written steps in the last fortnight, so
+ * on a phone with one band it is two rows and needs no thought. The
+ * enumeration costs a Health Connect read and is done off the main thread,
+ * once, for the reason `InstalledApps` exists.
+ */
+@Composable
+private fun StepSourcePicker() {
+    val context = LocalContext.current
+    val state = LocalHealthState.current
+    var sources by remember { mutableStateOf<List<HealthSource>>(emptyList()) }
+    var choice by remember { mutableStateOf(HealthSettings.stepSource(context)) }
+    var loaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        sources = withContext(Dispatchers.IO) {
+            HealthConnect.clientOrNull(context)
+                ?.let { HealthSources.stepWriters(context, it) }
+                .orEmpty()
+        }
+        loaded = true
+    }
+
+    fun pick(next: SourceChoice) {
+        choice = next
+        HealthSettings.writeStepSource(context, next)
+        state.refresh(context, force = true)
+    }
+
+    val phone = sources.firstOrNull { it.isPhone }
+
+    DetailCard {
+        Text(
+            "Steps counted from",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 6.dp, bottom = 2.dp),
+        )
+        Text(
+            when {
+                !loaded -> "Looking at what has written steps lately…"
+                sources.isEmpty() ->
+                    "Nothing has written a step in the last fortnight, so there " +
+                        "is nothing to choose between yet."
+                phone == null ->
+                    "Only your band is writing steps, so nothing is being left " +
+                        "out whichever of these you pick."
+                else ->
+                    "Your phone counts its own steps and writes them here too. " +
+                        "Counted alongside the band they make one walk into two, " +
+                        "and the goal buzzes early — so by default they are left " +
+                        "out."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp, bottom = 8.dp),
+        )
+
+        SourceOption(
+            title = "Devices only",
+            subtitle = phone?.let { "Everything but ${it.label}" } ?: "Every source writing now",
+            selected = choice == SourceChoice.Wearables,
+        ) { pick(SourceChoice.Wearables) }
+
+        SourceOption(
+            title = "Everything",
+            subtitle = "Your phone's own count included",
+            selected = choice == SourceChoice.Everything,
+        ) { pick(SourceChoice.Everything) }
+
+        // Naming each writer is what makes the two above checkable rather
+        // than taken on trust.
+        sources.forEach { source ->
+            SourceOption(
+                title = source.label,
+                subtitle = if (source.isPhone) "This phone, on its own" else source.packageName,
+                selected = (choice as? SourceChoice.Only)?.packageName == source.packageName,
+            ) { pick(SourceChoice.Only(source.packageName)) }
+        }
+    }
+}
+
+@Composable
+private fun SourceOption(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) = SettingsRow(
+    title = title,
+    subtitle = subtitle,
+    onClick = onClick,
+    trailing = {
+        if (selected) {
+            Icon(
+                Icons.Outlined.Check,
+                contentDescription = "Chosen",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    },
+)
+
 @Composable
 private fun GoalRow(
     value: String,
