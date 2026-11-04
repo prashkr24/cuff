@@ -384,6 +384,53 @@ survive as widget designs.
   and the contacts picker works, but no real Telegram call has matched a rule on
   a device yet.
 
+## Widgets: designed, not built
+
+Twenty-three artboards on the canvas in four families -- the app's own tiles,
+a score reading, rings and summaries, and the band itself. Nothing is built.
+The dependencies are already in `app/build.gradle.kts` (`glance-appwidget`
+1.1.1, `glance-material3`, `work-runtime-ktx`).
+
+**What Glance can and cannot draw.** Read from the 1.1.1 jars, not from
+memory, because three of these contradict what anyone would assume:
+
+- `CircularProgressIndicator(GlanceModifier, ColorProvider)` takes **no
+  progress parameter**. It is the indeterminate spinner and nothing else, so
+  there is no determinate ring at any size. A single ring costs a Bitmap just
+  as much as three concentric ones. `LinearProgressIndicator` has a `Float`
+  overload and is the only determinate component.
+- `TextStyle` carries colour, size, weight, style, alignment, decoration and
+  family. There is **no letter spacing**, and `FontWeight` is exactly Normal,
+  Medium and Bold. Every tile head in the app is bold, uppercased and tracked
+  at 1 sp, so a widget kicker sits tighter than the tab's and cannot be made
+  to match without baking it into a bitmap.
+- Weight is an **equal share only** -- no fractional weights and no
+  percentage heights, so every bar height is computed in Kotlin in dp from
+  `LocalSize`.
+- `GlanceModifier.cornerRadius` is API 31+ and `minSdk` is 28, so every
+  rounded surface needs a shape drawable on 28-30.
+
+A chart made of rectangles in a Row composes natively; anything curved -- a
+ring, a smooth sparkline -- is an Android Canvas rendered to a Bitmap and
+shown as an `Image`. Both are legitimate; the designs say which they need.
+
+**The band widget is the one only this app can do**, and it forced the
+decision the rest inherit: the battery is always the last reading *with its
+age*, never a live number. Asking the Air costs its one secure session and
+holding that session blocks the Google Health sync, so a widget that
+refreshed every half hour would quietly cost a day of readings.
+
+**Widgets must read `LightExtras` on a light ground.** The dark health
+colours are not merely dim there, they are unusable: `steps #5BD6A8` is
+1.81:1 on white. The light values already exist and pass -- steps 4.51:1,
+activity 4.82:1, heart 4.99:1. Do not mint a third set; a proposal to do so
+measured *worse* than what is already shipping.
+
+Two things a widget cannot carry, decided rather than overlooked: the live
+measuring tile (no animation, no per-second push, and the band cannot be held
+open from a home screen) and the hypnogram (sixty offset boxes would compose
+and would be a grey smear under 150 dp).
+
 ## Theming, and why the neutrals are no longer constants
 
 A ground is a choice now -- four in each mode -- and that broke a premise the
