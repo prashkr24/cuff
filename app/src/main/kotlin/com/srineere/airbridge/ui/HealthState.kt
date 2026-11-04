@@ -294,46 +294,8 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
         }
     }
 
-    private suspend fun load(context: Context): HealthData {
-        when (HealthConnect.availability(context)) {
-            HealthAvailability.NotInstalled ->
-                return HealthData(stage = HealthStage.NotConnected)
-            HealthAvailability.NeedsUpdate ->
-                return HealthData(stage = HealthStage.NeedsUpdate)
-            HealthAvailability.Ready -> Unit
-        }
-        val client = HealthConnect.clientOrNull(context)
-            ?: return HealthData(stage = HealthStage.NotConnected)
-        val granted = HealthConnect.granted(client)
-        // Nothing granted is not an error, it is the first run: the tab shows
-        // what it would give you and asks, rather than an empty grid.
-        if (granted.intersect(HealthConnect.readPermissions).isEmpty()) {
-            return HealthData(stage = HealthStage.NotConnected)
-        }
-
-        val snapshot = reader.read(context, days = windowDays)
-        return HealthData(
-            stage = HealthStage.Granted,
-            snapshot = snapshot,
-            restingTrend = trendOf(snapshot.restingHeartRate),
-            hrvTrend = trendOf(snapshot.hrv),
-            breathingTrend = trendOf(snapshot.respiratoryRate),
-            skinTrend = trendOf(snapshot.skinTemperature),
-            oxygenTrend = trendOf(snapshot.oxygenSaturation),
-            weightTrend = trendOf(snapshot.weight),
-            stepsTrend = trendOf(snapshot.steps),
-            sleepTrend = trendOf(snapshot.nights.toSleepReadings()),
-            // These three are derived rather than read: Health Connect has
-            // no "balance" or "minutes exercised a day" to ask for, so they
-            // are built from the halves it does hold. Computed here with the
-            // rest, not in a tile, because a trend recomputed on every
-            // recomposition costs a frame to say the same thing.
-            energyTrend = trendOf(balanceReadings(snapshot)),
-            nutritionTrend = trendOf(snapshot.eatenDaily),
-            activityTrend = trendOf(snapshot.sessions.toDailyMinutes()),
-            nights = snapshot.nights.sortedBy { it.day },
-        )
-    }
+    private suspend fun load(context: Context): HealthData =
+        loadHealthData(context, reader, windowDays)
 
     private companion object {
         /** What the tab opens with: a month, which every tile's window fits in. */
@@ -341,6 +303,61 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
         /** Long enough that switching tabs costs nothing, short enough to feel live. */
         const val FRESH_MILLIS = 60_000L
     }
+}
+
+/**
+ * One read of Health Connect, reduced the way every screen expects it.
+ *
+ * A plain function rather than a method because the widgets need exactly
+ * this and have no [HealthState] to ask: they run from a worker with no
+ * composition, no tab and no scope. Two readers would be two sets of
+ * arithmetic drifting apart, and the trend a tile shows differing from the
+ * one its widget shows is the kind of bug nobody reports because nobody
+ * believes it.
+ */
+internal suspend fun loadHealthData(
+    context: Context,
+    reader: HealthReader = HealthReader(),
+    days: Int = 30,
+): HealthData {
+    when (HealthConnect.availability(context)) {
+        HealthAvailability.NotInstalled ->
+            return HealthData(stage = HealthStage.NotConnected)
+        HealthAvailability.NeedsUpdate ->
+            return HealthData(stage = HealthStage.NeedsUpdate)
+        HealthAvailability.Ready -> Unit
+    }
+    val client = HealthConnect.clientOrNull(context)
+        ?: return HealthData(stage = HealthStage.NotConnected)
+    val granted = HealthConnect.granted(client)
+    // Nothing granted is not an error, it is the first run: the tab shows
+    // what it would give you and asks, rather than an empty grid.
+    if (granted.intersect(HealthConnect.readPermissions).isEmpty()) {
+        return HealthData(stage = HealthStage.NotConnected)
+    }
+
+    val snapshot = reader.read(context, days = days)
+    return HealthData(
+        stage = HealthStage.Granted,
+        snapshot = snapshot,
+        restingTrend = trendOf(snapshot.restingHeartRate),
+        hrvTrend = trendOf(snapshot.hrv),
+        breathingTrend = trendOf(snapshot.respiratoryRate),
+        skinTrend = trendOf(snapshot.skinTemperature),
+        oxygenTrend = trendOf(snapshot.oxygenSaturation),
+        weightTrend = trendOf(snapshot.weight),
+        stepsTrend = trendOf(snapshot.steps),
+        sleepTrend = trendOf(snapshot.nights.toSleepReadings()),
+        // These three are derived rather than read: Health Connect has
+        // no "balance" or "minutes exercised a day" to ask for, so they
+        // are built from the halves it does hold. Computed here with the
+        // rest, not in a tile, because a trend recomputed on every
+        // recomposition costs a frame to say the same thing.
+        energyTrend = trendOf(balanceReadings(snapshot)),
+        nutritionTrend = trendOf(snapshot.eatenDaily),
+        activityTrend = trendOf(snapshot.sessions.toDailyMinutes()),
+        nights = snapshot.nights.sortedBy { it.day },
+    )
 }
 
 /**

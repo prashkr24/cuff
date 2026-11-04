@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One provider per cell. The picker gets five entries, not forty-two:
+     choosing what a widget shows happens in WidgetConfigActivity, which
+     Android launches on drop and which this points at with android:configure.
+     Nothing is placed until that activity returns RESULT_OK.
+
+     targetCellWidth/Height and widgetFeatures are API 31+; minWidth/minHeight
+     are what 28-30 reads, and an attribute an older parser does not know is
+     ignored rather than fatal. updatePeriodMillis is 0 deliberately: the
+     platform's own period has a 30-minute floor it rounds up from and wakes
+     the device to meet, so the refresh is a WorkManager job instead. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="150dp"
+    android:minHeight="150dp"
+    android:minResizeWidth="150dp"
+    android:minResizeHeight="150dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable"
+    android:configure="com.srineere.airbridge.widget.WidgetConfigActivity"
+    android:description="@string/widget_square_description"
+    android:previewImage="@drawable/widget_preview"
+    android:initialLayout="@layout/glance_default_loading_layout" />

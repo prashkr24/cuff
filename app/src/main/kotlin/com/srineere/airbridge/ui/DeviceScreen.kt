@@ -65,6 +65,7 @@ import androidx.compose.material.icons.outlined.Palette
 import com.srineere.airbridge.ui.theme.Accent
 import com.srineere.airbridge.ui.theme.ThemeMode
 import com.srineere.airbridge.ui.theme.extras
+import com.srineere.airbridge.widget.BandStore
 import com.srineere.airbridge.ui.theme.isAvailable
 import dev.airpulse.fitbit_air.airResult
 import java.util.concurrent.TimeUnit
@@ -147,6 +148,12 @@ private fun BandCard() {
                 message = null
                 battery = (value as? Map<*, *>)?.get("percent") as? Int
                 batteryAt = System.currentTimeMillis()
+                // The only place the Air is actually asked. Kept, because no
+                // widget is allowed to ask: the band answers one session at a
+                // time and Google Health holds that session whenever it syncs,
+                // so a widget polling for a fresh charge would quietly cost a
+                // day of steps and sleep. The widgets draw this, dated.
+                battery?.let { BandStore.rememberBattery(context, it, batteryAt) }
                 Band.readSignal(context, airResult(
                     onSuccess = { reading ->
                         syncing = false

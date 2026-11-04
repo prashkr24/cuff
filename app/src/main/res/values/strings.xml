@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launcher's widget picker reads android:description from a string
+  resource and nowhere else, which is why this file exists at all: the only
+  other string this app ships is app_name, and that one varies per build
+  type so it comes from resValue in app/build.gradle.kts.
+
+  One line per cell, because the picker has one entry per cell. Each says
+  what the size is for and that the reading is chosen afterwards. A picker
+  entry called simply "Air Bridge" would look like a widget that does nothing
+  until you drop it.
+-->
+<resources>
+    <string name="widget_strip_description">One figure. You pick which after you drop it.</string>
+    <string name="widget_square_description">One reading and its chart. You pick which after you drop it.</string>
+    <string name="widget_row_description">A reading across a whole row. You pick which after you drop it.</string>
+    <string name="widget_wide_description">A reading, its goal and its week. You pick which after you drop it.</string>
+    <string name="widget_tall_description">The whole story, for the readings that fill it.</string>
+</resources>

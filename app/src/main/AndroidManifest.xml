@@ -87,6 +87,80 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Five providers, one per cell size, all backed by the same
+             AirWidget. The picker is someone else's list with no sections and
+             no search, so it gets five entries rather than forty-two; what a
+             widget actually shows is chosen in WidgetConfigActivity, which
+             android:configure launches on drop. Exported, which a widget
+             provider has to be: the system finds providers by resolving
+             APPWIDGET_UPDATE against installed receivers, and a non-exported
+             one is skipped: it still appears in dumpsys and never appears
+             in the launcher's picker. The action is a protected broadcast, so
+             only the system can actually send it. -->
+        <receiver
+            android:name=".widget.StripWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_strip" />
+        </receiver>
+        <receiver
+            android:name=".widget.SquareWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_square" />
+        </receiver>
+        <receiver
+            android:name=".widget.RowWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_row" />
+        </receiver>
+        <receiver
+            android:name=".widget.WideWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_wide" />
+        </receiver>
+        <receiver
+            android:name=".widget.TallWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tall" />
+        </receiver>
+
+        <!-- The catalogue, and the add flow. Exported because the launcher
+             starts it on behalf of the home screen; it does nothing without a
+             valid appWidgetId in the extras. -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

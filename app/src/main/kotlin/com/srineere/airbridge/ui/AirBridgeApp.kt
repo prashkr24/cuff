@@ -60,7 +60,7 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 }
 
 @Composable
-fun AirBridgeApp() {
+fun AirBridgeApp(openRoute: String? = null) {
     val context = LocalContext.current
     WarmInstalledApps(context)
     val state = rememberRelayState(context)
@@ -68,6 +68,20 @@ fun AirBridgeApp() {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination
+
+    // Where a widget sent us.
+    //
+    // Navigated once per value rather than once per composition: the same
+    // widget tapped twice should land on its screen twice, and a route that
+    // stayed in a remembered flag would only work the first time. Anything
+    // this build does not know is ignored, because a widget placed by an
+    // older version can name a screen that has since been renamed, and
+    // crashing on it is a worse answer than opening the Health tab.
+    androidx.compose.runtime.LaunchedEffect(openRoute) {
+        val route = openRoute ?: return@LaunchedEffect
+        if (route == Tab.Health.route) return@LaunchedEffect
+        runCatching { nav.navigate(route) }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,

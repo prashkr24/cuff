@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the launcher's picker shows before a widget is placed.
+
+  Not decoration: a provider with no previewImage is one that several
+  launchers quietly leave out of the picker altogether, and the ones that do
+  list it fall back to inflating initialLayout, which for a Glance widget is
+  an empty loading view. So this is a real drawing of the shape a widget
+  takes: a rounded card, a kicker, a figure and a chart.
+
+  Deliberately drawn in greys rather than the app's accent. The picker has no
+  way to tell us which theme is in use, and a preview in the wrong accent is
+  the first thing someone sees of this feature. From API 34 the app pushes a
+  properly themed preview with setWidgetPreview; this is what everything
+  older gets.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="180dp"
+    android:height="110dp"
+    android:viewportWidth="180"
+    android:viewportHeight="110">
+
+    <path
+        android:fillColor="#FF2A3137"
+        android:pathData="M8,8 L172,8 A16,16 0 0 1 188,24 L188,86 A16,16 0 0 1 172,102 L8,102 A16,16 0 0 1 -8,86 L-8,24 A16,16 0 0 1 8,8 Z" />
+    <path
+        android:fillColor="#FF1A1F24"
+        android:pathData="M14,8 L166,8 A14,14 0 0 1 180,22 L180,88 A14,14 0 0 1 166,102 L14,102 A14,14 0 0 1 0,88 L0,22 A14,14 0 0 1 14,8 Z" />
+
+    <!-- the kicker -->
+    <path android:fillColor="#FF6E7F88" android:pathData="M16,22 h34 v4 h-34 z" />
+
+    <!-- the figure -->
+    <path android:fillColor="#FFE8EDF0" android:pathData="M16,36 h52 v16 h-52 z" />
+    <!-- the line under it -->
+    <path android:fillColor="#FF4A555D" android:pathData="M16,58 h40 v4 h-40 z" />
+
+    <!-- the chart -->
+    <path android:fillColor="#FF46525A" android:pathData="M96,66 h10 v20 h-10 z" />
+    <path android:fillColor="#FF46525A" android:pathData="M110,56 h10 v30 h-10 z" />
+    <path android:fillColor="#FF46525A" android:pathData="M124,62 h10 v24 h-10 z" />
+    <path android:fillColor="#FF46525A" android:pathData="M138,48 h10 v38 h-10 z" />
+    <path android:fillColor="#FFB8C4CC" android:pathData="M152,40 h10 v46 h-10 z" />
+</vector>
