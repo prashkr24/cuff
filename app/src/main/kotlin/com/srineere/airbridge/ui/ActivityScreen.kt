@@ -246,7 +246,12 @@ private fun describeActivity(stage: String, errorCode: String?, preset: String?)
     }
 }
 
-private fun ago(atMillis: Long, now: Long): String {
+/**
+ * Kept here, where it was written, rather than moved somewhere tidier: the
+ * Health tab's header needs the same words, and two copies of this are two
+ * screens that will eventually disagree about what "now" means.
+ */
+internal fun ago(atMillis: Long, now: Long): String {
     val delta = (now - atMillis).coerceAtLeast(0)
     val minutes = TimeUnit.MILLISECONDS.toMinutes(delta)
     val hours = TimeUnit.MILLISECONDS.toHours(delta)

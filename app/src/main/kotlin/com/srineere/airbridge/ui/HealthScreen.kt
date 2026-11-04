@@ -21,10 +21,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,19 +49,20 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
-import com.srineere.airbridge.health.HealthConnect
 import com.srineere.airbridge.health.Goals
+import com.srineere.airbridge.health.HealthConnect
 import com.srineere.airbridge.health.Reading
+import com.srineere.airbridge.health.TILE_COLUMNS
 import com.srineere.airbridge.health.Tile
 import com.srineere.airbridge.health.TileColour
 import com.srineere.airbridge.health.TileKind
 import com.srineere.airbridge.health.TileSize
-import com.srineere.airbridge.health.TILE_COLUMNS
 import com.srineere.airbridge.health.Trend
 import com.srineere.airbridge.health.packTiles
 import com.srineere.airbridge.ui.theme.extras
 import java.text.NumberFormat
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -122,7 +127,11 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
     val tileColours = state.tiles.associate { it.kind to tileColour(it) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        HealthHeader()
+        HealthHeader(
+            writtenAt = data.snapshot.writtenAt,
+            loading = state.loading,
+            onRefresh = { state.refresh(context, force = true) },
+        )
 
         packTiles(state.tiles).forEach { row ->
             Row(
@@ -175,18 +184,57 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
     }
 }
 
+/**
+ * The tab's title, how old its figures are, and the one control that makes
+ * them newer.
+ *
+ * What the button does is re-read Health Connect. It cannot make Google
+ * Health sync the band -- nothing here can, that is Google Health's own
+ * schedule over the band's one session -- so it is drawn as a refresh rather
+ * than called a sync, and the age beside it is the honest answer to "is this
+ * current": the newest thing anything has filed, not the last time we asked.
+ *
+ * The age ticks on its own. Left to redraw only when something else changed,
+ * a tab held open kept saying "now" an hour later.
+ */
 @Composable
-private fun HealthHeader() = Row(
-    verticalAlignment = Alignment.CenterVertically,
-    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 4.dp),
-) {
-    Text("Health", style = MaterialTheme.typography.headlineSmall)
-    Spacer(Modifier.weight(1f))
-    Text(
-        today(),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.extras.disabled,
-    )
+private fun HealthHeader(writtenAt: Instant?, loading: Boolean, onRefresh: () -> Unit) {
+    val now = nowTicking()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 20.dp, bottom = 4.dp),
+    ) {
+        Text("Health", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.weight(1f))
+        Text(
+            // The date orients, the age answers "is this current". Both, and
+            // in that order, because the tab is always about today and the
+            // age is the thing that changes while you look at it.
+            //
+            // No age when nothing read carries a write time: only aggregates
+            // were granted, and "never" would be a lie -- the steps are
+            // right there on the tile.
+            today() + (writtenAt?.let { " · " + ago(it.toEpochMilli(), now) } ?: ""),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.extras.disabled,
+        )
+        if (loading) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(48.dp),
+            ) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+            }
+        } else {
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    Icons.Outlined.Refresh,
+                    contentDescription = "Read Health Connect again",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 /** "Tue 4 Nov" here, and whatever that is wherever the phone is set. */

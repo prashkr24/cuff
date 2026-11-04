@@ -145,7 +145,17 @@ data class HealthSnapshot(
     val proteinToday: Double? = null,
     val carbsToday: Double? = null,
     val fatToday: Double? = null,
-    /** When Google Health last wrote anything we read, so screens can age it. */
+    /**
+     * When anything we read was last **written to Health Connect**, which is
+     * not when we read it.
+     *
+     * Taken from `Metadata.lastModifiedTime`, so it answers the question the
+     * Health tab is actually asked -- how old is this? -- rather than the
+     * useless one, did we just run a query. Null when nothing with metadata
+     * was read: aggregates carry none, so a person who granted only steps
+     * has no answer here, and a screen must say so rather than print a dash
+     * that reads as "never".
+     */
     val writtenAt: Instant? = null,
     val missingPermissions: Set<String> = emptySet(),
 )
@@ -169,6 +179,17 @@ data class HealthSnapshot(
  */
 class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
 
+    /**
+     * The newest `lastModifiedTime` seen during the read now running.
+     *
+     * A field rather than a parameter threaded through six call sites, which
+     * is safe because `read` is never re-entered: `HealthState.refresh`
+     * returns early while a read is in flight, and nothing else calls it.
+     * `stepsNow` does not touch this -- it reads aggregates, which carry no
+     * metadata at all.
+     */
+    private var newestWrite: Instant? = null
+
     suspend fun read(context: Context, days: Int = 30): HealthSnapshot {
         val client = HealthConnect.clientOrNull(context) ?: return HealthSnapshot(
             missingPermissions = HealthConnect.readPermissions,
@@ -176,6 +197,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         val granted = HealthConnect.granted(client)
         val today = LocalDate.now(zone)
         val from = today.minusDays(days.toLong() - 1)
+        newestWrite = null
 
         fun allowed(type: KClass<out Record>): Boolean =
             HealthPermission.getReadPermission(type) in granted
@@ -427,7 +449,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             proteinToday = protein,
             carbsToday = carbs,
             fatToday = fat,
-            writtenAt = Instant.now(),
+            writtenAt = newestWrite,
             missingPermissions = HealthConnect.readPermissions - granted,
         )
     }
@@ -602,6 +624,10 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
                     pageToken = token,
                 ),
             )
+            page.records.forEach { row ->
+                val at = row.metadata.lastModifiedTime
+                if (newestWrite == null || at.isAfter(newestWrite)) newestWrite = at
+            }
             rows += page.records
             token = page.pageToken
             // Some providers hand back "" instead of null when the pages run
