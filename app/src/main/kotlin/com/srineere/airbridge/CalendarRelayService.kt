@@ -27,6 +27,7 @@ import android.provider.Settings
 import dev.airpulse.fitbit_air.AirLink
 import com.srineere.airbridge.health.HealthReader
 import com.srineere.airbridge.health.HealthSettings
+import com.srineere.airbridge.health.canPulseBand
 import com.srineere.airbridge.health.shouldBuzzForGoal
 import com.srineere.airbridge.health.shouldNudgeForHour
 import dev.airpulse.fitbit_air.AirResult
@@ -661,7 +662,7 @@ class CalendarRelayService : Service() {
         // these, and a nudge that outlived it would make them liars.
         val phoneToo = settings.hourlyNudge && settings.nudgeOnPhone
         if (!ready || stopping) return
-        if (air == null && !phoneToo) return
+        if (!canPulseBand(ready, stopping, air != null, heartStreaming) && !phoneToo) return
 
         healthScope.launch {
             val steps = withContext(Dispatchers.IO) { HealthReader().stepsNow(this@CalendarRelayService) }
@@ -672,15 +673,29 @@ class CalendarRelayService : Service() {
             val silenced = currentSilence() != null
             val history = HealthSettings.history(this@CalendarRelayService)
 
+            // Recorded only once something has actually been handed over.
+            //
+            // The ordering the handover defends -- record before the result
+            // comes back -- still holds, and for its original reason: a pulse
+            // that is sent and fails to verify may still have been felt, and
+            // retrying that every quarter hour for the rest of the day would
+            // be worse than missing it. What has changed is that a pulse
+            // which was never *sent* no longer counts. Those are different
+            // failures and only the first is worth giving up on.
             if (shouldBuzzForGoal(settings, history, today, day, silenced)) {
-                HealthSettings.recordGoalFired(this@CalendarRelayService, day)
-                buzzForSteps("goal")
+                if (buzzForSteps("goal")) {
+                    HealthSettings.recordGoalFired(this@CalendarRelayService, day)
+                }
                 return@launch
             }
             if (shouldNudgeForHour(settings, history, thisHour, day, now.hour, now.minute, silenced)) {
-                HealthSettings.recordNudgeFired(this@CalendarRelayService, day, now.hour)
+                // Delivered anywhere is delivered. The phone copy is enough
+                // on its own, which is the whole point of it.
                 if (settings.nudgeOnPhone) notifyNudge(thisHour, settings.hourlyGoal)
-                buzzForSteps("nudge")
+                val buzzed = buzzForSteps("nudge")
+                if (settings.nudgeOnPhone || buzzed) {
+                    HealthSettings.recordNudgeFired(this@CalendarRelayService, day, now.hour)
+                }
             }
         }
     }
@@ -745,13 +760,23 @@ class CalendarRelayService : Service() {
         }
     }
 
-    private fun buzzForSteps(reason: String) {
-        if (!ready || stopping || air == null || heartStreaming) return
+    /**
+     * Returns whether the pulse was handed to the band, which is what the
+     * caller records. False means nothing was sent and the hour or the day
+     * is still owed one; it does not mean the wrist felt nothing, because
+     * the result of a sent pulse arrives later and is its own question.
+     */
+    private fun buzzForSteps(reason: String): Boolean {
+        if (!canPulseBand(ready, stopping, air != null, heartStreaming)) return false
         // Each of the two has its own pulse, so a goal crossed and an hour
         // missed can be told apart without looking at the phone.
         val config = RelayRuleStore.read(this)
         val preset = if (reason == "goal") config.stepGoalPreset else config.hourlyNudgePreset
-        if (preset.silent) return
+        // Silence is a choice about how this is delivered, not a failure to
+        // deliver it, so it counts as done. Otherwise switching the preset
+        // to a real pulse at two in the afternoon would buzz for a goal
+        // crossed at ten in the morning.
+        if (preset.silent) return true
         val at = System.currentTimeMillis()
         fun record(stage: String, code: String?) = runCatching {
             RelayHistory.add(
@@ -783,6 +808,7 @@ class CalendarRelayService : Service() {
                 }
             })
         }
+        return true
     }
 
     /**

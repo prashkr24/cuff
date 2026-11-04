@@ -80,3 +80,24 @@ fun shouldNudgeForHour(
 
 /** Ten minutes is one lap of an office and leaves the hour fixable. */
 const val NUDGE_FROM_MINUTE = 50
+
+/**
+ * Whether the band can be pulsed at all right now.
+ *
+ * One rule, in one place, because the bug it replaces was two copies of it
+ * that disagreed: the step check tested some of these and the pulse itself
+ * tested more, and the "already fired today" record was written in the gap
+ * between them. Crossing the step goal while a live heart rate reading held
+ * the band therefore marked the goal fired, buzzed nothing, and never tried
+ * again that day.
+ *
+ * [measuring] is the one that actually fired: a reading holds the band's
+ * single session for up to two minutes, and the goal is checked every
+ * fifteen.
+ */
+fun canPulseBand(
+    ready: Boolean,
+    stopping: Boolean,
+    bandLinked: Boolean,
+    measuring: Boolean,
+): Boolean = ready && !stopping && bandLinked && !measuring

@@ -117,4 +117,39 @@ class StepGoalTest {
             shouldNudgeForHour(nudging.copy(hourlyNudge = false), fresh, 0, today, 14, 55, false),
         )
     }
+
+    // ------------------------------------------------- can the band be hit
+
+    @Test
+    fun `everything in place means a pulse can be sent`() {
+        assertTrue(canPulseBand(ready = true, stopping = false, bandLinked = true, measuring = false))
+    }
+
+    @Test
+    fun `a live reading holds the band, so nothing else may pulse it`() {
+        // The bug this rule exists for. The band has one secure session; a
+        // heart rate reading holds it for up to two minutes and the step
+        // goal is checked every fifteen, so crossing the goal mid-reading is
+        // not a rare race.
+        assertFalse(canPulseBand(ready = true, stopping = false, bandLinked = true, measuring = true))
+    }
+
+    @Test
+    fun `no link, not started, or shutting down all mean no`() {
+        assertFalse(canPulseBand(ready = true, stopping = false, bandLinked = false, measuring = false))
+        assertFalse(canPulseBand(ready = false, stopping = false, bandLinked = true, measuring = false))
+        assertFalse(canPulseBand(ready = true, stopping = true, bandLinked = true, measuring = false))
+    }
+
+    @Test
+    fun `the goal is still owed while it cannot be sent`() {
+        // The invariant the fix is about, spelled out: a day on which the
+        // pulse could never be sent must not look like a day it fired. The
+        // service writes the "fired" record only when canPulseBand was true,
+        // so an unsendable goal stays unfired and is tried again -- and
+        // shouldBuzzForGoal keeps saying yes until it is.
+        val history = StepGoalHistory()
+        assertFalse(canPulseBand(ready = true, stopping = false, bandLinked = true, measuring = true))
+        assertTrue(shouldBuzzForGoal(on, history, 12_000, today, silenced = false))
+    }
 }
