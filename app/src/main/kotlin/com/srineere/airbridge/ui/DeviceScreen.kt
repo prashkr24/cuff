@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.Band
+import androidx.compose.material.icons.outlined.Palette
 import com.srineere.airbridge.ui.theme.Accent
 import com.srineere.airbridge.ui.theme.ThemeMode
 import com.srineere.airbridge.ui.theme.extras
@@ -79,29 +80,15 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
 
         BandCard()
 
+        // Appearance outgrew a section: it now carries two grounds, an
+        // accent, a custom colour and the edge weight, which is a screen.
         SectionHeader("Appearance")
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-        ) {
-            ThemeMode.entries.forEach { mode ->
-                Segment(
-                    label = mode.name,
-                    selected = appearance.mode == mode,
-                    modifier = Modifier.weight(1f),
-                ) { AppSettings.setMode(context, mode) }
-            }
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-        ) {
-            Spacer(Modifier.weight(1f))
-            Accent.entries.filter { it.isAvailable }.forEach { accent ->
-                AccentDot(accent, appearance.accent == accent) { AppSettings.setAccent(context, accent) }
-            }
-            Spacer(Modifier.weight(1f))
-        }
+        SettingsRow(
+            title = "Theme",
+            subtitle = appearanceSummary(appearance),
+            icon = Icons.Outlined.Palette,
+            onClick = { onOpen("appearance") },
+        )
 
         SectionHeader("Band")
         SettingsRow(
@@ -404,6 +391,18 @@ private fun reason(code: String?, detail: String?): String = when (code) {
     else -> detail?.takeIf { it.isNotBlank() } ?: "Could not reach the band"
 }
 
+/** The theme in a line, so the row says what it holds without opening. */
+private fun appearanceSummary(appearance: Appearance): String {
+    val preset = appearance.preset
+    val mode = when (appearance.mode) {
+        ThemeMode.System -> "follows the system"
+        ThemeMode.Light -> "always light"
+        ThemeMode.Dark -> "always dark"
+    }
+    val look = preset?.label ?: if (appearance.custom != null) "Custom colour" else "Custom"
+    return "$look · $mode"
+}
+
 /** What the Permissions row says without having to be opened. */
 @Composable
 private fun permissionsSummary(): String {
@@ -416,44 +415,3 @@ private fun permissionsSummary(): String {
     }
 }
 
-/** One accent swatch. Dynamic shows the wallpaper's own tone. */
-@Composable
-private fun AccentDot(accent: Accent, selected: Boolean, onClick: () -> Unit) {
-    // The wallpaper swatch has to show the wallpaper's own colour, not the
-    // active scheme's: unless Dynamic is already picked, that scheme is one of
-    // ours and its tertiary means nothing here.
-    val context = LocalContext.current
-    val dark = isSystemInDarkTheme()
-    val fill = when (accent) {
-        Accent.Dynamic ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (dark) dynamicDarkColorScheme(context).primary
-                else dynamicLightColorScheme(context).primary
-            } else MaterialTheme.colorScheme.primary
-        Accent.Cyan -> Color(0xFF6FD3E8)
-        Accent.Green -> Color(0xFF5BD6A8)
-        Accent.Violet -> Color(0xFFB9A8E8)
-        Accent.Amber -> Color(0xFFE8C48F)
-        Accent.Rose -> Color(0xFFE8A6B4)
-        Accent.Slate -> Color(0xFFA8B6C8)
-    }
-    val ring by animateColorAsState(
-        if (selected) fill else MaterialTheme.colorScheme.outline,
-        label = "accentRing",
-    )
-    val scale by animateFloatAsState(
-        if (selected) 1f else 0.88f,
-        spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "accentScale",
-    )
-    Box(
-        Modifier
-            .size(32.dp)
-            .scale(scale)
-            .border(2.dp, ring, CircleShape)
-            .padding(4.dp)
-            .clip(CircleShape)
-            .background(fill)
-            .clickable(onClick = onClick),
-    )
-}

@@ -384,6 +384,55 @@ survive as widget designs.
   and the contacts picker works, but no real Telegram call has matched a rule on
   a device yet.
 
+## Theming, and why the neutrals are no longer constants
+
+A ground is a choice now -- four in each mode -- and that broke a premise the
+colour file was built on. Twenty neutrals were declared as hex values tuned
+against the single near-black that existed when they were written, and a
+constant tuned against one ground is a wrong answer on every other. Two were
+measurably broken the moment Dusk was offered: `sleepAwake #2E2E42` is 1.45:1
+on Ink and 1.25:1 on Dusk, an invisible stage of the sleep chart, and
+`DarkDisabled #6E7E87` falls from 4.57:1 to 3.95:1, under AA.
+
+So `Scheme.kt` derives the lot from `ground.base` and `ground.ink`. The ones
+whose job is to be *just* visible are mixed to a contrast ratio rather than a
+fixed amount -- `mixToContrast` binary-searches the mix until it hits the
+target. The six health colours do not move at all: a steps green that drifts
+with the ground is a steps green nobody can learn.
+
+Three traps, all of them found by measuring rather than looking:
+
+- **The accents collided with the data.** Three of the six were the same hex
+  as a health colour: the green accent *was* `extras.steps`, the amber *was*
+  `extras.hrv`, the rose a shade off `extras.heart`. On the one tab where
+  colour carries meaning, the chrome and the readings were the same colour.
+  The five replacements sit in hues the charts do not use, and a test asserts
+  no accent ever equals a health colour again.
+- **True black cannot lift.** Material conveys depth in dark mode by lifting
+  the surface, and a lift off `#000000` is either invisible or relights the
+  pixels the ground exists to turn off. `Ground.liftsTiles` answers no for
+  Pitch, tiles there are a border and nothing else, and `Edges.on` raises the
+  softest border setting so a card is never left with neither fill nor line.
+- **Material You would have overwritten the ground.** `dynamicDarkColorScheme`
+  returns surfaces as well as an accent, so taking it wholesale meant "true
+  black" plus "match my wallpaper" silently stopped being true black. The
+  wallpaper now contributes one colour -- its primary, used as a hue -- and
+  everything else is ours.
+
+`lift` mixes in sRGB component space on purpose, NOT with Compose's `lerp`,
+which interpolates perceptually. A 0.14 perceptual lift off true black lands
+at 1.05:1. The test suite caught that one.
+
+A custom accent is clamped, never rejected: `clampToGround` keeps the hue and
+moves lightness until it clears 4.5:1, because the accent draws 1px chart
+strokes and 11px labels. Refusing the pick would be rude and a "use anyway"
+escape would be dishonest.
+
+Anything asking `isSystemInDarkTheme()` to choose a colour is a bug; use
+`MaterialTheme.isDark`, which reads the ground actually in force. The activity
+badges asked the system and drew dark inks on a light card whenever someone
+forced Light on a dark phone.
+
 ## The food log
 
 Tapping Log on Nutrition opens the log, not a form. What anyone wants first

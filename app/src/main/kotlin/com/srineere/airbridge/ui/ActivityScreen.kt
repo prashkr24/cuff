@@ -1,7 +1,6 @@
 package com.srineere.airbridge.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,12 +28,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayActivity
 import com.srineere.airbridge.RelayPreset
 import com.srineere.airbridge.ui.theme.extras
+import com.srineere.airbridge.ui.theme.isDark
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -143,25 +144,38 @@ internal fun ActivityRow(
  */
 private class AppBadge(
     val icon: ImageVector,
-    private val darkTile: Long, private val darkInk: Long,
-    private val lightTile: Long, private val lightInk: Long,
+    private val darkInk: Long,
+    private val lightInk: Long,
 ) {
-    fun tile(dark: Boolean) = Color(if (dark) darkTile else lightTile)
     fun ink(dark: Boolean) = Color(if (dark) darkInk else lightInk)
 }
 
-private val CALL = AppBadge(Icons.Outlined.Call, 0xFF1F3B2F, 0xFF7FE0B2, 0xFFD7F0E2, 0xFF1D5B3C)
-private val CHAT = AppBadge(Icons.Outlined.ChatBubbleOutline, 0xFF26303A, 0xFF9FD6E8, 0xFFD9ECF5, 0xFF1A4E63)
-private val DATE = AppBadge(Icons.Outlined.CalendarMonth, 0xFF332B22, 0xFFE8C48F, 0xFFF6E7CE, 0xFF6B4A17)
-private val WAKE = AppBadge(Icons.Outlined.Alarm, 0xFF2B2433, 0xFFCFA8E8, 0xFFEADDF5, 0xFF4C2E63)
-private val POST = AppBadge(Icons.Outlined.MailOutline, 0xFF3A2326, 0xFFE89FA6, 0xFFF8DFE2, 0xFF6B2730)
+/**
+ * The badge's own tile, mixed from whatever ground is underneath.
+ *
+ * The tiles used to be eight more fixed hexes, tuned against the one
+ * near-black that existed when they were written. On Dusk the call badge's
+ * #1F3B2F sits about 1.2:1 off the ground and the badge all but disappears;
+ * on true black the lift is wrong in the other direction. Only the ink is a
+ * decision now -- the tile is that ink, barely mixed in.
+ */
+@Composable
+private fun AppBadge.tile(dark: Boolean): Color =
+    ink(dark).copy(alpha = if (dark) 0.16f else 0.13f)
+        .compositeOver(MaterialTheme.colorScheme.surfaceContainer)
+
+private val CALL = AppBadge(Icons.Outlined.Call, 0xFF7FE0B2, 0xFF1D5B3C)
+private val CHAT = AppBadge(Icons.Outlined.ChatBubbleOutline, 0xFF9FD6E8, 0xFF1A4E63)
+private val DATE = AppBadge(Icons.Outlined.CalendarMonth, 0xFFE8C48F, 0xFF6B4A17)
+private val WAKE = AppBadge(Icons.Outlined.Alarm, 0xFFCFA8E8, 0xFF4C2E63)
+private val POST = AppBadge(Icons.Outlined.MailOutline, 0xFFE89FA6, 0xFF6B2730)
 /** A buzz this app asked for itself, which belongs to no app at all. */
-private val SELF = AppBadge(Icons.Outlined.Vibration, 0xFF1E262B, 0xFF9FD6E8, 0xFFE2EAEF, 0xFF2A4C5B)
+private val SELF = AppBadge(Icons.Outlined.Vibration, 0xFF9FD6E8, 0xFF2A4C5B)
 // The app raises three of its own, and they are worth telling apart: a
 // nudge you have had eight of today reads differently from a goal you
 // crossed once.
-private val GOAL = AppBadge(Icons.Outlined.DirectionsWalk, 0xFF14332A, 0xFF7FE0B2, 0xFFD7F0E2, 0xFF1D5B3C)
-private val NUDGE = AppBadge(Icons.Outlined.Schedule, 0xFF2B2433, 0xFFCFA8E8, 0xFFEADDF5, 0xFF4C2E63)
+private val GOAL = AppBadge(Icons.Outlined.DirectionsWalk, 0xFF7FE0B2, 0xFF1D5B3C)
+private val NUDGE = AppBadge(Icons.Outlined.Schedule, 0xFFCFA8E8, 0xFF4C2E63)
 
 /**
  * The stock apps, by what they are rather than by who makes them: the package
@@ -186,7 +200,9 @@ private fun badgeFor(packageName: String?, dialer: String, commandId: String = "
 
 @Composable
 private fun Badge(badge: AppBadge) {
-    val dark = isSystemInDarkTheme()
+    // The theme's own ground, not the system's: forcing Light on a dark
+    // phone used to leave these drawing dark inks on a light card.
+    val dark = MaterialTheme.isDark
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier

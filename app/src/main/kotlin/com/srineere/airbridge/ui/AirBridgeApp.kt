@@ -204,6 +204,7 @@ fun AirBridgeApp() {
                 pushed("healthnutrition") {
                     HealthNutritionScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
                 }
+                pushed("appearance") { AppearanceScreen(onBack = nav::popBackStack) }
                 pushed("healthsavedfoods") {
                     HealthSavedFoodsScreen(onBack = nav::popBackStack)
                 }

@@ -409,7 +409,10 @@ private fun TilePanel(
                 }
             }
 
-            PanelLabel("Colour", top = 10.dp)
+            // The last swatch is the app's own accent, including a custom
+            // one, so a tab can be a single colour. It is a circle like the
+            // other seven and nothing said which it was.
+            PanelLabel("Colour — ${colourName(chosen)}", top = 10.dp)
             // Shared out rather than fixed at 38dp: eight of those plus the
             // gaps are wider than the panel, and the eighth was being cut in
             // half by the edge of the screen.
@@ -453,6 +456,19 @@ private fun PanelLabel(text: String, top: Dp = 6.dp) = Text(
     color = MaterialTheme.extras.disabled,
     modifier = Modifier.padding(top = top),
 )
+
+/** Which of the eight is in use, named so the accent one can be found. */
+private fun colourName(chosen: TileColour?): String = when (chosen) {
+    null -> "its own"
+    TileColour.Heart -> "heart red"
+    TileColour.Sleep -> "sleep violet"
+    TileColour.Steps -> "steps green"
+    TileColour.Hrv -> "HRV amber"
+    TileColour.Activity -> "activity blue"
+    TileColour.Energy -> "energy orange"
+    TileColour.Slate -> "slate"
+    TileColour.Accent -> "the app's accent"
+}
 
 @Composable
 private fun swatchColour(option: TileColour): Color {
