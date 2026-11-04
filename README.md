@@ -133,7 +133,11 @@ identity a call arrives with.
 
 ## Limits worth knowing
 
-- Android only. iOS does not let an app read other apps' notifications.
+- Android only, and outside the EU that is permanent. iOS has no way for an
+  app to read other apps' notifications — except `AccessoryNotifications`,
+  which iOS 26.5 added for accessory companions and which Apple restricts to
+  EU accounts on EU devices. A reduced version is no way round it: the
+  blocker is reading a notification at all, not what you do with it.
 - Arm64 phones only; other ABIs are untested upstream.
 - Background delivery is *evidenced*, not *guaranteed*: screen-off haptics are
   confirmed, deep idle and post-reboot are not.

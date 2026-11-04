@@ -1,5 +1,12 @@
 # Air Bridge on iOS — feasibility
 
+> **Settled, 5 November 2026: the owner is not in the EU.** So the alerts half
+> is the report's case (a) — impossible in any form worth shipping — and the
+> `AccessoryNotifications` route below is unreachable, entitlements and
+> keypair experiment alike. The health half still ports; the rest of this
+> document is kept for the method and for the day Apple widens the API beyond
+> the EU, which is the only thing that would reopen it.
+
 Written 4 November 2026. Research-only; nothing here has been run on a device.
 Every claim is tagged **[doc]** (Apple/Google primary documentation), **[obs]**
 (a dated first-hand account), or **[inf]** (my inference — argued, not evidenced).
