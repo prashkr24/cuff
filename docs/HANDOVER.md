@@ -431,6 +431,33 @@ survive as widget designs.
   and the contacts picker works, but no real Telegram call has matched a rule on
   a device yet.
 
+- **Four metrics Google Health already writes and this app does not read.**
+  Built once on 4 November 2026 and backed out the same day, deliberately, to
+  keep the source-filter change alone. The groundwork is established and worth
+  not re-establishing: every type exists in `connect-client:1.1.0`, so no
+  version bump is needed.
+  - `Vo2MaxRecord.vo2MillilitersPerMinuteKilogram` — no aggregate, so read the
+    records. An estimate something recomputes every week or two, **not one a
+    day**: a thirty-day window holds two or three readings, and anything
+    drawing it has to survive that. Belongs on Vitals.
+  - `FloorsClimbedRecord.FLOORS_CLIMBED_TOTAL` — a daily aggregate. Must take
+    the same origin filter steps do, or the phone's stairs land on the band's.
+    Belongs with steps.
+  - `BodyTemperatureRecord.temperature.inCelsius` — no aggregate, read the
+    records. **Not skin temperature**: skin temp is a delta from your own
+    baseline and body temp is an absolute somebody measured. Showing either as
+    the other is wrong by about thirty degrees. Belongs on Vitals, below skin.
+  - `SpeedRecord.SPEED_AVG`/`SPEED_MAX` (a `Velocity`, `.inKilometersPerHour`)
+    and `StepsCadenceRecord.RATE_AVG`/`RATE_MAX` (plain doubles) — both are
+    series records with aggregates, so one call each on `SessionReader.read`
+    rather than averaging samples by hand. They are per-session and belong on
+    the session screen, in a third row drawn only when one of them exists: a
+    band with no GPS writes neither, and a row of three dashes says less than
+    no row.
+
+  Each needs its `READ_*` in both `HealthConnect.readPermissions` and the
+  manifest. Granting them is by hand on this phone; `pm grant` is blocked.
+
 ## Widgets: designed, not built
 
 Twenty-three artboards on the canvas in four families -- the app's own tiles,
