@@ -203,6 +203,14 @@ decisions that are settled:
   number — the method is a rolling average against a smallest worthwhile
   change, which is a band, and inventing a 0–100 figure on top would be a
   clinical claim.
+
+  **Reversed on 5 November 2026**, for readiness and for a biological age,
+  on the owner's instruction after this reasoning was put to them twice. See
+  `docs/ROADMAP.md`, which records what the reversal keeps: a total is never
+  shown without its parts, every figure is measured against your own history,
+  and a figure with nothing behind it stays null. The danger this rule names
+  is real; the judgement is that the feature is worth it with those guards.
+  The rule still stands for everything it does not name.
 - **Distance and pace were empty because `READ_DISTANCE` was never granted**
   — granting it filled every session in, walks and racquet sessions alike.
   Not because nothing writes them. That took a log line to establish and it
@@ -431,6 +439,11 @@ survive as widget designs.
   and the contacts picker works, but no real Telegram call has matched a rule on
   a device yet.
 
+- **The seven features chosen on 5 November** — readiness, biological age, a
+  morning moment, a journal, a sleep bank, export, and finishing day-wise
+  exploration. They have their own document, `docs/ROADMAP.md`, because two of
+  them overturn the no-composite-scores rule above, and that reversal needed
+  somewhere to be written down rather than discovered in a diff.
 - **Four metrics Google Health already writes and this app does not read.**
   Built once on 4 November 2026 and backed out the same day, deliberately, to
   keep the source-filter change alone. The groundwork is established and worth
@@ -548,7 +561,9 @@ Glance 1.1.1 jars, not assumed:
   `RemoteViewsService` whose factory composes each page with
   `GlanceRemoteViews.compose()` (`@ExperimentalGlanceRemoteViewsApi`). Option
   three is the one that matches what a launcher stack feels like, and it is
-  the only one that leaves Glance's normal path.
+  the only one that leaves Glance's normal path. **It is also the one to
+  build**: it is the only option that leaves the tap free to open a screen,
+  which every other widget on the canvas does.
 - A stack refreshes as one widget, so **the dearest member sets the update
   cost for all of them** -- which is another reason the band card in a stack
   shows a stored battery and never asks the Air.
