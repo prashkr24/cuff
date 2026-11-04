@@ -102,6 +102,7 @@ internal fun AboutScreen(onBack: () -> Unit) {
                 "looking; the Health tab is the half you open it to see, which is why the app " +
                 "opens on it."
         )
+        Link(context, "srineere on GitHub", "https://github.com/srineere")
 
         SectionHeader("Alerts")
         Note(
@@ -193,16 +194,13 @@ internal fun AboutScreen(onBack: () -> Unit) {
                 "your heart rate pauses the relay, and why a long ring delays a sync."
         )
 
-        SectionHeader("Credit and licences")
+        SectionHeader("Credit")
         Note(
-            "None of the above was documented. It was worked out by Thore Koritzius, whose " +
-                "fitbit_air project this is built on and without which none of this would exist."
+            "None of that transport was documented. It was worked out by Thore Koritzius, " +
+                "whose fitbit_air project this is built on."
         )
         Link(context, "fitbit_air on GitHub", "https://github.com/ThoreKoritzius/fitbit-air")
-        Note(
-            "Air Bridge is MIT licensed. The bundled Golden Gate transport is Fitbit's own, " +
-                "under Apache 2.0."
-        )
+        Note("MIT, with the bundled Golden Gate transport under Apache 2.0.")
 
         Box(Modifier.padding(bottom = 28.dp))
     }
