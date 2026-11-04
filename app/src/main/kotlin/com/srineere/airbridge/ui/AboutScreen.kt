@@ -35,9 +35,13 @@ import dev.airpulse.fitbit_air.airResult
 
 /**
  * Read in the order that matters to someone holding the phone: the band in
- * their hand first, then this app and what it does with their data, then how
- * it reaches the band at all. The protocol credit sits last because it
- * explains the other two.
+ * their hand first, then what this app is, then what becomes of their
+ * readings, then what might stop it working. The transport and the credit sit
+ * last because they explain everything above them and are the least urgent.
+ *
+ * Both halves are named. This screen described the relay alone for a while,
+ * which made the Health tab -- the half the app opens on -- look like
+ * something that had wandered in.
  */
 @Composable
 internal fun AboutScreen(onBack: () -> Unit) {
@@ -85,21 +89,71 @@ internal fun AboutScreen(onBack: () -> Unit) {
         SectionHeader("This app")
         Fact("Air Bridge", BuildConfig.VERSION_NAME)
         Note(
-            "Sends the notifications you choose to your wrist, with the buzz you choose, for " +
-                "the people you choose. It runs entirely on this phone: no account, no server, " +
-                "nothing uploaded, and the band is reached over Bluetooth directly."
+            "Two halves. It sends the notifications you choose to your wrist, with the buzz " +
+                "you choose, for the people you choose — which the Air cannot do on its own, " +
+                "because its motor is built for alarms and nothing else. And it reads the " +
+                "readings your band has already taken, and draws them."
+        )
+        Note(
+            "The Health tab is the half you open it to see. The relay runs whether or not " +
+                "anyone is looking."
         )
         Link(context, "Source on GitHub", "https://github.com/srineere/air-bridge")
+
+        SectionHeader("Your readings")
+        Note(
+            "The band's readings go to Google Health, which files them in Health Connect, " +
+                "and Air Bridge reads them back out from there. Thirteen kinds of reading, " +
+                "and it writes exactly one thing: the food you log here, which is saved as a " +
+                "nutrition entry like any other app's."
+        )
+        Note(
+            "Because it reads Health Connect rather than the band, it is not really Air-only. " +
+                "Anything whose app files readings there — a Pixel Watch, a Garmin, a Samsung, " +
+                "a Polar — fills most of these screens too."
+        )
+        Note(
+            "None of it leaves this phone. No account, no server, nothing uploaded. The band " +
+                "is reached over Bluetooth directly, and your contacts are read only to put a " +
+                "name on a number."
+        )
+
+        SectionHeader("What can break it")
+        Note(
+            "This is unofficial. Fitbit publishes no way in, so the way to the band was worked " +
+                "out by reading the traffic — which means a firmware update to the Air, or an " +
+                "update to Google Health, can stop it working without warning. Nothing here is " +
+                "approved by Fitbit or by Google."
+        )
+        Note(
+            "Two things the hardware simply cannot do, both tested rather than assumed: the " +
+                "status light cannot be driven, and a wrist tap cannot be felt by this app. " +
+                "So there is no colour-coding alerts, and no tapping to silence one."
+        )
 
         SectionHeader("How it reaches the band")
         Note(
             "The Air has no public way in. Air Bridge speaks the transport Fitbit's own app " +
                 "speaks — Golden Gate, then DTLS, then CoAP — and there is no vibrate command " +
                 "in it: a buzz is a side effect of writing to the band's settings. That is why " +
-                "a ring holds one secure session open rather than opening a new one per pulse."
+                "a ring holds one secure session open rather than opening a new one per pulse, " +
+                "and why the first buzz of a call takes a few seconds to arrive."
         )
-        Note("None of that was documented. It was worked out by Thore Koritzius, whose fitbit_air project this is built on.")
+        Note(
+            "It also means only one thing can hold the band at a time, which is why measuring " +
+                "your heart rate pauses the relay, and why a long ring delays a sync."
+        )
+
+        SectionHeader("Credit and licences")
+        Note(
+            "None of the above was documented. It was worked out by Thore Koritzius, whose " +
+                "fitbit_air project this is built on and without which none of this would exist."
+        )
         Link(context, "fitbit_air on GitHub", "https://github.com/ThoreKoritzius/fitbit-air")
+        Note(
+            "Air Bridge is MIT licensed. The bundled Golden Gate transport is Fitbit's own, " +
+                "under Apache 2.0."
+        )
 
         Box(Modifier.padding(bottom = 28.dp))
     }
