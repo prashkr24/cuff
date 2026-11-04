@@ -505,6 +505,54 @@ measuring tile (no animation, no per-second push, and the band cannot be held
 open from a home screen) and the hypnogram (sixty offset boxes would compose
 and would be a grey smear under 150 dp).
 
+**Three pick sheets** sit after those four families, and they are the ones to
+read first: `WidgetPickTiles` (all thirteen Health kinds at Square and Wide),
+`WidgetPickBand` (twelve band and relay widgets, including the three with
+buttons) and `WidgetPickStyles` (seventeen faces across four borrowed
+grammars -- rings, dials, paper and type alone). Each face carries an id so a
+decision can name one.
+
+**A widget's colour is the tile's colour**, read from the `air_health` tile
+store, not a setting of its own. The widget config therefore has no colour
+row; changing a tile under Edit tiles changes its widget too. Sleep stages
+and energy in-against-out keep their own palettes, as on the tab.
+
+### The catalogue, and stacks: what Android actually allows
+
+Both ideas are buildable. Checked against `android-36/android.jar` and the
+Glance 1.1.1 jars, not assumed:
+
+- **A few standard sizes, with the choice made in-app.** Declare one provider
+  per cell size with `android:configure` pointing at an activity. Android
+  launches it on drop and the widget is not placed until it returns OK, so
+  the catalogue *is* the add flow. `WIDGET_FEATURE_RECONFIGURABLE` lets a
+  long-press re-open it, `WIDGET_FEATURE_CONFIGURATION_OPTIONAL` allows a
+  sensible default without one, and `WIDGET_FEATURE_HIDE_FROM_PICKER` can
+  keep any per-family providers out of the drawer. **All three are API 31+**,
+  and `minSdk` is 28: on 28-30 there is no re-open from the launcher, so the
+  app needs its own "widgets you have placed" list to edit them.
+- **Drawer previews.** `previewLayout` is API 31+, `previewImage` is the
+  fallback. `AppWidgetManager.setWidgetPreview` (API 34+) can push a live,
+  themed `RemoteViews` into the picker, so on a recent phone the drawer entry
+  can be drawn in the user's own accent.
+- **A stack has three honest shapes, and Glance only supplies one of them.**
+  There is `LazyColumn` and `LazyVerticalGrid` in
+  `androidx.glance.appwidget.lazy` and **no LazyRow and no pager**, so a
+  horizontal swipe is not available in Glance's own composables. The options
+  are: (1) `LazyColumn` with each item the full widget height -- vertical
+  scroll, no snapping, pure Glance, cheapest; (2) dots plus an
+  `actionRunCallback` that bumps a stored index -- tap to advance, works on
+  28, but the tap target fights tap-to-open; (3) a real swipeable
+  `StackView` or `AdapterViewFlipper` -- both are annotated
+  `@RemoteViews.RemoteView`, so both are legal inside a widget -- fed by a
+  `RemoteViewsService` whose factory composes each page with
+  `GlanceRemoteViews.compose()` (`@ExperimentalGlanceRemoteViewsApi`). Option
+  three is the one that matches what a launcher stack feels like, and it is
+  the only one that leaves Glance's normal path.
+- A stack refreshes as one widget, so **the dearest member sets the update
+  cost for all of them** -- which is another reason the band card in a stack
+  shows a stored battery and never asks the Air.
+
 ## Theming, and why the neutrals are no longer constants
 
 A ground is a choice now -- four in each mode -- and that broke a premise the
