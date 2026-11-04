@@ -21,8 +21,20 @@ class RelayRuleStoreTest {
         assertTrue(actual.apps["com.whatsapp"]!!.enabled)
     }
     @Test(expected = IllegalArgumentException::class) fun `newer schema is not treated as an empty default`() {
-        val json = RelayRuleStore.encode(RelayRuleConfig()).put("version", 6)
+        val json = RelayRuleStore.encode(RelayRuleConfig()).put("version", 7)
         RelayRuleStore.decode(json)
+    }
+    @Test fun `settings saved before the step buzzes had their own pulse keep the notification one`() {
+        val before = RelayRuleStore.encode(RelayRuleConfig(defaultPreset = RelayPreset.LOW)).apply {
+            put("version", 5)
+            remove("stepGoalPreset")
+            remove("hourlyNudgePreset")
+        }
+        val after = RelayRuleStore.decode(before)
+        // Both used defaultPreset before version 6, so both must still feel
+        // exactly as they did until someone chooses otherwise.
+        assertEquals(RelayPreset.LOW, after.stepGoalPreset)
+        assertEquals(RelayPreset.LOW, after.hourlyNudgePreset)
     }
     @Test fun `settings saved before apps had their own call default keep one ring for both`() {
         val before = RelayRuleStore.encode(RelayRuleConfig(defaultCallPreset = RelayPreset.DOUBLE)).apply {

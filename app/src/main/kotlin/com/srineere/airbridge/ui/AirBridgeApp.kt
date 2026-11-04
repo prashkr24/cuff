@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material3.Icon
@@ -48,10 +49,12 @@ import androidx.navigation.compose.rememberNavController
 import com.srineere.airbridge.ui.theme.extras
 
 /**
- * The tabs. Health is designed but not built, so the bar carries two for now
- * and the app opens on Alerts.
+ * The tabs. Health is first in the bar, as it was always drawn, but the app
+ * opens on Health: the relay runs without being looked at, and the readings
+ * are the half of this app anyone opens it to see.
  */
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
+    Health("health", "Health", Icons.Outlined.MonitorHeart),
     Alerts("alerts", "Alerts", Icons.Outlined.Vibration),
     Device("device", "Device", Icons.Outlined.Watch),
 }
@@ -61,6 +64,7 @@ fun AirBridgeApp() {
     val context = LocalContext.current
     WarmInstalledApps(context)
     val state = rememberRelayState(context)
+    val health = rememberHealthState()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination
@@ -102,15 +106,19 @@ fun AirBridgeApp() {
             }
         },
     ) { insets ->
-        CompositionLocalProvider(LocalRelayState provides state) {
+        CompositionLocalProvider(
+            LocalRelayState provides state,
+            LocalHealthState provides health,
+        ) {
             NavHost(
                 navController = nav,
-                startDestination = Tab.Alerts.route,
+                startDestination = Tab.Health.route,
                 modifier = Modifier.fillMaxSize().padding(insets),
                 // Tabs cross-fade; pushed screens slide, set per route below.
                 enterTransition = { fadeIn(tween(180)) },
                 exitTransition = { fadeOut(tween(180)) },
             ) {
+                composable(Tab.Health.route) { HealthScreen(onOpen = nav::navigate) }
                 composable(Tab.Alerts.route) { AlertsScreen(onOpen = nav::navigate) }
                 composable(Tab.Device.route) { DeviceScreen(onOpen = nav::navigate) }
 
@@ -163,6 +171,65 @@ fun AirBridgeApp() {
                         onOpen = nav::navigate,
                         packageName = entry.arguments?.getString("scope"),
                     )
+                }
+                pushed("healthheart") { HealthHeartScreen(onBack = nav::popBackStack) }
+                pushed("healthenergy") {
+                    HealthEnergyScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("healthsleep") { HealthSleepScreen(onBack = nav::popBackStack) }
+                pushed("healthsteps") {
+                    HealthStepsScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("healthvitals") {
+                    HealthVitalsScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("healthactivity") {
+                    HealthActivityScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("healthsessions") {
+                    HealthSessionsScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed(
+                    route = "healthsession/{start}",
+                    arguments = listOf(navArgument("start") { type = NavType.LongType }),
+                ) { entry ->
+                    HealthSessionScreen(
+                        startMillis = entry.arguments?.getLong("start") ?: 0L,
+                        onBack = nav::popBackStack,
+                    )
+                }
+                pushed("healthtiles") { HealthTilesScreen(onBack = nav::popBackStack) }
+                pushed("healthgoals") { HealthGoalsScreen(onBack = nav::popBackStack) }
+                pushed("healthhrv") { HealthHrvScreen(onBack = nav::popBackStack) }
+                pushed("healthnutrition") {
+                    HealthNutritionScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("healthsavedfoods") {
+                    HealthSavedFoodsScreen(onBack = nav::popBackStack)
+                }
+                pushed("healthfoodlog") {
+                    HealthFoodLogScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("healthlogfood") { HealthLogFoodScreen(onBack = nav::popBackStack, onOpen = nav::navigate) }
+                pushed("healthbalance") { HealthBalanceDayScreen(onBack = nav::popBackStack) }
+                pushed("healthtrend") {
+                    HealthTrendScreen(
+                        metric = TrendMetric.Resting,
+                        onBack = nav::popBackStack,
+                        onOpen = nav::navigate,
+                    )
+                }
+                pushed("healthweight") {
+                    HealthTrendScreen(TrendMetric.Weight, onBack = nav::popBackStack)
+                }
+                pushed("healthbreathing") {
+                    HealthTrendScreen(TrendMetric.Breathing, onBack = nav::popBackStack)
+                }
+                pushed("healthskin") {
+                    HealthTrendScreen(TrendMetric.Skin, onBack = nav::popBackStack)
+                }
+                pushed("healthoxygen") {
+                    HealthTrendScreen(TrendMetric.Oxygen, onBack = nav::popBackStack)
                 }
                 pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }
                 pushed("permissions") { PermissionsScreen(onBack = nav::popBackStack) }
@@ -250,4 +317,17 @@ private fun NavGraphBuilder.pushed(
     popExitTransition = {
         slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, spring(stiffness = 420f))
     },
-) { entry -> Box(Modifier.fillMaxSize()) { content(entry) } }
+) { entry ->
+    // The tile's colour is provided to the route that tile opened, not to
+    // whichever route is current. Keying it on the current back stack entry
+    // meant that on the way back the entry flipped to the tab while this
+    // screen was still sliding out, so it spent its last frames repainting
+    // itself in the default colour.
+    CompositionLocalProvider(
+        LocalTileColour provides LocalHealthState.current.openedWith
+            ?.takeIf { it.first == route }
+            ?.second,
+    ) {
+        Box(Modifier.fillMaxSize()) { content(entry) }
+    }
+}

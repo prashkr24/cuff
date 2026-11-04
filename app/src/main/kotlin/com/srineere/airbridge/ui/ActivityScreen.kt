@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Call
@@ -91,16 +93,16 @@ internal fun ActivityRow(
     // The phone's own 12 or 24 hour habit, not this file's opinion of it.
     val clock = remember(context) { DateFormat.getTimeFormat(context) }
     val app = state.apps.firstOrNull { it.packageName == entry.sourcePackage }
-    val badge = badgeFor(entry.sourcePackage, state.dialer)
+    val badge = badgeFor(entry.sourcePackage, state.dialer, entry.commandId)
     // The history holds only the identity hash, so the name is looked up
     // here, from the same places a person's screen finds them. Someone who
     // rang once before a restart is no longer nameable, and the app's own
     // name stands in rather than a blank.
     val who = entry.callerId?.let { state.callerLabel(it) }
     SettingsRow(
-        title = who ?: state.label(entry.sourcePackage),
+        title = who ?: state.label(entry),
         subtitle = listOfNotNull(
-            state.label(entry.sourcePackage).takeIf { who != null },
+            state.label(entry).takeIf { who != null },
             describeActivity(entry.stage, entry.errorCode, entry.preset),
         ).joinToString(" · "),
         // A drawn badge for the things every phone has, so a list of alerts
@@ -155,14 +157,23 @@ private val WAKE = AppBadge(Icons.Outlined.Alarm, 0xFF2B2433, 0xFFCFA8E8, 0xFFEA
 private val POST = AppBadge(Icons.Outlined.MailOutline, 0xFF3A2326, 0xFFE89FA6, 0xFFF8DFE2, 0xFF6B2730)
 /** A buzz this app asked for itself, which belongs to no app at all. */
 private val SELF = AppBadge(Icons.Outlined.Vibration, 0xFF1E262B, 0xFF9FD6E8, 0xFFE2EAEF, 0xFF2A4C5B)
+// The app raises three of its own, and they are worth telling apart: a
+// nudge you have had eight of today reads differently from a goal you
+// crossed once.
+private val GOAL = AppBadge(Icons.Outlined.DirectionsWalk, 0xFF14332A, 0xFF7FE0B2, 0xFFD7F0E2, 0xFF1D5B3C)
+private val NUDGE = AppBadge(Icons.Outlined.Schedule, 0xFF2B2433, 0xFFCFA8E8, 0xFFEADDF5, 0xFF4C2E63)
 
 /**
  * The stock apps, by what they are rather than by who makes them: the package
  * name is the only clue available here, and every maker's dialer still has
  * "dialer" in it.
  */
-private fun badgeFor(packageName: String?, dialer: String): AppBadge? {
-    val name = packageName ?: return SELF
+private fun badgeFor(packageName: String?, dialer: String, commandId: String = ""): AppBadge? {
+    val name = packageName ?: return when {
+        commandId.startsWith("goal-") -> GOAL
+        commandId.startsWith("nudge-") -> NUDGE
+        else -> SELF
+    }
     return when {
         name == dialer || "dialer" in name || "telecom" in name -> CALL
         "calendar" in name -> DATE

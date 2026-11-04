@@ -1,7 +1,7 @@
 # Air Bridge — handover
 
-Written 3 November 2026, updated 4 November, at commit `b1cf70d` on branch
-`native`.
+Written 3 November 2026, updated 4 November, on branch `native`. A commit hash
+is deliberately not named here: it went stale within the day, twice.
 
 Read this before touching the app. It is the state of play, the decisions that
 are settled, and the traps that have already cost time.
@@ -21,10 +21,28 @@ and `com.srineere.airbridge.dev`) and must not run at once.
 
 ## Shape of the app
 
-Two tabs, `Alerts` and `Device`. A third, `Health`, is designed and deliberately
-not built.
+Three tabs: `Health`, `Alerts`, `Device`. Health is first in the bar and the
+app opens on it: the relay runs whether or not anyone looks at it, and the
+readings are the half of this app you open it to see.
+
+The Health column below is the **default** layout, not a fixed one: the tab
+draws whatever the stored list says, and anybody can rearrange it.
 
 ```
+Health
+  a grid of tiles, laid out from a stored list  → Edit tiles
+                                                → Goals
+  Heart rate XL ─ today's trace, Measure    → Heart (today, zones, pills)
+  Steps L       ─ ring, goal bars           → window, by week, when you walk
+  Energy M · Nutrition M                    → Energy  → Burned against eaten
+                                            → Nutrition → Food log → Log food
+                                                                   → Saved foods
+  Sleep XL      ─ stage bars, score         → score, hypnogram, stages, nights
+  Vitals W · Activity S                     → Vitals  → HRV, breathing, skin,
+                                                        blood oxygen
+                                            → Activity → all of them → one
+  Resting heart rate L ─ scatter, usual band → trend (histogram, 6 metrics)
+
 Alerts
   [Relaying]  ──────────── the relay's on/off, as one switch
   Schedule              → pause (15 min / 1 hour / indefinitely) + quiet hours
@@ -32,6 +50,9 @@ Alerts
     Calls               → the phone's own calls, its ring, its people
     Apps                → every app, its defaults, its alert kinds
     People              → everyone with a rule, across every app
+  FROM YOUR ACTIVITY
+    Buzz me at N steps  → its own pulse
+    Nudge me each hour  → its own pulse
   RECENT (4)  Show all  → Activity
 
 Device
@@ -71,6 +92,165 @@ Apps that name their caller are listed in `RelayContacts.NAMED_CALLERS`
 (WhatsApp, Telegram). Any other app earns the same treatment automatically the
 first time it names someone, via `RelayAppSelection.rememberNamesCallers`.
 
+### The Health tab
+
+Reads Health Connect, and writes one thing to it: food you log here. The
+decisions that are settled:
+
+- **Health Connect has no goals, and this cost an hour to establish.** It
+  carries measurements only: no step target, no sleep target, no calorie
+  target. The one `Goal` type in the API is `ExerciseCompletionGoal`, which
+  belongs to `PlannedExerciseSessionRecord` — a structured training plan, not
+  a daily figure — and whatever you set inside Google Health stays inside
+  Google Health. So `health/HealthGoals.kt` holds our own, the Goals screen
+  names the published source of each default, and every goal line on the tab
+  is drawn from there. Do not go looking for a way to read Google's; there
+  isn't one. The step goal shares its stored key with the buzz settings on
+  purpose, because the band buzzes at that number and two keys would be two
+  goals waiting to disagree.
+- **Dense charts are drawn as ranges, not lines.** Eight hours of beats is
+  about eighteen thousand readings against eight hundred pixels: as a
+  polyline the strokes overlap into a solid block and the shape disappears
+  into its own ink. `bandsOf` slices the span into about a bar a minute
+  (capped at 120) and draws each slice from its lowest beat to its highest,
+  which is the honest summary of what a pixel column holds. A slice with no
+  readings is left out, so a band off the wrist is a gap rather than a line
+  drawn through it. Under 400 samples the line comes back, because with
+  fourteen beats the line *is* the data. The window control on the Heart
+  screen is what makes a shorter span a finer chart rather than the same one
+  stretched.
+- **A session screen does not depend on the snapshot.** It looks the
+  workout up by its start time through `SessionReader.session`, because the
+  snapshot holds seven days and the history list reaches back a year: every
+  workout older than a week used to open on "no longer in the window the tab
+  holds". The snapshot is still the fast path when the session is in it.
+- **A tile's colour is stored with the route it opened.** Without the route
+  it leaked: opening a grey Activity tile left every screen visited
+  afterwards grey, because the composition local was still holding the last
+  tile tapped.
+- **Activity history is a separate read.** The snapshot holds seven days
+  because that is what the tile is about; `SessionReader.sessions` reads
+  further back when someone opens All activities, and that list is
+  deliberately plainer -- name, when, duration -- because a year of workouts
+  is for finding one, not studying each.
+- **Charts move and charts answer back.** `ui/ChartWindow.kt` holds both.
+  A `ChartWindow` is a length *and* an offset, because resizing the view and
+  moving it are different questions — "show me a fortnight" and "show me
+  last September" — and a chart that always ends today can only answer the
+  first. Stepping back calls `HealthState.widen`, which reads further and
+  never narrows again. `Modifier.scrubbable` maps a touch to a point index
+  and the charts draw a marker at it; the value lands in a `ChartReadout`
+  **under** the chart, not in a tooltip under the thumb that is holding it.
+  Two traps live here. An empty window and an unread window look identical,
+  so every one of those screens checks `HealthState.loading` before saying
+  "nothing recorded" — otherwise stepping back reads as "you did not walk
+  that week" for as long as the read takes. And the window bar must stay on
+  screen when its window is empty, or stepping back once strands you with
+  no way forward.
+- **A selection means the whole card follows it.** On Sleep, picking a night
+  off the chart moves the score, efficiency, sleeping rate, hypnogram and
+  stage breakdown onto that night, headers included — a score sitting beside
+  a chart of a different night is two nights pretending to be one. Sleeping
+  rate for an older night is not in the snapshot (the tab reads two days of
+  beats), so it is read on demand through `SessionReader.heartSamples`.
+  Charts indexed by time rather than by day take `scrubbableAcross`, which
+  reports a fraction and lets the screen find the nearest reading; the gap
+  between two beats is not the gap between two days.
+- **Every chart has a scale.** `ui/ChartAxes.kt` is the axis toolkit —
+  gutter, gridlines, baseline, goal line, zone bands — and the charts draw
+  through it rather than inventing their own margins. Labels are drawn into
+  the same Canvas as the series, not laid out as composables, so a
+  thirty-point chart still costs one node. `axes` is optional throughout:
+  passing it gives the chart its scale, leaving it out gives the bare shape,
+  which is all a two-column tile has room for.
+- **The tab is a grid, not a screen.** `health/Tiles.kt` holds the model —
+  thirteen kinds, five sizes over six columns, a colour each — and the tab draws
+  whatever `packTiles` makes of the stored list. Nothing in `HealthScreen.kt`
+  is laid out by hand, which is the only reason Edit tiles can be a real
+  screen rather than a settings page that rearranges nothing. A tile offers
+  only the sizes it can honestly fill, and a tile at S is not the same tile
+  shrunk: each size is written out, because the alternative is a hero with a
+  9pt label in it.
+- **A layout that cannot be read falls back to the default whole**, never to
+  three tiles in the wrong order. A kind removed in a later version costs
+  that one tile. There are tests for both.
+
+- **`connect-client:1.1.0`, not the 1.2 alphas.** They demand AGP 9 and
+  `compileSdk 37`, a toolchain jump this app has no other reason to make. 1.1.0
+  already carries the background-read permission and the feature check.
+- **All the arithmetic is in `health/HealthTrend.kt`**, with tests, and the
+  screens hold none of their own. "Usual" is the interquartile range rather
+  than mean ± SD, so one freak night cannot widen what counts as normal — there
+  is a test that says exactly that. Change over a window compares thirds, not
+  endpoints.
+- **A week is the last seven days, everywhere, rolling.** Never Monday to
+  Sunday, except in a month view. A calendar week is two days long on a
+  Tuesday, so "this week" would mean something different every morning.
+- **Resting is in no heart-rate zone.** Counting 58 bpm as Light turns a desk
+  day into eight hours of exercise. Time between readings is credited to the
+  earlier one, and a gap over five minutes is credited to nothing.
+- **No composite scores beyond sleep.** `health/SleepScore.kt` scores last
+  night on Duration, Stages, Consistency and Interruptions, and the screen
+  never shows the total without the four parts. Every part is measured
+  against **your own** nights, not a recommended figure, so 70 means "like
+  your usual" and not "adequate sleep"; a part with nothing behind it is null
+  and the score says it stood on three. Two things in there are worth knowing
+  before changing it: the consistency component averages bedtimes **on the
+  clock face**, because a plain mean of 23:30 and 00:30 is midday; and the
+  usual band has a floor of five percent, because against a band of zero
+  width a very consistent sleeper is marked down for five minutes. Both have
+  tests. Readiness is drawn as a band around your own baseline, never as a
+  number — the method is a rolling average against a smallest worthwhile
+  change, which is a band, and inventing a 0–100 figure on top would be a
+  clinical claim.
+- **Distance and pace were empty because `READ_DISTANCE` was never granted**
+  — granting it filled every session in, walks and racquet sessions alike.
+  Not because nothing writes them. That took a log line to establish and it
+  is worth keeping: a permission nobody granted and a metric nobody wrote
+  look identical on screen. `HealthReader` logs the ungranted types on every
+  read (`adb logcat -s AirBridge`), and the Activity rows say "distance not
+  allowed yet" rather than printing a dash and leaving you to guess. If the
+  Activity screen offers the permission sheet rather than making anyone
+  hunt through Health Connect for it.
+- **Blood oxygen is empty because Fitbit is not allowed to share it.**
+  Established from the device, not guessed: every read permission is granted
+  to us and `dumpsys package com.fitbit.FitbitMobile` shows
+  `WRITE_OXYGEN_SATURATION: granted=false` while skin temperature and
+  respiratory rate are `granted=true` — which matches the reader's own log,
+  `oxygen=0` against 25 and 30 readings for those two. Seeing SpO2 inside
+  the Fitbit app says nothing: that app reads it off the band directly. The
+  empty-metric copy on every vital screen now points at exactly this.
+- **Live heart rate needs Share heart rate on in Google Health.** With it off
+  the CCCD write still succeeds and nothing arrives, and the transport waits
+  `OPERATION_TIMEOUT_MS = 45_000` before saying so. The screen gives up at ten
+  seconds and names the toggle. See `[[air-bridge-air-protocol]]`.
+- **A measurement takes the relay's one slot**, through the same
+  `begin()`/`onAir` path a notification uses, so alerts queue behind it rather
+  than fighting for the session. `holdsBand` exists because the service object
+  outlives its link — alive while starting, revived by ColorOS after a force
+  stop — so "service alive" and "band taken" are different questions.
+
+**The one write** is `health/HealthWriter.kt`: a `NutritionRecord` from the
+Log food screen, marked as a manual entry, saved exactly as typed. When the
+macros imply a different calorie figure from the one typed, the screen says
+so and keeps both — the person read them off a packet, and silently replacing
+one with the other would be the app deciding which of their numbers was the
+lie.
+
+**Reads are widened, never narrowed.** The tab loads thirty days; a detail
+screen asking for ninety calls `HealthState.widen`, which re-reads once. A
+ninety-day read is a superset, so there is no way back down and no need for
+one. Per-session heart rate is not in the snapshot at all — `SessionReader`
+reads one workout when you open it, because per-minute heart rate for every
+session in a week is thousands of samples nothing on the tab draws.
+
+The step goal polls every fifteen minutes from the relay service, and also
+immediately when switched on. It records the fired day **before** sending the
+pulse: a buzz can fail halfway, and recording only on success would retry every
+quarter hour for the rest of the day. Settings live in `air_health.xml`, apart
+from `relay_rules.xml`, because nothing there changes how a notification is
+matched and so should not be able to break it.
+
 ## Invariants — do not break these quietly
 
 1. **The history file holds no names.** `RelayActivity.toMap()` is what leaves
@@ -85,6 +265,23 @@ first time it names someone, via `RelayAppSelection.rememberNamesCallers`.
 4. **Quiet hours cannot start and end at the same minute** — `RelaySilence.init`
    requires it, because such a window never ends. The picker catches the clash
    before the requirement throws.
+
+### What has been seen on the phone
+
+Every Health screen has been walked on the device and screenshotted, twice
+over: once when the tab became a tile grid, and again after the charts got
+their scales. That second pass caught four things a compiler could not —
+zone labels printed on top of the y axis, two goal labels in the same gutter
+slot, "5.0k" where "5k" belongs, and the burned/eaten bars collapsing into
+one track when they were put side by side. Look for that class of fault by
+eye; none of it fails a build.
+
+The food write is now proven too, and the two bugs it took to get there are
+worth reading before touching it — see **The one write**. What is still
+unwitnessed is deleting an entry: the path is the same permission and the same
+`runCatching` as the save, and the identical code has been exercised against
+the saved-foods store, but no real `NutritionRecord` has been removed from the
+phone. Firing it costs somebody a genuine record, which is theirs to spend.
 
 ## Working on it
 
@@ -107,7 +304,7 @@ adb logcat -s AirBridge
 ```
 
 `calendar_relay.xml` holds the activity history and the learned naming apps;
-`relay_rules.xml` holds the config (currently **version 5**).
+`relay_rules.xml` holds the config (currently **version 6**).
 
 ## Traps that have already cost time
 
@@ -143,35 +340,270 @@ adb logcat -s AirBridge
 ## Design
 
 The canvas is an Artifact: <https://claude.ai/artifact/EcNAsWKo5w3ciHwkswEDFc>
-(private). Fifteen boards plus design notes explaining *why* each screen is the
-shape it is — the notes matter more than the pixels.
+(private). Thirty-five boards plus design notes explaining *why* each screen is
+the shape it is — the notes matter more than the pixels.
 
 The working habit this project runs on: **design first, then build.** For
 anything structural, update the board, show it, wait for a yes. Small fixes go
-straight in. The boards are current as of version 39.
+straight in. A board that has drifted from what shipped is worse than no board,
+so the canvas is republished in the same sitting as the change.
 
 Boards for screens that exist but were never drawn: the per-app caller list, and
-a person's rules across apps. Boards drawn but never built: `Health`, `Setup`,
-`Widgets`.
+a person's rules across apps. Of the Health boards, only `Widgets` is still
+unbuilt; `Setup` is the tab's own not-connected state, and `Live` is the
+measuring state of the heart rate tile.
+
+Two places where the build deliberately departs from the board. Edit tiles
+says arrows rather than drag: reordering a packed grid of five sizes by drag
+is a frame-rate problem and a target-size problem, and two arrows say the
+same thing in a way that also works for anyone who cannot drag. And the Log
+food screen has no macro targets, because nothing in the app stores one —
+the rows show grams and share of calories instead of inventing a goal.
+
+The canvas also carries an `Option B` row — a Whoop-style take on Health, kept
+for comparison rather than built. Option A won the tab; Option B's rings
+survive as widget designs.
 
 ## What is not built
 
 - **Widgets.** Designed, with a gallery screen in the app, but no Glance
   implementation behind it.
 - **"Pair a different band."** On the Device board, never built.
-- **Health tab and Health Connect.** Deliberately deferred.
+- **Confirming the goal pulse on the wrist.** The hourly nudge is now proven end
+  to end: the device prefs hold `nudge-*` entries and Recent names them. The
+  goal pulse is still unwitnessed — the poll reads the steps and writes
+  `goal_fired_day`, but no `goal-*` entry has been seen, because it takes
+  crossing 7,500 on a day the relay is up.
+- **Knowing a food log is complete.** The screen exists; the certainty does
+  not. The reader counts entries a day and the Energy screen says when today
+  has fewer than usual, which is as far as the data can go: nothing can tell a
+  genuine fast from an unlogged dinner.
 - **Per-day quiet windows.** The config holds one window for every day; per-day
   would be a config change, not a screen.
 - **Telegram end to end.** The identity path is verified from Telegram's source
   and the contacts picker works, but no real Telegram call has matched a rule on
   a device yet.
 
+## The food log
+
+Tapping Log on Nutrition opens the log, not a form. What anyone wants first
+is to see what is already down for today; adding is one tap from that rather
+than instead of it. Entries group by meal, each group folds, and every entry
+can be opened for its macros, kept as a saved food, or deleted.
+
+Deleting goes through Health Connect and takes the record with it, whichever
+app wrote it. It needs no permission the save did not already need: Health
+Connect counts delete as writing. `FoodEntry` carries `id` for exactly this.
+
+Logging is two steps, not one screen. "Start from" offers something recent,
+a saved food, or typing it; whichever you pick lands on the same form, the
+first two with the figures already in. It was one screen with meal pills,
+two tabbed lists and a five-field form all at once, and nothing on it said
+which part you were meant to begin with. Nothing is written from a list: the
+figures pass through the form, where they can still be corrected.
+
+Saved foods are Air Bridge's own, in `SavedFoods`. They can be edited and
+deleted on their own screen; renaming one is a remove and a save, because
+saving under the new name alone would leave the old one behind. They have to be: Health
+Connect has one food record, `NutritionRecord`, which is a thing eaten at a
+time. There is no library, no favourites, nothing to pick from -- checked in
+the 1.1.0 jar, not assumed. Three screens say so in as many words, because
+the obvious thought on not finding them in Google Health is that something
+broke.
+
+The store is separated by unit and record characters rather than commas or
+pipes: a food is named by a person, and "Rice, dal and curd" is an ordinary
+name. Any printable delimiter is eventually inside one.
+
+## The one write
+
+`HealthWriter.logFood` is the only thing this app writes, and it took the app
+down the first time anybody pressed Save. `NutritionRecord` validates its own
+times in its constructor and requires start strictly before end; the record
+was built as an instant, start and end the same, on the reasoning that a thing
+eaten has no duration. It threw before the insert was attempted, on the main
+thread, outside the `runCatching` that only ever wrapped the insert.
+
+So: a meal lasts one second, never crossing local midnight (a 23:59:59 entry
+is logged as the last second of its own day rather than counted in two days'
+totals), and the record is now built inside the catch. A library constructor
+that rejects its own arguments is a refusal like any other and belongs in the
+same message as "Health Connect refused the entry".
+
+All of that is tested on the JVM, the constructor included -- the thing that
+broke was argument validation, which is plain Kotlin and does not need a
+phone to exercise. The write is now proven end to end as well: an entry saved
+from the app on 2026-11-04 is in Health Connect and listed on the Nutrition
+screen.
+
+The second bug was worse than the first, because it looked like the write
+failing when the write had worked. `refresh` ran on whichever screen asked
+for it, and saving refreshed and popped the screen in the same breath: the
+scope died mid-read and a half-cancelled snapshot -- `eaten=0 burned=0` --
+was stored over the real one. `HealthState` now reads on a scope of its own
+and clears `loading` in a `finally`, since a flag left set refuses every
+later refresh and the tab never loads again.
+
+The lesson worth keeping: never hand a long read the coroutine scope of a
+screen that is about to leave.
+
+## What a trend is
+
+`trendOf` in `health/HealthTrend.kt`. `change` is the newest third of the
+window against the oldest third -- not this week against last, and not first
+reading against last: one odd night at either end would otherwise set the
+whole direction of travel. It is in the metric's own units. Steps are the one
+conversion, shown as a share of the window average, because "318 fewer steps"
+means nothing without knowing what a usual day is.
+
+Three of them are derived rather than read, in `HealthState`, because Health
+Connect has no such record to ask for: energy (eaten minus burned, days with
+both halves), nutrition (kilocalories eaten) and activity (minutes a day,
+rest days left out rather than zeroed).
+
+Two tiles have no trend and should not get one. Heart rate is today's trace,
+which means nothing a week later; Vitals is a count of how many readings sit
+in range, which is not a quantity that moves.
+
+`sampleHealthData` builds its trends from the same two helpers the real path
+uses (`balanceReadings`, `toDailyMinutes`), which is why they are `internal`
+rather than private. They were not, once, and the edit screen's previews
+showed no chips on energy, nutrition or activity while the tab behind them
+showed all three -- a preview that computes differently is a preview that can
+disagree with the thing it previews.
+
+`ChangeChip` narrows as the tile does: S shows the arrow alone, M adds the
+figure, W and wider add the unit. The heading's name gives way before the
+chip does -- it carries the weight in that Row -- because a chip squeezed
+until its figure drops out is an arrow pointing at nothing.
+
+One switch on the edit screen turns the lot off, and `TileHead` gates every
+trailing slot on it, so a tile cannot keep its chip by accident.
+
+## The tile grid
+
+Six columns, because six is the smallest number that lets one, two and three
+tiles share a row on the same gutters. The sizes are S (2 columns), M (3), W
+(4), L (6) and XL (6 across and two rows high).
+
+W exists for one reason: S beside M is five of six, and that last column was
+dead air no arrangement could use. S beside W is a whole row. Anything added
+later that is meant to pair with another size has to fall out of the same
+arithmetic, and any size that can share a row must be one row high, or the
+grid goes ragged. Both are asserted in `TilesTest`.
+
+Each kind names itself twice. `title` is the full name; `short` is what S
+shows, because two columns cannot hold "Resting heart rate". Chopping at the
+first space used to do this and gave "Blood" for blood oxygen and "Skin" for
+skin temperature, so the ones that break are written out.
+
+Heart rate and resting heart rate are two kinds, not one tile with two faces.
+One is a live trace that means nothing a week later; the other is a single
+figure a day inside a thirty-day trend. They were one tile for a while, and
+the giveaway was that tapping it opened a screen about the other.
+
+## Measuring takes the tile over
+
+A live reading is the one thing on the Health tab that Health Connect cannot
+answer, and the only thing on it that costs something while you look: holding
+the subscription holds the band's single session, so the wrist cannot be
+buzzed and alerts queue behind it.
+
+It belongs to the heart rate tile, not the resting one. Resting heart rate is
+a figure read while you slept; a live trace is a different question with the
+same organ behind it, and the button sat on the wrong tile until 2026-11-04.
+
+While a reading runs, the XL heart tile replaces today's trace with the live
+one -- same card, same place, different question. It wears a tint, stops
+being a link (it carries a Stop button, and a card that both stops the thing
+and navigates is one you cannot tap confidently), and says what it costs. A
+failure takes the tile over too: the answer to the tap belongs where the
+number would have been.
+
+`rememberMeasure()` is called ONCE for the grid and passed down. Each holder
+frees the band when it leaves composition, so a second holder in a tile would
+stop the first one's reading. The edit screen passes null, which is also how
+its preview knows to draw a dead button.
+
+## The heart screen's window
+
+Four pills — 1h, 4h, 8h, Today — inside the card, above the chart they govern,
+which is where every other window control on this tab sits. They arrived as a
+new kind of control floating loose on the screen and were moved for that
+reason alone: a tab with two idioms for the same job has one idiom too many.
+Eight hours rather than twelve is the default because that is what the owner
+asked for after living with both.
+
+The clock range the window actually covers — "10:22 – 17:57" — is the chart's
+**caption**, under the hour ticks. Above the chart it sat between the pills
+that set it and the figures that summarise it, belonging to neither, and read
+as a third heading. A reading taken by scrubbing lands below that again, so
+the column runs: what you asked for, the summary, the chart, what it spans,
+what your finger is on.
+
+## The default layout
+
+`defaultTiles` is the layout this app's owner actually settled on, adopted as
+the default on 2026-11-04: heart rate XL, steps L, energy M beside nutrition
+M, sleep XL, vitals W beside activity S, resting heart rate L. Today first,
+then the day as it is being spent, then the night that preceded it.
+
+Two properties are asserted rather than left to luck, because they are the
+reason it is a good first screen: every row fills exactly, and every size is
+used at least once. A new size that does not divide into six will fail that
+test, which is the point of it.
+
+## Editing a tile
+
+The tile itself is the way in. Tapping its body opens a panel holding size,
+colour and remove; the tile keeps only the two arrows that reorder it.
+
+It was not always so, and the two things that were wrong are worth not
+repeating. Removing lived behind the colour swatch, which looks like a colour
+and nothing else, so the way off the tab was effectively hidden. And size was
+a chip that cycled, which meant five taps to undo one and no way to see what
+a tile even offered. Four controls never did fit across two columns.
+
+## Edit tiles shows a made-up person
+
+`sampleHealthData()` in `ui/SampleHealth.kt`, never your own readings. The
+question that screen asks is what a size can hold, and real data answers it
+badly: an empty tile might mean the size is too small or might mean you did
+not wear the band, and nothing on screen says which. The sample slept, walked
+and ate, so every tile is full and the shape is the only thing varying. It is
+fixed rather than random, because two tiles being compared have to be drawn
+from the same numbers twice.
+
+The previews also swallow every touch before the tile sees it. The heart tile
+carries a Measure button, and on that screen a stray tap would have started a
+real reading.
+
+## The two buzzes the app raises itself
+
+The step goal and the hourly nudge are the only pulses with no notification
+behind them. They are written once, as `StepBuzzRows` in `AlertsScreen.kt`, and
+drawn by both the Alerts tab and the Steps screen: two copies of a switch are
+two chances for the screens to disagree about what the band is about to do.
+
+Each is recorded like any other buzz, with `commandId = "goal-<at>"` or
+`"nudge-<at>"` and no package. That null package is why they read as "Test
+vibration" for a while — `RelayState.label` only knew how to name packages.
+`label(entry)` reads the prefix instead, and `badgeFor` gives each its own
+badge, so Recent tells the three apart.
+
+Both go through the relay's link, so neither fires while relaying is off. The
+rows say so, but only when it is off: a caveat that is always on screen stops
+being read.
+
 ## If you change the stored config
 
-`RelayRuleStore` is versioned and currently at 5. Add a field by: widening the
+`RelayRuleStore` is versioned and currently at 6. Add a field by: widening the
 `require(version in 2..N)`, defaulting the field from the old value in `decode`,
 bumping the number in `encode`, and writing a test that an old config decodes to
 the same behaviour. Version 5's migration copies the single old call default into
-both call defaults, so nobody's band rings differently after an update — that is
-the shape to copy, and the reason it has a test is that the way such a migration
-fails is silently.
+both call defaults; version 6's copies the notification default into the step
+goal and the hourly nudge, which until then had no pulse of their own. Either
+way nobody's band feels different after an update — that is the shape to copy,
+and the reason each has a test is that the way such a migration fails is
+silently. Note that the "newer schema is rejected" test has to move up with the
+version, or it starts asserting against a number the decoder now accepts.

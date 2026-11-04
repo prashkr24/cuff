@@ -181,6 +181,16 @@ internal data class RelayRuleConfig(
      * meant setting every app by hand.
      */
     val defaultAppCallPreset: RelayPreset = RelayPreset.RING,
+    /**
+     * The two buzzes with no notification behind them.
+     *
+     * Separate from [defaultPreset] because they are not an app getting
+     * through: a goal crossed once a day and an hourly reminder are the
+     * app's own doing, and wanting them to feel different from a message
+     * is the whole reason to have them at all.
+     */
+    val stepGoalPreset: RelayPreset = RelayPreset.DOUBLE,
+    val hourlyNudgePreset: RelayPreset = RelayPreset.LOW,
     val apps: Map<String, RelayAppRule> = emptyMap(),
     val chats: Map<String, SavedChat> = emptyMap(),
     val silence: RelaySilence = RelaySilence(),

@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.Log
 import dev.airpulse.fitbit_air.AirLink
 import dev.airpulse.fitbit_air.AirResult
+import dev.airpulse.fitbit_air.AirSink
 
 /**
  * The app's way to the band.
@@ -29,6 +30,7 @@ internal object Band {
     private val queue = ArrayDeque<Work>()
     private var link: AirLink? = null
     private var busy = false
+    private var measuring = false
     private val idle = Runnable { close() }
 
     /**
@@ -98,6 +100,52 @@ internal object Band {
         } else {
             operate(context, recorded) { air, r -> air.tap(preset.intensity, r) }
         }
+    }
+
+    /**
+     * A live heart rate, for as long as the screen wants one.
+     *
+     * This is the only thing the app asks of the band that is not over in a
+     * second, and it costs the band's single session for the whole time. The
+     * relay therefore lends its own link rather than letting a second one be
+     * opened, and refuses outright while it is mid-delivery.
+     */
+    fun measureHeartRate(context: Context, sink: AirSink): Boolean {
+        // Only defer to the relay when it is actually holding the link. A
+        // service that exists but has not taken the band yet must not stop
+        // the screen opening one, or Measure refuses for no reason.
+        CalendarRelayService.active?.takeIf { it.holdsBand }
+            ?.let { return it.startHeartRate(sink) }
+        handler.removeCallbacks(idle)
+        if (busy) return false
+        busy = true
+        measuring = true
+        own(context).readHeartRate(object : AirSink {
+            override fun success(event: Any?) = sink.success(event)
+            override fun error(code: String, message: String?, details: Any?) {
+                finishMeasuring()
+                sink.error(code, message, details)
+            }
+            override fun endOfStream() {
+                finishMeasuring()
+                sink.endOfStream()
+            }
+        })
+        return true
+    }
+
+    fun stopMeasuring() {
+        CalendarRelayService.active?.takeIf { it.holdsBand }
+            ?.let { return it.stopHeartRate() }
+        if (!measuring) return
+        link?.stopHeartRate()
+        finishMeasuring()
+    }
+
+    private fun finishMeasuring() {
+        if (!measuring) return
+        measuring = false
+        done()
     }
 
     /**

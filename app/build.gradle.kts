@@ -26,6 +26,13 @@ android {
         targetSdk = 36
         versionCode = 24
         versionName = "0.3.0"
+
+        // The transport ships prebuilt .so files for three ABIs and is only
+        // tested on arm64 -- upstream says so and so does our README. Packing
+        // the other two adds about 1.2 MB of native code that would crash in
+        // a different way if it ever ran, so the APK carries the one that is
+        // real. Revisit the day armeabi-v7a is actually verified.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     compileOptions {
@@ -97,6 +104,18 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.6")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.navigation:navigation-compose:2.8.1")
+
+    // Health Connect. The 1.2 alphas want AGP 9 and compileSdk 37, which is a
+    // toolchain jump this app has no other reason to make; 1.1.0 is stable,
+    // needs only compileSdk 36, and already carries the background-read
+    // permission and the feature-availability check.
+    implementation("androidx.health.connect:connect-client:1.1.0")
+    // Reading while the app is not on screen, for the goal poll and widgets.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    // Home screen widgets. Compose for the launcher, so the tiles are written
+    // the same way as the tab rather than in RemoteViews.
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.glance:glance-material3:1.1.1")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
     implementation(composeBom)

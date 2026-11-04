@@ -9,17 +9,28 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.DirectionsWalk
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import java.text.NumberFormat
 import com.srineere.airbridge.RelayPattern
+import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.RelayPreset
+import com.srineere.airbridge.ui.theme.extras
+import com.srineere.airbridge.health.StepGoalSettings
+import com.srineere.airbridge.health.HealthSettings
 
 @Composable
 internal fun AlertsScreen(onOpen: (String) -> Unit) {
@@ -59,6 +70,12 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
             icon = Icons.Outlined.People,
             onClick = { onOpen("people") },
         )
+        // Under "what gets through", because that is what these are: two
+        // more things that reach the wrist, with the app rather than a
+        // notification behind them.
+        SectionHeader("From your activity")
+        StepBuzzRows(onOpen, goals = false)
+
         if (state.history.isNotEmpty()) {
             // The newest few answer "did that buzz come from what I think it
             // did"; the rest is for when it did not, and lives behind this.
@@ -116,6 +133,83 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
  * merely buzz differently, belong on the screen itself -- a row that lists
  * every setting is a worse copy of the screen behind it.
  */
+/**
+ * The two buzzes the app raises itself.
+ *
+ * Shared by the Alerts tab and the Steps screen rather than written twice:
+ * they are one setting, and two copies of a switch are two chances for the
+ * screens to disagree about what the band is going to do.
+ *
+ * Each row opens its pulse, the way an app or a caller does, and the switch
+ * is its own target: tapping the row changes how it feels, tapping the
+ * switch changes whether it happens.
+ */
+@Composable
+internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
+    val context = LocalContext.current
+    val relay = LocalRelayState.current
+    var settings by remember { mutableStateOf(HealthSettings.read(context)) }
+
+    fun update(next: StepGoalSettings) {
+        settings = next
+        HealthSettings.write(context, next)
+        // The service keeps its own schedule, so it has to be told rather
+        // than left to notice at the next quarter hour.
+        CalendarRelayService.active?.settingsChanged()
+    }
+
+    SettingsRow(
+        title = "Buzz me at ${NumberFormat.getIntegerInstance().format(settings.goal)} steps",
+        subtitle = "Once a day, when you cross it · " +
+            describe(relay.preset(VibrationTarget.StepGoal) ?: relay.inherited(VibrationTarget.StepGoal)),
+        icon = Icons.Outlined.DirectionsWalk,
+        onClick = { onOpen("vibration/${VibrationTarget.StepGoal.encode()}") },
+        trailing = {
+            Switch(
+                checked = settings.buzzOnGoal,
+                onCheckedChange = { update(settings.copy(buzzOnGoal = it)) },
+            )
+        },
+    )
+    SettingsRow(
+        title = "Nudge me each hour",
+        subtitle = "${settings.hourlyGoal} steps, " +
+            "${"%02d".format(settings.activeFrom)}:00–${"%02d".format(settings.activeUntil)}:00 · " +
+            describe(relay.preset(VibrationTarget.HourlyNudge) ?: relay.inherited(VibrationTarget.HourlyNudge)),
+        icon = Icons.Outlined.Schedule,
+        onClick = { onOpen("vibration/${VibrationTarget.HourlyNudge.encode()}") },
+        trailing = {
+            Switch(
+                checked = settings.hourlyNudge,
+                onCheckedChange = { update(settings.copy(hourlyNudge = it)) },
+            )
+        },
+    )
+    // Both of these go through the relay's link to the band, so neither can
+    // fire while it is off. Said only when it is off, because a caveat that
+    // is always on screen stops being read.
+    if (!relayRunning() && (settings.buzzOnGoal || settings.hourlyNudge)) {
+        Text(
+            "Neither can reach the band while relaying is off — that switch is " +
+                "what holds the link.",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.extras.hrv,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+        )
+    }
+    // Only where the figures themselves live. On the Alerts tab the question
+    // is what reaches the wrist, and a door into the step goal is a second
+    // answer to a question nobody asked there.
+    if (goals) {
+        SettingsRow(
+            title = "Goals",
+            subtitle = "The step goal, the hourly figure, and when it may buzz",
+            icon = Icons.Outlined.Flag,
+            onClick = { onOpen("healthgoals") },
+        )
+    }
+}
+
 private fun callsSummary(state: RelayState): String {
     if (!state.callsOn) return "Off"
     val ring = shape(state.config.defaultCallPreset)

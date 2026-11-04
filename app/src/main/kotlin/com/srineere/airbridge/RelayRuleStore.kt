@@ -36,7 +36,7 @@ internal object RelayRuleStore {
     /** [legacy] holds version 1's separately stored saved chats and "Selected" flag. */
     internal fun decode(json: JSONObject, legacy: Pair<Map<String, SavedChat>, Boolean>? = null): RelayRuleConfig {
         val version = json.getInt("version")
-        require(version in 2..5 || (version == 1 && legacy != null))
+        require(version in 2..6 || (version == 1 && legacy != null))
         val apps = json.getJSONObject("apps")
         val chats = json.getJSONObject("chats")
         val quiet = json.getJSONObject("silence")
@@ -49,8 +49,16 @@ internal object RelayRuleStore {
         // was, so nothing starts buzzing differently after an update.
         val calls = if (json.isNull("defaultCallPreset")) RelayPreset.RING
             else RelayPreset.parse(json.getString("defaultCallPreset"))
+        // Before version 6 both of the step buzzes used the notification
+        // default, so that is what they decode to: nobody's wrist starts
+        // feeling different after an update.
+        val fallback = RelayPreset.parse(json.getString("defaultPreset"))
         return RelayRuleConfig(
-            defaultPreset = RelayPreset.parse(json.getString("defaultPreset")),
+            defaultPreset = fallback,
+            stepGoalPreset = if (json.isNull("stepGoalPreset")) fallback
+                else RelayPreset.parse(json.getString("stepGoalPreset")),
+            hourlyNudgePreset = if (json.isNull("hourlyNudgePreset")) fallback
+                else RelayPreset.parse(json.getString("hourlyNudgePreset")),
             defaultCallPreset = calls,
             defaultAppCallPreset = if (json.isNull("defaultAppCallPreset")) calls
                 else RelayPreset.parse(json.getString("defaultAppCallPreset")),
@@ -122,7 +130,9 @@ internal object RelayRuleStore {
                     JSONObject().put("gapMillis", it.gapMillis).put("maxSeconds", it.maxSeconds)
                 } ?: JSONObject.NULL))
         }
-        val json = JSONObject().put("version", 5).put("defaultPreset", config.defaultPreset.id)
+        val json = JSONObject().put("version", 6).put("defaultPreset", config.defaultPreset.id)
+            .put("stepGoalPreset", config.stepGoalPreset.id)
+            .put("hourlyNudgePreset", config.hourlyNudgePreset.id)
             .put("callers", callers).put("onlySavedCallers", config.onlySavedCallers)
             .put("defaultCallPreset", config.defaultCallPreset.id)
             .put("defaultAppCallPreset", config.defaultAppCallPreset.id)

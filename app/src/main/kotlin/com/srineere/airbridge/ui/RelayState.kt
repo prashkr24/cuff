@@ -32,10 +32,16 @@ internal sealed interface VibrationTarget {
     data class App(val packageName: String, val calls: Boolean) : VibrationTarget
     data class Caller(val id: String) : VibrationTarget
 
+    /** The two buzzes the app raises itself, with no notification behind them. */
+    data object StepGoal : VibrationTarget
+    data object HourlyNudge : VibrationTarget
+
     fun encode(): String = when (this) {
         Default -> "default"
         DefaultCall -> "defaultCall"
         DefaultAppCall -> "defaultAppCall"
+        StepGoal -> "stepGoal"
+        HourlyNudge -> "hourlyNudge"
         is App -> "app|$packageName|${if (calls) "call" else "message"}"
         is Caller -> "caller|$id"
     }
@@ -46,6 +52,8 @@ internal sealed interface VibrationTarget {
             return when (parts.firstOrNull()) {
                 "defaultCall" -> DefaultCall
                 "defaultAppCall" -> DefaultAppCall
+                "stepGoal" -> StepGoal
+                "hourlyNudge" -> HourlyNudge
                 "app" -> App(parts.getOrElse(1) { "" }, parts.getOrNull(2) == "call")
                 "caller" -> Caller(parts.drop(1).joinToString("|"))
                 else -> Default
@@ -101,6 +109,21 @@ internal class RelayState(private val context: Context, private val invalidate: 
         apps.firstOrNull { it.packageName == name }?.label ?: name.substringAfterLast('.')
     } ?: "Test vibration"
 
+    /**
+     * What raised this buzz.
+     *
+     * Not every pulse comes from a notification: the app raises three of its
+     * own, and they are recorded with no package at all. Reading only the
+     * package filed all three under "Test vibration", which is how an hourly
+     * nudge came to look like somebody pressing Buzz.
+     */
+    fun label(entry: RelayActivity): String = when {
+        entry.sourcePackage != null -> label(entry.sourcePackage)
+        entry.commandId.startsWith("goal-") -> "Step goal"
+        entry.commandId.startsWith("nudge-") -> "Hourly nudge"
+        else -> "Test vibration"
+    }
+
     // ------------------------------------------------------------- mutations
 
     private fun changed() = invalidate()
@@ -133,6 +156,8 @@ internal class RelayState(private val context: Context, private val invalidate: 
         VibrationTarget.Default -> config.defaultPreset
         VibrationTarget.DefaultCall -> config.defaultCallPreset
         VibrationTarget.DefaultAppCall -> config.defaultAppCallPreset
+        VibrationTarget.StepGoal -> config.stepGoalPreset
+        VibrationTarget.HourlyNudge -> config.hourlyNudgePreset
         is VibrationTarget.App ->
             if (target.calls) config.apps[target.packageName]?.callPreset
             else config.apps[target.packageName]?.preset
@@ -144,6 +169,8 @@ internal class RelayState(private val context: Context, private val invalidate: 
         VibrationTarget.Default -> config.defaultPreset
         VibrationTarget.DefaultCall -> config.defaultCallPreset
         VibrationTarget.DefaultAppCall -> config.defaultAppCallPreset
+        VibrationTarget.StepGoal -> config.stepGoalPreset
+        VibrationTarget.HourlyNudge -> config.hourlyNudgePreset
         is VibrationTarget.App ->
             if (target.calls) config.defaultAppCallPreset else config.defaultPreset
         is VibrationTarget.Caller -> {
@@ -157,6 +184,8 @@ internal class RelayState(private val context: Context, private val invalidate: 
             VibrationTarget.Default -> config.copy(defaultPreset = preset)
             VibrationTarget.DefaultCall -> config.copy(defaultCallPreset = preset)
             VibrationTarget.DefaultAppCall -> config.copy(defaultAppCallPreset = preset)
+            VibrationTarget.StepGoal -> config.copy(stepGoalPreset = preset)
+            VibrationTarget.HourlyNudge -> config.copy(hourlyNudgePreset = preset)
             is VibrationTarget.App -> {
                 val rule = config.apps[target.packageName]
                     ?: RelayAppRule(enabled = true)

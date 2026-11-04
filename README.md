@@ -23,6 +23,33 @@ break it without warning.
   per app and per person.
 - **Quiet hours, a pause, and a Stop button** in its own notification.
 
+## The Health tab
+
+The other half of the app, and the reason it wants Google Health at all: the
+Air's readings land in Health Connect, and this reads them back out.
+
+- **A grid you arrange.** Tiles in five sizes — S, M, W, L and XL — across a
+  six-column row, reordered, resized, recoloured or taken off. Each carries a
+  trend: the newest third of its window against the oldest, in that tile's own
+  units.
+- **A screen behind every tile.** Today's heart rate, resting heart rate over
+  thirty days, sleep with a score built from your own nights rather than a
+  recommended figure, steps, energy in against energy out, workouts, HRV, the
+  five vitals, and nutrition.
+- **A live reading from the band.** The one figure no Health Connect reader
+  can produce, because it is a measurement you ask for rather than a number
+  already written. It holds the Air's single session while it runs, so alerts
+  queue behind it, and it stops itself after two minutes.
+- **Buzzes from your own activity.** One when you cross the step goal, and an
+  hourly nudge when an active hour falls short. Both go through the relay, so
+  neither can reach your wrist while it is off.
+- **A food log — the only thing this app writes.** Entries go to Health
+  Connect as nutrition records, and deleting one there is done from the log.
+  Everything else on the tab it only reads.
+
+Saved foods are the exception that proves it: they live in Air Bridge, because
+Health Connect records what you ate and keeps no list of foods to pick from.
+
 ## How a pulse actually works
 
 The Air exposes no "vibrate" command. It has a vibration-*strength* setting,
@@ -55,16 +82,26 @@ impossible, not unimplemented.
 
 ## Build
 
-Needs the Flutter SDK and an Android SDK. The transport comes from a pinned
-git dependency, so nothing is vendored here.
+Needs an Android SDK and a JDK 17 or newer. Gradle comes with the wrapper and
+the transport is vendored, so there is nothing else to fetch.
 
 ```bash
-flutter build apk --release
+./gradlew :app:assembleDebug
 ```
 
-The first build downloads an Android NDK (~2.3 GB), which `integration_test`
-pins. Build release, not debug: a debug APK is ~1.4 GB of Vulkan validation
-layers and unstripped engine libraries, against ~53 MB for release.
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+Two modules: `:app` is the app, `:air` is the Air's transport. No NDK is
+involved — `:air` carries prebuilt `libgg.so` and `libxp.so` rather than
+building them, and the APK packs only `arm64-v8a`, the one ABI anybody has
+verified. Debug installs as `com.srineere.airbridge.dev`, beside a release
+build rather than over it.
+
+Release builds are signed from `key.properties` or the `AIR_RELAY_*`
+environment variables. Without either they fall back to the debug key and must
+not be distributed.
 
 ## Setting it up
 
@@ -77,6 +114,9 @@ layers and unstripped engine libraries, against ~53 MB for release.
    phone that matters more than anything in the code: without it, Android
    stops background work once the screen has been off a while.
 5. Pick your apps under Rules, set each one's rows, and press Start.
+6. For the Health tab, allow it in **Health Connect** when it asks. It reads
+   thirteen record types and writes one, nutrition, which is what logging food
+   saves.
 
 Contacts are optional and asked for only when you open a caller list; they are
 read to show names, and a contact's number is turned into the same hashed
@@ -97,14 +137,14 @@ identity a call arrives with.
 Built on [ThoreKoritzius/fitbit-air](https://github.com/ThoreKoritzius/fitbit-air)
 (MIT) — an independent reverse-engineering of the Air's Golden Gate / DTLS /
 CoAP transport, and the reason any of this is possible. This app began as that
-project's example relay and has diverged into a product; the transport itself
-is used as a dependency, unmodified.
+project's example relay and has diverged into a product. The transport now
+lives here as the `:air` module rather than as a package dependency, which is
+what the rewrite from Flutter to native Android cost.
 
 The held-session ring and the settings/resource probes developed here are
 offered back upstream in
 [#15](https://github.com/ThoreKoritzius/fitbit-air/pull/15) and
-[#16](https://github.com/ThoreKoritzius/fitbit-air/pull/16). Until #15 lands,
-the dependency points at a fork carrying it.
+[#16](https://github.com/ThoreKoritzius/fitbit-air/pull/16).
 
 MIT, with Apache-2.0 for the bundled Golden Gate transport. See `LICENSE`,
 `LICENSE-APACHE-2.0` and `THIRD_PARTY_NOTICES.md`.

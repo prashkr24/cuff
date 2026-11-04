@@ -257,6 +257,8 @@ private fun titleFor(target: VibrationTarget, state: RelayState): String = when 
     VibrationTarget.Default -> "Everything else"
     VibrationTarget.DefaultCall -> "Phone calls"
     VibrationTarget.DefaultAppCall -> "App calls"
+    VibrationTarget.StepGoal -> "Step goal"
+    VibrationTarget.HourlyNudge -> "Hourly nudge"
     is VibrationTarget.App -> if (target.calls) "Calls" else "Messages"
     is VibrationTarget.Caller -> state.caller(target.id)?.label ?: "Caller"
 }

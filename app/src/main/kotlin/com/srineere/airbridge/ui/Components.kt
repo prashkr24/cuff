@@ -74,11 +74,20 @@ internal fun nowTicking(): Long {
  * screen is about.
  */
 @Composable
-fun ScreenTitle(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null) {
+fun ScreenTitle(
+    title: String,
+    subtitle: String? = null,
+    onBack: (() -> Unit)? = null,
+    /** The one thing this screen is for, where a screen has one. */
+    action: @Composable (() -> Unit)? = null,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(
-            start = if (onBack == null) 20.dp else 10.dp, end = 20.dp, top = 20.dp, bottom = 4.dp,
+            start = if (onBack == null) 20.dp else 10.dp,
+            end = if (action == null) 20.dp else 12.dp,
+            top = 20.dp,
+            bottom = 4.dp,
         ),
     ) {
         if (onBack != null) {
@@ -86,8 +95,13 @@ fun ScreenTitle(title: String, subtitle: String? = null, onBack: (() -> Unit)? =
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
             }
         }
-        Column {
-            Text(title, style = MaterialTheme.typography.headlineSmall)
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (subtitle != null) {
                 Text(
                     subtitle,
@@ -97,6 +111,7 @@ fun ScreenTitle(title: String, subtitle: String? = null, onBack: (() -> Unit)? =
                 )
             }
         }
+        if (action != null) action()
     }
 }
 

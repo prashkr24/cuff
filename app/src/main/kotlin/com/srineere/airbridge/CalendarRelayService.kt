@@ -16,6 +16,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.util.Log
+import android.os.SystemClock
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -23,7 +24,18 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import dev.airpulse.fitbit_air.AirLink
+import com.srineere.airbridge.health.HealthReader
+import com.srineere.airbridge.health.HealthSettings
+import com.srineere.airbridge.health.shouldBuzzForGoal
+import com.srineere.airbridge.health.shouldNudgeForHour
 import dev.airpulse.fitbit_air.AirResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import dev.airpulse.fitbit_air.AirSink
 
 /** User-started example relay; never starts work from a notification callback. */
 class CalendarRelayService : Service() {
@@ -35,6 +47,10 @@ class CalendarRelayService : Service() {
      */
     private val airQueue = ArrayDeque<(AirLink) -> Unit>()
     private var airBusy = false
+    private var heartStreaming = false
+    private val healthScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val stepCheck = Runnable { checkStepGoals() }
+    private var lastStepCheck = 0L
     private var filter: CalendarAlertFilter? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var pending = 0
@@ -108,6 +124,7 @@ class CalendarRelayService : Service() {
     }
 
     fun settingsChanged() {
+        scheduleStepCheck()
         val config = RelayRuleStore.read(this)
         val packages = config.selectedPackages
         ringSettings = config.ring
@@ -580,6 +597,162 @@ class CalendarRelayService : Service() {
     internal fun readSignal(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readSignalStrength(r) }
     internal fun readDeviceInfo(reply: AirResult) = readDeviceStatus(reply) { link, r -> link.readDeviceInfo(r) }
 
+    /**
+     * Holds the band open for a live heart rate reading.
+     *
+     * Unlike every other band call this one does not finish on its own, so
+     * it takes the same slot a notification would and keeps it: begin() so
+     * the watchdog and wake lock cover it, onAir so alerts queue behind it
+     * rather than fighting it for the one session the Air allows. The
+     * watchdog bounds it at four minutes even if the screen never calls
+     * stop, which is the backstop behind the UI's own two-minute limit.
+     */
+    /**
+     * The step goals, checked on a timer rather than pushed.
+     *
+     * Health Connect notifies nobody when a figure changes, so this polls --
+     * but it polls from the service that is already running for
+     * notifications, so it costs one read a quarter of an hour rather than a
+     * background job of its own. Both buzzes obey quiet hours and pause,
+     * because a goal is not more important than the quiet.
+     */
+    private fun scheduleStepCheck() {
+        handler.removeCallbacks(stepCheck)
+        val settings = HealthSettings.read(this)
+        if (!settings.buzzOnGoal && !settings.hourlyNudge) return
+        handler.postDelayed(stepCheck, STEP_CHECK_MILLIS)
+
+        // Check now as well as in a quarter of an hour. Someone who switches
+        // this on having already walked ten thousand steps should not wait
+        // fifteen minutes to hear about it. Throttled, because
+        // settingsChanged() also fires on clock ticks and silence changes,
+        // and Health Connect rate-limits callers.
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastStepCheck >= STEP_CHECK_FLOOR_MILLIS) {
+            lastStepCheck = now
+            checkStepGoals(reschedule = false)
+        }
+    }
+
+    private fun checkStepGoals(reschedule: Boolean = true) {
+        if (reschedule) scheduleStepCheck()
+        val settings = HealthSettings.read(this)
+        if (!settings.buzzOnGoal && !settings.hourlyNudge) return
+        if (!ready || stopping || air == null) return
+
+        healthScope.launch {
+            val steps = withContext(Dispatchers.IO) { HealthReader().stepsNow(this@CalendarRelayService) }
+                ?: return@launch
+            val (today, thisHour) = steps
+            val now = java.time.ZonedDateTime.now()
+            val day = now.toLocalDate().toEpochDay()
+            val silenced = currentSilence() != null
+            val history = HealthSettings.history(this@CalendarRelayService)
+
+            if (shouldBuzzForGoal(settings, history, today, day, silenced)) {
+                HealthSettings.recordGoalFired(this@CalendarRelayService, day)
+                buzzForSteps("goal")
+                return@launch
+            }
+            if (shouldNudgeForHour(settings, history, thisHour, day, now.hour, now.minute, silenced)) {
+                HealthSettings.recordNudgeFired(this@CalendarRelayService, day, now.hour)
+                buzzForSteps("nudge")
+            }
+        }
+    }
+
+    /**
+     * One pulse, in the shape the person already chose for everything else,
+     * and recorded like every other buzz.
+     *
+     * The record is not bookkeeping. A step goal fires unprompted while the
+     * phone is in a pocket, so "did it actually buzz?" has no other answer:
+     * Recent is the only place that can say it reached the band, and the
+     * only place a failure can be seen at all.
+     */
+    private fun buzzForSteps(reason: String) {
+        if (!ready || stopping || air == null || heartStreaming) return
+        // Each of the two has its own pulse, so a goal crossed and an hour
+        // missed can be told apart without looking at the phone.
+        val config = RelayRuleStore.read(this)
+        val preset = if (reason == "goal") config.stepGoalPreset else config.hourlyNudgePreset
+        if (preset.silent) return
+        val at = System.currentTimeMillis()
+        fun record(stage: String, code: String?) = runCatching {
+            RelayHistory.add(
+                this,
+                RelayActivity(
+                    commandId = "$reason-$at",
+                    sourcePackage = null,
+                    stage = stage,
+                    atMillis = System.currentTimeMillis(),
+                    latencyMillis = System.currentTimeMillis() - at,
+                    errorCode = code,
+                    preset = preset.id,
+                ),
+            )
+        }
+        begin()
+        onAir { link ->
+            link.tap(preset.intensity, object : AirResult {
+                override fun success(result: Any?) {
+                    record("verified", null)
+                    airDone()
+                    end()
+                }
+
+                override fun error(code: String, message: String?, details: Any?) {
+                    record("failed", code)
+                    airDone()
+                    end()
+                }
+            })
+        }
+    }
+
+    /**
+     * Whether the service is actually holding the band's one link.
+     *
+     * The service object outlives its link -- it exists while starting, and
+     * ColorOS brings it back after a force stop -- so "the service is alive"
+     * and "the band is taken" are different questions. Only the second one
+     * stops the UI opening a link of its own.
+     */
+    internal val holdsBand: Boolean get() = air != null
+
+    internal fun startHeartRate(sink: AirSink): Boolean {
+        if (!ready || stopping || pending != 0 || air == null || heartStreaming) return false
+        heartStreaming = true
+        begin()
+        val held = object : AirSink {
+            override fun success(event: Any?) = sink.success(event)
+            override fun error(code: String, message: String?, details: Any?) {
+                releaseHeartRate()
+                sink.error(code, message, details)
+            }
+            override fun endOfStream() {
+                releaseHeartRate()
+                sink.endOfStream()
+            }
+        }
+        onAir { link -> link.readHeartRate(held) }
+        return true
+    }
+
+    internal fun stopHeartRate() {
+        if (!heartStreaming) return
+        air?.stopHeartRate()
+        releaseHeartRate()
+    }
+
+    /** Frees the queue and the pending count exactly once. */
+    private fun releaseHeartRate() {
+        if (!heartStreaming) return
+        heartStreaming = false
+        airDone()
+        end()
+    }
+
     internal fun readDeviceStatus(reply: AirResult, operation: (AirLink, AirResult) -> Unit) {
         if (!ready || stopping || pending != 0 || air == null) {
             reply.error("BUSY", "The relay is delivering a notification. Try again shortly.", null)
@@ -714,6 +887,8 @@ class CalendarRelayService : Service() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(stepCheck)
+        healthScope.cancel()
         ready = false
         stopping = true
         val endedAt = System.currentTimeMillis()
@@ -759,6 +934,16 @@ class CalendarRelayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        /**
+         * How often the step goals are checked. Health Connect batches step
+         * writes about once a minute, so anything tighter than this spends
+         * reads on a figure that has not moved.
+         */
+        private const val STEP_CHECK_MILLIS = 15 * 60 * 1000L
+
+        /** The soonest two immediate checks may be run back to back. */
+        private const val STEP_CHECK_FLOOR_MILLIS = 60 * 1000L
+
         private var starting = false
             set(value) { field = value; publishRunning() }
         private var cancelStart = false

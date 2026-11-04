@@ -13,13 +13,14 @@ runtime.
 
 The full license text is included in [`LICENSE-APACHE-2.0`](LICENSE-APACHE-2.0).
 
-The native libraries under `android/src/main/jniLibs/` are built from this
-source by [`tool/native/build.py`](tool/native/build.py) without modification;
-upstream's `NOTICE` is reproduced in
+The native libraries under [`air/src/main/jniLibs/`](air/src/main/jniLibs) are
+built from this source without modification and vendored as binaries; the
+build script that produced them is upstream's, not in this repository.
+Upstream's `NOTICE` is reproduced in
 [`third_party/golden-gate/NOTICE`](third_party/golden-gate/NOTICE).
 
 The Kotlin sources under
-`android/src/main/kotlin/com/fitbit/goldengate/bindings/` are derived from the
+`air/src/main/kotlin/com/fitbit/goldengate/bindings/` are derived from the
 upstream Android bindings and retain their SPDX headers. They include limited
 adaptations: a per-stack TLS key resolver and logging cleanups.
 
