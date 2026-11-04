@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -185,6 +186,23 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
             )
         },
     )
+    // Only while the nudge is on. A switch for a thing that is not happening
+    // is a question about nothing, and the row above is where you say
+    // whether it happens at all.
+    if (settings.hourlyNudge) {
+        SettingsRow(
+            title = "Also show it on this phone",
+            subtitle = "A silent notification each time it nudges. Change its sound " +
+                "or hide it in Android's own notification settings.",
+            icon = Icons.Outlined.PhoneAndroid,
+            trailing = {
+                Switch(
+                    checked = settings.nudgeOnPhone,
+                    onCheckedChange = { update(settings.copy(nudgeOnPhone = it)) },
+                )
+            },
+        )
+    }
     // Both of these go through the relay's link to the band, so neither can
     // fire while it is off. Said only when it is off, because a caveat that
     // is always on screen stops being read.

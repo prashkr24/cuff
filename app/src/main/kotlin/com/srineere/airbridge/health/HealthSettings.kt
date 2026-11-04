@@ -16,6 +16,7 @@ object HealthSettings {
     private const val KEY_GOAL = "step_goal"
     private const val KEY_BUZZ = "buzz_on_goal"
     private const val KEY_NUDGE = "hourly_nudge"
+    private const val KEY_NUDGE_PHONE = "hourly_nudge_phone"
     private const val KEY_HOURLY = "hourly_goal"
     private const val KEY_FROM = "active_from"
     private const val KEY_UNTIL = "active_until"
@@ -39,6 +40,7 @@ object HealthSettings {
             hourlyGoal = p.getInt(KEY_HOURLY, fallback.hourlyGoal),
             activeFrom = p.getInt(KEY_FROM, fallback.activeFrom),
             activeUntil = p.getInt(KEY_UNTIL, fallback.activeUntil),
+            nudgeOnPhone = p.getBoolean(KEY_NUDGE_PHONE, fallback.nudgeOnPhone),
         )
     }
 
@@ -50,6 +52,7 @@ object HealthSettings {
             .putInt(KEY_HOURLY, settings.hourlyGoal)
             .putInt(KEY_FROM, settings.activeFrom)
             .putInt(KEY_UNTIL, settings.activeUntil)
+            .putBoolean(KEY_NUDGE_PHONE, settings.nudgeOnPhone)
             .apply()
     }
 

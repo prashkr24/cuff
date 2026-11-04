@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.app.Notification
 import android.app.NotificationChannel
+import com.srineere.airbridge.widget.ROUTE_EXTRA
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -214,6 +215,12 @@ class CalendarRelayService : Service() {
         if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
             NotificationChannel(CHANNEL, "Notifications to Air", NotificationManager.IMPORTANCE_LOW)
         )
+        // Anything left over from a previous process. A nudge is about the
+        // hour you are in and the process that could replace or cancel it is
+        // gone, so starting fresh is the honest state -- and this is the one
+        // moment that is guaranteed to run, where settingsChanged() only
+        // fires when something actually changes.
+        runCatching { manager.cancel(903) }
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= 29)
             startForeground(902, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
@@ -622,6 +629,12 @@ class CalendarRelayService : Service() {
     private fun scheduleStepCheck() {
         handler.removeCallbacks(stepCheck)
         val settings = HealthSettings.read(this)
+        // A nudge still sitting in the shade after the thing that posts it
+        // was switched off is a notification about a setting that no longer
+        // exists. Cleared here because this runs on every settings change.
+        if (!settings.hourlyNudge || !settings.nudgeOnPhone) {
+            runCatching { getSystemService(NotificationManager::class.java).cancel(903) }
+        }
         if (!settings.buzzOnGoal && !settings.hourlyNudge) return
         handler.postDelayed(stepCheck, STEP_CHECK_MILLIS)
 
@@ -641,7 +654,14 @@ class CalendarRelayService : Service() {
         if (reschedule) scheduleStepCheck()
         val settings = HealthSettings.read(this)
         if (!settings.buzzOnGoal && !settings.hourlyNudge) return
-        if (!ready || stopping || air == null) return
+        // A missing band used to end this outright. It still does when the
+        // wrist is the only destination -- but a nudge the phone is meant to
+        // show has somewhere to go without one. Relaying being off still
+        // ends it either way: that switch is what the rows promise holds
+        // these, and a nudge that outlived it would make them liars.
+        val phoneToo = settings.hourlyNudge && settings.nudgeOnPhone
+        if (!ready || stopping) return
+        if (air == null && !phoneToo) return
 
         healthScope.launch {
             val steps = withContext(Dispatchers.IO) { HealthReader().stepsNow(this@CalendarRelayService) }
@@ -659,6 +679,7 @@ class CalendarRelayService : Service() {
             }
             if (shouldNudgeForHour(settings, history, thisHour, day, now.hour, now.minute, silenced)) {
                 HealthSettings.recordNudgeFired(this@CalendarRelayService, day, now.hour)
+                if (settings.nudgeOnPhone) notifyNudge(thisHour, settings.hourlyGoal)
                 buzzForSteps("nudge")
             }
         }
@@ -673,6 +694,57 @@ class CalendarRelayService : Service() {
      * Recent is the only place that can say it reached the band, and the
      * only place a failure can be seen at all.
      */
+    /**
+     * The hourly nudge, on the phone as well as the wrist.
+     *
+     * Its own channel, so Android's own per-channel controls are what change
+     * its sound and importance rather than settings this app would have to
+     * build and keep. Low importance to begin with: the band is already
+     * buzzing, and an hourly chime is the fastest way to have the whole
+     * feature switched off. Anybody who wants it louder can say so where
+     * every other app's notifications are configured.
+     *
+     * One id, so each hour replaces the last rather than stacking twelve of
+     * them by evening.
+     */
+    private fun notifyNudge(stepsThisHour: Long, goal: Int) {
+        runCatching {
+            val manager = getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
+                NotificationChannel(NUDGE_CHANNEL, "Hourly nudge", NotificationManager.IMPORTANCE_LOW)
+            )
+            val open = PendingIntent.getActivity(
+                this,
+                1,
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    .putExtra(ROUTE_EXTRA, "healthsteps"),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val short = (goal - stepsThisHour).coerceAtLeast(0)
+            val builder = if (Build.VERSION.SDK_INT >= 26) {
+                Notification.Builder(this, NUDGE_CHANNEL)
+            } else {
+                @Suppress("DEPRECATION") Notification.Builder(this)
+            }
+            manager.notify(
+                903,
+                builder
+                    .setSmallIcon(android.R.drawable.ic_menu_directions)
+                    .setContentTitle("Time to move")
+                    .setContentText(
+                        // The figure, not an exhortation. What is missing is
+                        // the only part that is actually about you.
+                        "$short more steps for this hour's $goal",
+                    )
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .setOnlyAlertOnce(false)
+                    .build(),
+            )
+        }
+    }
+
     private fun buzzForSteps(reason: String) {
         if (!ready || stopping || air == null || heartStreaming) return
         // Each of the two has its own pulse, so a goal crossed and an hour
@@ -1012,6 +1084,7 @@ class CalendarRelayService : Service() {
         /** Codes we pass through to the log; anything else becomes WORKER_ERROR. */
         private val ERROR_CODE = Regex("[A-Z0-9_]{1,64}")
         private const val CHANNEL = "calendar_relay"
+        private const val NUDGE_CHANNEL = "hourly_nudge"
         private const val STOP = "calendar_relay.STOP"
         private const val SILENCE = "calendar_relay.SILENCE"
         private const val PAUSE = "calendar_relay.PAUSE"

@@ -15,6 +15,16 @@ data class StepGoalSettings(
     /** Hours the nudge is allowed to fire, inclusive of [activeFrom]. */
     val activeFrom: Int = 9,
     val activeUntil: Int = 21,
+    /**
+     * Whether the hourly nudge also lands on the phone.
+     *
+     * Off unless asked for. This app exists to move notifications off the
+     * phone and onto the wrist, so one that puts them back is a choice
+     * somebody makes rather than a default they inherit. The step goal has
+     * no equivalent on purpose: it fires once a day and crossing it is not
+     * news you need twice.
+     */
+    val nudgeOnPhone: Boolean = false,
 )
 
 /** What has already been sent, so nothing fires twice. */
