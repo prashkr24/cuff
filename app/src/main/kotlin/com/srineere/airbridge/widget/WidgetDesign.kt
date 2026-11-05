@@ -180,6 +180,22 @@ object WidgetCatalogue {
 
     fun forSize(size: WidgetSize): List<WidgetDesign> = all.filter { it.fits(size) }
 
+    /** Everything, grouped, for the catalogue under Device. */
+    fun families(): List<Pair<WidgetFamily, List<WidgetDesign>>> =
+        WidgetFamily.entries
+            .map { family -> family to all.filter { it.family == family } }
+            .filter { it.second.isNotEmpty() }
+
+    /**
+     * The families that exist on the design canvas and nowhere else.
+     *
+     * Derived rather than listed, so a family leaves this the moment one of
+     * its designs is written -- a hand-kept "coming soon" list is a list
+     * that goes on promising something that shipped a month ago.
+     */
+    val notBuilt: List<WidgetFamily>
+        get() = WidgetFamily.entries.filter { family -> all.none { it.family == family } }
+
     fun families(size: WidgetSize): List<Pair<WidgetFamily, List<WidgetDesign>>> =
         WidgetFamily.entries
             .map { family -> family to forSize(size).filter { it.family == family } }

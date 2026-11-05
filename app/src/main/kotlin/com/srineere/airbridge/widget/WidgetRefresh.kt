@@ -80,38 +80,6 @@ internal fun liveIds(context: Context): Set<Int> {
     }.toSet()
 }
 
-/**
- * The provider behind one cell size.
- *
- * Used to offer a widget from inside the app: `requestPinAppWidget` needs a
- * component, and the five receivers are the only thing that differs between
- * the sizes.
- */
-internal fun receiverFor(size: WidgetSize): Class<out AirWidgetReceiver> = when (size) {
-    WidgetSize.Strip -> StripWidgetReceiver::class.java
-    WidgetSize.Square -> SquareWidgetReceiver::class.java
-    WidgetSize.Row -> RowWidgetReceiver::class.java
-    WidgetSize.Wide -> WideWidgetReceiver::class.java
-    WidgetSize.Tall -> TallWidgetReceiver::class.java
-}
-
-/**
- * Asks the launcher to place one, where the launcher supports being asked.
- *
- * Android does not run the configuration activity for a widget pinned this
- * way, so it lands showing "Tap to choose" -- which is the face that exists
- * for exactly this, and tapping it opens the catalogue. Returns false where
- * the launcher has no pin support, and the screen then falls back to telling
- * the person how to do it by hand.
- */
-internal fun offerWidget(context: Context, size: WidgetSize): Boolean {
-    val manager = AppWidgetManager.getInstance(context) ?: return false
-    if (!manager.isRequestPinAppWidgetSupported) return false
-    return runCatching {
-        manager.requestPinAppWidget(ComponentName(context, receiverFor(size)), null, null)
-    }.getOrDefault(false)
-}
-
 private val RECEIVERS = listOf(
     StripWidgetReceiver::class.java,
     SquareWidgetReceiver::class.java,
