@@ -100,7 +100,15 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val typed = number(kcal)
     val anything = typed != null || fromMacros != null
 
+    // Null is All, on the saved list only: a recent entry is sorted by when
+    // it was eaten, and filtering that by meal would be a second, worse copy
+    // of the food log.
+    var pick by remember { mutableStateOf<Meal?>(null) }
+
     fun fill(food: SavedFood) {
+        // A saved food knows its meal, so picking it answers the meal
+        // question too rather than leaving the hour's guess standing.
+        food.meal?.let { meal = it }
         name = food.name
         kcal = food.kcal?.let { figure(it) } ?: ""
         protein = food.protein?.let { figure(it) } ?: ""
@@ -147,15 +155,24 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
         if (step == Step.Recent || step == Step.Saved) {
             val onSaved = step == Step.Saved
+            if (onSaved && saved.isNotEmpty()) {
+                MealPills(
+                    selected = pick,
+                    onPick = { pick = it },
+                    any = "All",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                )
+            }
             PickList(
-                foods = if (onSaved) saved
+                foods = if (onSaved) saved.filter { pick == null || it.meal == pick }
                 else data.snapshot.food.sortedByDescending { it.at }
                     .distinctBy { (it.name ?: "").trim().lowercase() }
                     .take(8)
                     .map { it.asSavedFood() },
                 forgettable = onSaved,
-                empty = if (onSaved) "Nothing saved yet. Save a food from an entry and it waits here."
-                else "Nothing logged yet, so there is nothing to repeat.",
+                empty = if (!onSaved) "Nothing logged yet, so there is nothing to repeat."
+                else if (pick != null) "Nothing saved under ${pick?.label?.lowercase()} yet."
+                else "Nothing saved yet. Save a food from an entry and it waits here.",
                 onPick = ::fill,
                 onForget = { food -> saved = SavedFoods.remove(context, food) },
             )
@@ -164,31 +181,11 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         }
 
         SectionHeader("Which meal")
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-        ) {
-            Meal.entries.forEach { option ->
-                val on = option == meal
-                Surface(
-                    color = if (on) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.weight(1f).clickable { meal = option },
-                ) {
-                    Text(
-                        option.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (on) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    )
-                }
-            }
-        }
+        MealPills(
+            selected = meal,
+            onPick = { meal = it ?: meal },
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+        )
 
         SectionHeader("The entry")
         DetailCard {
@@ -249,7 +246,12 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             val already = saved.any { it.key == name.trim().lowercase() }
             TextButton(
                 onClick = {
-                    val food = SavedFood(name.trim(), typed, number(protein), number(carbs), number(fat))
+                    val food = SavedFood(
+                        name.trim(), typed, number(protein), number(carbs), number(fat),
+                        // The meal chosen above, because this is the one
+                        // screen where it is already on the record.
+                        meal = meal,
+                    )
                     saved = if (already) SavedFoods.remove(context, food)
                     else SavedFoods.save(context, food)
                 },
@@ -400,23 +402,6 @@ private fun StartRow(
 
 /** Which part of logging you are in. */
 private enum class Step { Start, Recent, Saved, Type }
-
-@Composable
-private fun Tab(label: String, on: Boolean, onClick: () -> Unit) = Surface(
-    color = if (on) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
-    shape = RoundedCornerShape(50),
-    modifier = Modifier.clickable(onClick = onClick),
-) {
-    Text(
-        label,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-        color = if (on) MaterialTheme.colorScheme.onSurface
-        else MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-    )
-}
 
 /** A figure as a person typed it: no trailing zero on a whole number. */
 private fun figure(value: Double): String =

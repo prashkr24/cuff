@@ -3,6 +3,7 @@ package com.srineere.airbridge.ui
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -84,6 +86,10 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     // here to read the day, not to unfold it.
     var folded by remember { mutableStateOf(setOf<Int>()) }
     var saying by remember { mutableStateOf<String?>(null) }
+    // Held rather than asked for per row: the answer comes off disk, and a
+    // row that asked it would ask again on every recomposition. Every path
+    // that changes the list updates this in the same breath.
+    var savedKeys by remember { mutableStateOf(SavedFoods.read(context).map { it.key }.toSet()) }
 
     val day = remember(back) { LocalDate.now().minusDays(back.toLong()).toEpochDay() }
     val entries = remember(data.snapshot.food, day) {
@@ -137,14 +143,25 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             )
             if (shut) return@forEach
             forMeal.forEach { entry ->
+                val food = entry.asSavedFood()
+                val kept = food.key in savedKeys
                 EntryRow(
                     entry = entry,
                     open = open == entry.id,
                     accent = accent,
+                    saved = kept,
                     onOpen = { open = if (open == entry.id) null else entry.id },
+                    // The star is a switch, the way a star is everywhere.
+                    // Before this it only ever filled the list, and an entry
+                    // already in it offered to save it again.
                     onSave = {
-                        SavedFoods.save(context, entry.asSavedFood())
-                        saying = "${entry.name ?: "Entry"} saved to your foods."
+                        savedKeys = if (kept) {
+                            saying = "${food.name} removed from your foods."
+                            SavedFoods.remove(context, food).map { it.key }.toSet()
+                        } else {
+                            saying = "${food.name} saved to your foods."
+                            SavedFoods.save(context, food).map { it.key }.toSet()
+                        }
                         open = null
                     },
                     onDelete = {
@@ -328,6 +345,7 @@ private fun EntryRow(
     entry: FoodEntry,
     open: Boolean,
     accent: Color,
+    saved: Boolean,
     onOpen: () -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
@@ -341,7 +359,20 @@ private fun EntryRow(
             entry.kcal?.let { "${count(it.roundToInt().toLong())} kcal" },
         ).joinToString(" · "),
         onClick = onOpen,
-        trailing = {},
+        // A filled star on the row itself, so which of today's entries you
+        // keep is answerable without opening any of them. Nothing at all
+        // where there is no star, rather than the chevron every other row
+        // has: this one opens in place.
+        trailing = {
+            if (saved) {
+                Icon(
+                    Icons.Outlined.Star,
+                    contentDescription = "Saved to your foods",
+                    tint = MaterialTheme.extras.disabled,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        },
     )
     if (!open) return
     Surface(
@@ -360,11 +391,11 @@ private fun EntryRow(
                 // from an entry they have stopped to look at.
                 TextButton(onClick = onSave) {
                     Icon(
-                        Icons.Outlined.StarOutline,
+                        if (saved) Icons.Outlined.Star else Icons.Outlined.StarOutline,
                         contentDescription = null,
                         modifier = Modifier.size(17.dp),
                     )
-                    Text(" Save food")
+                    Text(if (saved) " Saved" else " Save food")
                 }
                 Box(Modifier.weight(1f))
                 TextButton(onClick = onDelete) {
@@ -387,7 +418,76 @@ internal fun FoodEntry.asSavedFood() = SavedFood(
     protein = protein,
     carbs = carbs,
     fat = fat,
+    // The entry already knows which meal it was, and that is the only
+    // moment anybody knows it without being asked.
+    meal = Meal.entries.firstOrNull { it.type == mealType },
 )
+
+/**
+ * The meal pills.
+ *
+ * One drawing for the three places a meal is picked -- the meal an entry
+ * goes in under, the meal a saved food belongs to, and the meal a list is
+ * filtered by -- because they were otherwise three pill rows with three sets
+ * of padding doing one job.
+ *
+ * Four pills fit across a phone at equal widths and five do not, so a row
+ * carrying an [any] pill scrolls rather than squeezing "Breakfast" into a
+ * fifth of the screen. That rule lives here so no call site has to know it.
+ */
+@Composable
+internal fun MealPills(
+    selected: Meal?,
+    onPick: (Meal?) -> Unit,
+    any: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    val options: List<Pair<String, Meal?>> =
+        (if (any == null) emptyList() else listOf(any to null)) +
+            Meal.entries.map { it.label to it }
+    val fill = any == null
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth()
+            .then(if (fill) Modifier else Modifier.horizontalScroll(rememberScrollState()))
+            .then(modifier),
+    ) {
+        options.forEach { (label, value) ->
+            MealPill(
+                label = label,
+                on = value == selected,
+                fill = fill,
+                modifier = if (fill) Modifier.weight(1f) else Modifier,
+            ) { onPick(value) }
+        }
+    }
+}
+
+@Composable
+private fun MealPill(
+    label: String,
+    on: Boolean,
+    fill: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) = Surface(
+    color = if (on) MaterialTheme.colorScheme.primaryContainer
+    else MaterialTheme.colorScheme.surfaceContainerHigh,
+    shape = RoundedCornerShape(50),
+    modifier = modifier.clickable(onClick = onClick),
+) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (on) MaterialTheme.colorScheme.onPrimaryContainer
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        modifier = (if (fill) Modifier.fillMaxWidth() else Modifier)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
+}
 
 /** Today and yesterday by name, anything older by date. */
 @Composable

@@ -14,8 +14,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,13 +61,28 @@ internal fun HealthNutritionScreen(onBack: () -> Unit, onOpen: (String) -> Unit)
     val fat = extras.energy
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        // Logging is what this screen is for, so it sits in the title rather
-        // than inside the card about today -- which is a reading, and had a
-        // button for an unrelated job wedged into the side of it.
+        // The button says Log and now logs. It used to open the food log,
+        // which is a list of what is already down -- so the one control on
+        // the screen that looked like "add something" was the one that did
+        // not, and reading the day back is a row of its own below.
+        //
+        // Drawn exactly as the food log draws its own: same icon, same
+        // label, same accent, because it is the same button for the same job
+        // one screen along.
         ScreenTitle(
             "Nutrition",
             onBack = onBack,
-            action = { Button(onClick = { onOpen("healthfoodlog") }) { Text("Log") } },
+            action = {
+                Button(
+                    onClick = { onOpen("healthlogfood") },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LocalTileColour.current ?: MaterialTheme.extras.energy,
+                    ),
+                ) {
+                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(" Log")
+                }
+            },
         )
 
         val eaten = snapshot.eatenToday
@@ -130,6 +149,15 @@ internal fun HealthNutritionScreen(onBack: () -> Unit, onOpen: (String) -> Unit)
 
         SplitSection(snapshot, protein, carbs, fat, axes)
         ProteinSection(snapshot.proteinDaily, protein, goals.proteinGrams, axes)
+
+        // Above the balance rather than in the title: reading the day back
+        // is a different job from adding to it, and a row can say which day
+        // and how many entries where a button in a title bar cannot.
+        SettingsRow(
+            title = "Food log",
+            subtitle = "Every entry for the day, to check or correct",
+            onClick = { onOpen("healthfoodlog") },
+        )
 
         SettingsRow(
             title = "Burned against eaten",

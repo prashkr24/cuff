@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.srineere.airbridge.health.Meal
 import com.srineere.airbridge.health.SavedFood
 import com.srineere.airbridge.health.SavedFoods
 import com.srineere.airbridge.ui.theme.extras
@@ -53,9 +54,36 @@ internal fun HealthSavedFoodsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var saved by remember { mutableStateOf(SavedFoods.read(context)) }
     var open by remember { mutableStateOf<String?>(null) }
+    // Null is All. A list of forty is long enough that "my breakfasts" is a
+    // question worth being able to ask, and short enough that it needs a
+    // filter rather than a search.
+    var filter by remember { mutableStateOf<Meal?>(null) }
+    val shown = remember(saved, filter) {
+        if (filter == null) saved else saved.filter { it.meal == filter }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Saved foods", onBack = onBack)
+
+        if (saved.isNotEmpty()) {
+            MealPills(
+                selected = filter,
+                onPick = { filter = it; open = null },
+                any = "All",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+            )
+        }
+
+        if (saved.isNotEmpty() && shown.isEmpty()) {
+            Text(
+                "Nothing saved under ${filter?.label?.lowercase()} yet. A food takes " +
+                    "its meal from the entry it was saved from, and you can change " +
+                    "it by opening the food.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+        }
 
         if (saved.isEmpty()) {
             Text(
@@ -67,7 +95,7 @@ internal fun HealthSavedFoodsScreen(onBack: () -> Unit) {
             )
         }
 
-        saved.forEach { food ->
+        shown.forEach { food ->
             SavedRow(
                 food = food,
                 open = open == food.key,
@@ -132,6 +160,13 @@ private fun SavedRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.padding(top = 2.dp),
             ) {
+                food.meal?.let {
+                    Text(
+                        it.label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.extras.disabled,
+                    )
+                }
                 food.kcal?.let {
                     Text(
                         "${count(it.roundToInt().toLong())} kcal",
@@ -165,6 +200,7 @@ private fun SavedRow(
         var protein by remember(food.key) { mutableStateOf(food.protein.text()) }
         var carbs by remember(food.key) { mutableStateOf(food.carbs.text()) }
         var fat by remember(food.key) { mutableStateOf(food.fat.text()) }
+        var meal by remember(food.key) { mutableStateOf(food.meal) }
 
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             OutlinedTextField(
@@ -191,6 +227,21 @@ private fun SavedRow(
                 Field("Carbs", carbs, Modifier.weight(1f)) { carbs = it }
                 Field("Fat", fat, Modifier.weight(1f)) { fat = it }
             }
+            Text(
+                "Meal",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            // Any, and not a default of breakfast: a food nobody has placed
+            // is a real answer, and guessing one would put it under a filter
+            // it does not belong to.
+            MealPills(
+                selected = meal,
+                onPick = { meal = it },
+                any = "Any",
+                modifier = Modifier.padding(top = 4.dp),
+            )
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                 TextButton(onClick = onDelete) {
                     Icon(
@@ -211,6 +262,7 @@ private fun SavedRow(
                                 protein = protein.number(),
                                 carbs = carbs.number(),
                                 fat = fat.number(),
+                                meal = meal,
                             ),
                         )
                     },

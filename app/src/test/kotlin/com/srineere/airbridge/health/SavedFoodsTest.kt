@@ -33,6 +33,27 @@ class SavedFoodsTest {
     }
 
     @Test
+    fun `a meal rides with the food, and its absence is a real answer`() {
+        val foods = listOf(
+            SavedFood("Idli", 180.0, 4.0, 36.0, 1.0, Meal.Breakfast),
+            SavedFood("Almonds", 70.0, null, null, null, null),
+        )
+        val round = SavedFoods.decode(SavedFoods.encode(foods))
+        assertEquals(foods, round)
+        assertEquals(Meal.Breakfast, round.first().meal)
+        assertNull(round.last().meal)
+    }
+
+    @Test
+    fun `foods saved before meals existed decode without one`() {
+        // Five fields and no sixth: the record this app wrote last week.
+        val old = "Dosa\u001F250\u001F6\u001F40\u001F8"
+        assertEquals(1, SavedFoods.decode(old).size)
+        assertNull(SavedFoods.decode(old).single().meal)
+        assertEquals("Dosa", SavedFoods.decode(old).single().name)
+    }
+
+    @Test
     fun `nothing stored is an empty list, not a crash`() {
         assertTrue(SavedFoods.decode(null).isEmpty())
         assertTrue(SavedFoods.decode("").isEmpty())

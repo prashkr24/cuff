@@ -18,6 +18,16 @@ data class SavedFood(
     val protein: Double?,
     val carbs: Double?,
     val fat: Double?,
+    /**
+     * The meal this is usually eaten at, which is what the filters sort by.
+     *
+     * One meal and not a set: a food saved from an entry knows the meal that
+     * entry was logged under, and that one answer is right often enough to
+     * be worth a filter. Null is a real state -- a food saved before this
+     * existed, or one nobody has placed -- and such a food shows under All
+     * and nowhere else, rather than quietly under breakfast.
+     */
+    val meal: Meal? = null,
 ) {
     /** Two entries of the same food are the same food, whatever the figures. */
     val key: String get() = name.trim().lowercase()
@@ -81,6 +91,7 @@ object SavedFoods {
             it.protein.text(),
             it.carbs.text(),
             it.fat.text(),
+            it.meal?.name ?: "",
         ).joinToString(FIELD.toString())
     }
 
@@ -101,6 +112,9 @@ object SavedFoods {
                 protein = bits[2].number(),
                 carbs = bits[3].number(),
                 fat = bits[4].number(),
+                // Written before foods knew their meal: five fields, and no
+                // meal is exactly what such a food has.
+                meal = bits.getOrNull(5)?.let { field -> Meal.entries.firstOrNull { it.name == field } },
             )
         }
     }
