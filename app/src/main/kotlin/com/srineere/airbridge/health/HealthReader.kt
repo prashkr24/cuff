@@ -205,7 +205,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         // Steps are the one metric read from chosen writers rather than from
         // all of them, because the phone counts its own and adding those to
         // the band's counts one walk twice. Resolved once for the whole read.
-        val stepOrigins = stepOrigins(context, client)
+        val stepOrigins = stepOrigins(context, client, granted)
 
         val steps = if (allowed(StepsRecord::class)) {
             dailyTotals(client, StepsRecord.COUNT_TOTAL, from, today, stepOrigins) { it.toDouble() }
@@ -464,7 +464,11 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
      */
     suspend fun stepsNow(context: Context): Pair<Long, Long>? {
         val client = HealthConnect.clientOrNull(context) ?: return null
-        if (HealthPermission.getReadPermission(StepsRecord::class) !in HealthConnect.granted(client)) {
+        // Asked once and passed on, for the reason HealthSources.stepWriters
+        // spells out: two answers to the same question is one answer too
+        // many, and the second one is the one that was wrong.
+        val granted = HealthConnect.granted(client)
+        if (HealthPermission.getReadPermission(StepsRecord::class) !in granted) {
             return null
         }
         val today = LocalDate.now(zone)
@@ -474,7 +478,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
 
         // The figure the band buzzes at. Unfiltered, this counted the phone's
         // own pedometer alongside the band and crossed the goal early.
-        val origins = stepOrigins(context, client)
+        val origins = stepOrigins(context, client, granted)
         if (origins.filtersToNothing()) return 0L to 0L
 
         val day = guard("steps today") {
@@ -506,13 +510,17 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
      * Enumeration is cached for the process, so the quarter-hourly poll in
      * the relay service pays for it about twice a day.
      */
-    private suspend fun stepOrigins(context: Context, client: HealthConnectClient): Set<String>? {
+    private suspend fun stepOrigins(
+        context: Context,
+        client: HealthConnectClient,
+        granted: Set<String>,
+    ): Set<String>? {
         val choice = HealthSettings.stepSource(context)
         // Only one choice needs to know who is writing; the other two answer
         // without a read, and the common case is cheap.
         if (choice is SourceChoice.Only) return setOf(choice.packageName)
         if (choice == SourceChoice.Everything) return null
-        return resolveSources(choice, HealthSources.stepWriters(context, client))
+        return resolveSources(choice, HealthSources.stepWriters(context, client, granted))
     }
 
     /**

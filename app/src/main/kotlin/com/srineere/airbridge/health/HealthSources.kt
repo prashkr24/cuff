@@ -133,12 +133,27 @@ object HealthSources {
      * Empty when the permission is missing or nothing has been written, which
      * the caller must tell apart from "one source, and it is the phone" —
      * [resolveSources] does, and so does the picker.
+     *
+     * [granted] is passed in rather than asked for. This used to call
+     * `HealthConnect.granted` itself, a second permission round trip inside a
+     * read that had just made one, and on a real phone it came back without
+     * steps in it while the caller's own copy had them — so this returned
+     * empty, `resolveSources` read that as "nothing to exclude", and the step
+     * filter quietly switched itself off. Then the empty answer was cached
+     * for six hours. The caller already knows; asking twice only added a way
+     * to be wrong.
      */
-    suspend fun stepWriters(context: Context, client: HealthConnectClient): List<HealthSource> {
+    suspend fun stepWriters(
+        context: Context,
+        client: HealthConnectClient,
+        granted: Set<String>,
+    ): List<HealthSource> {
         val now = System.currentTimeMillis()
         cached?.let { if (now - cachedAt < CACHE_MS) return it }
 
-        if (HealthPermission.getReadPermission(StepsRecord::class) !in HealthConnect.granted(client)) {
+        if (HealthPermission.getReadPermission(StepsRecord::class) !in granted) {
+            // Said out loud. The whole fault above was a silent return.
+            Log.i(TAG, "step writers: steps not granted, so no filter")
             return emptyList()
         }
 
@@ -177,8 +192,14 @@ object HealthSources {
                 sources.joinToString { "${it.packageName}${if (it.isPhone) " (phone)" else ""}" }
             },
         )
-        cached = sources
-        cachedAt = now
+        // Only a real answer is kept. An empty one means the question
+        // failed or nothing has walked in a fortnight, and caching either
+        // for six hours turns a moment's trouble into an afternoon of
+        // counting the phone's steps as the band's.
+        if (sources.isNotEmpty()) {
+            cached = sources
+            cachedAt = now
+        }
         return sources
     }
 

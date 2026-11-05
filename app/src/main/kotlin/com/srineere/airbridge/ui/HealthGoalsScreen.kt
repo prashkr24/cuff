@@ -255,7 +255,7 @@ private fun StepSourcePicker() {
     LaunchedEffect(Unit) {
         sources = withContext(Dispatchers.IO) {
             HealthConnect.clientOrNull(context)
-                ?.let { HealthSources.stepWriters(context, it) }
+                ?.let { HealthSources.stepWriters(context, it, HealthConnect.granted(it)) }
                 .orEmpty()
         }
         loaded = true
