@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -158,7 +159,7 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.fillMaxWidth().height(22.dp),
         ) {
-            val top = chart.values.maxOrNull()?.takeIf { it > 0f } ?: 1f
+            val top = chart.ceiling ?: chart.values.maxOrNull()?.takeIf { it > 0f } ?: 1f
             // The newest reading, not the biggest one. The widget picks out
             // the last bar; a preview that picked out the tallest would be
             // highlighting a different day from the thing it is a picture of.
@@ -251,6 +252,58 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
             }
         }
 
+        // One arc each, side by side, each with its figure inside. The
+        // widget adds a label under every figure; a thumbnail has no room
+        // for three of those and the figure is the part that carries.
+        is Chart.Dials -> Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().height(46.dp),
+        ) {
+            chart.parts.forEach { dial ->
+                val tint = tileColourOf(dial.colour)
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val side = kotlin.math.min(size.width, size.height)
+                        val strokePx = side * DIAL_PREVIEW_STROKE
+                        val box = side - strokePx
+                        val topLeft = Offset(
+                            (size.width - side) / 2f + strokePx / 2f,
+                            (size.height - side) / 2f + strokePx / 2f,
+                        )
+                        val arcSize = Size(box, box)
+                        drawArc(
+                            color = trackColour,
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokePx, cap = StrokeCap.Round),
+                        )
+                        val swept = dial.fraction.coerceIn(0f, 1f) * 360f
+                        if (swept > 0f) {
+                            drawArc(
+                                color = tint,
+                                startAngle = -90f,
+                                sweepAngle = swept.coerceAtMost(359.9f),
+                                useCenter = false,
+                                topLeft = topLeft,
+                                size = arcSize,
+                                style = Stroke(width = strokePx, cap = StrokeCap.Round),
+                            )
+                        }
+                    }
+                    Text(
+                        dial.centre,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontSize = if (chart.parts.size > 1) 11.sp else 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+
         // Three readings will not fit under a figure at this size, so the
         // thumbnail shows the two that do and lets the widget show the rest.
         is Chart.Rows -> Column(Modifier.fillMaxWidth()) {
@@ -277,6 +330,9 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
         }
     }
 }
+
+/** A dial is one arc with room to spare, so it is drawn thicker than a ring. */
+private const val DIAL_PREVIEW_STROKE = 0.16f
 
 /** One health colour, in whichever mode is on. */
 @Composable

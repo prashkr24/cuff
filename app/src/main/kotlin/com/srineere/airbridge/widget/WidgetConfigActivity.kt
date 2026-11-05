@@ -419,6 +419,7 @@ private fun openLabel(design: WidgetDesign): String = when (design) {
     is WidgetDesign.OfTile -> design.kind.title
     is WidgetDesign.OfBand -> "The Device tab"
     is WidgetDesign.OfRings -> "The Health tab"
+    is WidgetDesign.OfDials -> if (design.face == DialFace.Score) "Sleep" else "The Health tab"
 }
 
 @Composable
@@ -428,6 +429,7 @@ private fun swatch(design: WidgetDesign): Color {
         is WidgetDesign.OfTile -> design.kind.defaultColour
         is WidgetDesign.OfBand -> TileColour.Accent
         is WidgetDesign.OfRings -> TileColour.Steps
+        is WidgetDesign.OfDials -> TileColour.Sleep
     }
     return when (colour) {
         TileColour.Heart -> extras.heart

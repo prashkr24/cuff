@@ -284,7 +284,12 @@ private fun Arcs(rings: List<Ring>, colours: WidgetColours, side: Dp) =
 
 /** The bitmap, and the only one in this app so far. */
 @Composable
-internal fun RingImage(parts: List<Pair<Float, TileColour>>, colours: WidgetColours, side: Dp) {
+internal fun RingImage(
+    parts: List<Pair<Float, TileColour>>,
+    colours: WidgetColours,
+    side: Dp,
+    stroke: Float = RingBitmap.STROKE,
+) {
     if (parts.isEmpty()) return
     val context = LocalContext.current
     val dark = colours.isDark(context)
@@ -294,7 +299,9 @@ internal fun RingImage(parts: List<Pair<Float, TileColour>>, colours: WidgetColo
     val track = colours.trackArgb(dark)
     // Keyed on everything that changes a pixel, so scrolling past a widget
     // does not redraw a Canvas that would come out identical.
-    val bitmap = remember(sidePx, arcs, track) { RingBitmap.draw(sidePx, arcs, track) }
+    val bitmap = remember(sidePx, arcs, track, stroke) {
+        RingBitmap.draw(sidePx, arcs, track, stroke = stroke)
+    }
     Image(
         provider = ImageProvider(bitmap),
         contentDescription = null,

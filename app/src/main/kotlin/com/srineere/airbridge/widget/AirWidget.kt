@@ -87,6 +87,7 @@ class AirWidget : GlanceAppWidget() {
             is WidgetDesign.OfTile -> TileWidget(design.kind, face, snapshot, colours, onClick)
             is WidgetDesign.OfBand -> BandWidget(design.face, face, snapshot, colours, onClick, now)
             is WidgetDesign.OfRings -> RingsWidget(design.face, face, snapshot, colours, onClick)
+            is WidgetDesign.OfDials -> DialsWidget(design.face, face, snapshot, colours, onClick)
         }
     }
 
@@ -122,6 +123,8 @@ private fun openFor(config: WidgetConfig): Action {
         is WidgetDesign.OfBand -> if (config.opensTab) null else DEVICE_ROUTE
         // Several readings at once, so there is no one screen behind them.
         is WidgetDesign.OfRings -> null
+        is WidgetDesign.OfDials ->
+            if (config.opensTab || design.face != DialFace.Score) null else SLEEP_ROUTE
     }
     return actionStartActivity(
         MainActivity::class.java,
@@ -130,6 +133,7 @@ private fun openFor(config: WidgetConfig): Action {
 }
 
 internal const val DEVICE_ROUTE = "device"
+internal const val SLEEP_ROUTE = "healthsleep"
 
 /** Carried into MainActivity as an extra, so a tap lands on the right screen. */
 internal val WidgetRouteKey = ActionParameters.Key<String>(ROUTE_EXTRA)

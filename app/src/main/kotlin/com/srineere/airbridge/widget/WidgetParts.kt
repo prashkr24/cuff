@@ -131,9 +131,18 @@ internal fun Bars(
     highlightLast: Boolean = true,
     gap: Dp = 3.dp,
     blankZeros: Boolean = false,
+    /**
+     * The value a full-height bar means, when the series has one of its own.
+     *
+     * A week of sleep scores drawn against its own best is a week where the
+     * best night is full and every other looks poor -- including a week
+     * where every night scored ninety. Out of a hundred, the week reads as
+     * what it was.
+     */
+    top: Float? = null,
 ) {
     if (values.isEmpty()) return
-    val top = values.maxOrNull()?.takeIf { it > 0f } ?: 1f
+    val ceiling = top ?: values.maxOrNull()?.takeIf { it > 0f } ?: 1f
     Row(
         modifier = GlanceModifier.fillMaxWidth().height(height),
         verticalAlignment = Alignment.Bottom,
@@ -148,7 +157,7 @@ internal fun Bars(
                 Spacer(GlanceModifier.defaultWeight())
                 return@forEachIndexed
             }
-            val tall = (height.value * (value / top)).coerceAtLeast(MIN_BAR).dp
+            val tall = (height.value * (value / ceiling)).coerceAtLeast(MIN_BAR).dp
             Box(
                 modifier = GlanceModifier
                     .defaultWeight()

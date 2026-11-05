@@ -106,10 +106,20 @@ sealed interface WidgetDesign {
         override val sizes: Set<WidgetSize> get() = face.sizes
     }
 
+    /** Whoop's grammar: one thick arc with its figure in the middle. */
+    data class OfDials(val face: DialFace) : WidgetDesign {
+        override val id: String get() = "$DIALS_PREFIX${face.name}"
+        override val title: String get() = face.title
+        override val summary: String get() = face.summary
+        override val family: WidgetFamily get() = WidgetFamily.Dials
+        override val sizes: Set<WidgetSize> get() = face.sizes
+    }
+
     companion object {
         const val TILE_PREFIX = "tile:"
         const val BAND_PREFIX = "band:"
         const val RINGS_PREFIX = "rings:"
+        const val DIALS_PREFIX = "dials:"
     }
 }
 
@@ -187,7 +197,8 @@ object WidgetCatalogue {
     val all: List<WidgetDesign> =
         TileKind.entries.map { WidgetDesign.OfTile(it) } +
             BandFace.entries.map { WidgetDesign.OfBand(it) } +
-            RingFace.entries.map { WidgetDesign.OfRings(it) }
+            RingFace.entries.map { WidgetDesign.OfRings(it) } +
+            DialFace.entries.map { WidgetDesign.OfDials(it) }
 
     fun forSize(size: WidgetSize): List<WidgetDesign> = all.filter { it.fits(size) }
 
@@ -228,6 +239,10 @@ object WidgetCatalogue {
                 RingFace.entries
                     .firstOrNull { it.name == id.removePrefix(WidgetDesign.RINGS_PREFIX) }
                     ?.let { WidgetDesign.OfRings(it) }
+            id.startsWith(WidgetDesign.DIALS_PREFIX) ->
+                DialFace.entries
+                    .firstOrNull { it.name == id.removePrefix(WidgetDesign.DIALS_PREFIX) }
+                    ?.let { WidgetDesign.OfDials(it) }
             else -> null
         }
     }

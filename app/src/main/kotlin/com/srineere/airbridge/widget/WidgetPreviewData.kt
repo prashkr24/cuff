@@ -101,6 +101,7 @@ internal fun WidgetSnapshot.colourFor(design: WidgetDesign): TileColour = when (
         RingFace.Arcs -> TileColour.Steps
         RingFace.Summary, RingFace.Trends -> TileColour.Slate
     }
+    is WidgetDesign.OfDials -> TileColour.Sleep
 }
 
 /** The reading a design shows, whichever half of the app it comes from. */
@@ -108,6 +109,25 @@ internal fun faceOf(design: WidgetDesign, snapshot: WidgetSnapshot, now: Long): 
     is WidgetDesign.OfTile -> faceFor(design.kind, snapshot)
     is WidgetDesign.OfBand -> bandFace(design.face, snapshot.band, now)
     is WidgetDesign.OfRings -> ringsFace(design.face, snapshot)
+    is WidgetDesign.OfDials -> dialsFace(design.face, snapshot)
+}
+
+/** A dials face as a [Face], for the thumbnail. */
+private fun dialsFace(face: DialFace, snapshot: WidgetSnapshot): Face? = when (face) {
+    DialFace.Score -> sleepDial(snapshot.health)?.let {
+        Face(kicker = "Sleep", figure = "", sub = "", chart = Chart.Dials(listOf(it)))
+    }
+    DialFace.Three -> dialsOf(snapshot.health, snapshot.goals).takeIf { it.isNotEmpty() }?.let {
+        Face(kicker = "Today", figure = "", sub = "", chart = Chart.Dials(it))
+    }
+    DialFace.Week -> nightScores(snapshot.health).takeIf { it.isNotEmpty() }?.let {
+        Face(
+            kicker = "Seven nights",
+            figure = "",
+            sub = "",
+            chart = Chart.Bars(it, ceiling = 100f),
+        )
+    }
 }
 
 /**

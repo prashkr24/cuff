@@ -52,7 +52,12 @@ internal sealed interface Chart {
      * hold a reading -- the hours of today. A gap there means "nothing was
      * recorded then", which is not the same claim as a bar of zero height.
      */
-    class Bars(val values: List<Float>, val blankZeros: Boolean = false) : Chart
+    class Bars(
+        val values: List<Float>,
+        val blankZeros: Boolean = false,
+        /** What a full-height bar means, when the series has a ceiling of its own. */
+        val ceiling: Float? = null,
+    ) : Chart
 
     /** A night, in proportion. Keeps the sleep palette whatever colour the tile is. */
     class Stages(val parts: List<Pair<Float, SleepStage>>) : Chart
@@ -68,6 +73,9 @@ internal sealed interface Chart {
      * rectangles, so the one that costs a bitmap.
      */
     class Arcs(val parts: List<Pair<Float, TileColour>>) : Chart
+
+    /** Arcs side by side, each with its figure in the middle. */
+    class Dials(val parts: List<DialReading>) : Chart
 }
 
 @Composable
@@ -246,6 +254,7 @@ private fun DrawChart(
             colours.tileDim(colour),
             height,
             blankZeros = chart.blankZeros,
+            top = chart.ceiling,
         )
         is Chart.Stages -> Stripe(
             chart.parts.map { (share, stage) -> share to colours.sleepStage(stage) },
@@ -258,6 +267,12 @@ private fun DrawChart(
             width = width,
         )
         is Chart.Arcs -> RingImage(chart.parts, colours, height)
+
+        // Only the thumbnail draws this; the widget lays its own
+        // dials out, because it has room for their labels.
+        is Chart.Dials -> RingImage(
+            chart.parts.map { it.fraction to it.colour }, colours, height,
+        )
 
         is Chart.Rows -> Column(modifier = GlanceModifier.fillMaxWidth()) {
             chart.rows.forEach { (name, value, each) ->
