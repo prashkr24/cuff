@@ -7,6 +7,8 @@ import com.srineere.airbridge.health.Reading
 import com.srineere.airbridge.health.TileColour
 import com.srineere.airbridge.ui.HealthData
 import com.srineere.airbridge.ui.HealthStage
+import com.srineere.airbridge.ui.sampleGoals
+import com.srineere.airbridge.ui.sampleHealthData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -140,6 +142,23 @@ class WidgetRingsTest {
     fun `the rings family is no longer listed as unbuilt`() {
         assertTrue(WidgetFamily.Rings !in WidgetCatalogue.notBuilt)
         assertTrue(WidgetCatalogue.families().any { it.first == WidgetFamily.Rings })
+    }
+
+    /**
+     * The sample is what the catalogue draws, and a catalogue has to show
+     * the mechanism. Goals level with the sample day closed every ring and
+     * every progress bar in every preview, which looks like a decoration
+     * rather than a chart.
+     */
+    @Test
+    fun `the sample day leaves its goal rings visibly open`() {
+        val rings = ringsOf(sampleHealthData(), sampleGoals)
+        val byLabel = rings.associateBy { it.label }
+        listOf("Steps", "Sleep").forEach { label ->
+            val fraction = byLabel.getValue(label).fraction
+            assertTrue("$label is $fraction, which draws as a closed circle", fraction < 0.95f)
+            assertTrue("$label is $fraction, which draws as an empty one", fraction > 0.3f)
+        }
     }
 
     @Test

@@ -82,10 +82,22 @@ fun sampleHealthData(): HealthData {
     )
 }
 
-/** The goals the previews measure against, so no tile reads 0% of nothing. */
+/**
+ * The goals the previews measure against, so no tile reads 0% of nothing.
+ *
+ * Deliberately a little beyond the sample day rather than level with it.
+ * They used to sit just under it -- 8,000 steps against 8,240 walked, 7h30
+ * against 7h32 slept -- and every goal in every preview came out closed: a
+ * progress bar that is simply full, and three rings that read as a bullseye
+ * with no way to tell they were arcs at all. A preview has to show the
+ * mechanism, and a finished one shows nothing but the end of it.
+ *
+ * Both are ordinary numbers for someone to have chosen: twelve thousand
+ * steps, and nine hours, the top of the 7-9 band rather than the bottom.
+ */
 val sampleGoals = Goals(
-    steps = 8_000,
-    sleepMinutes = 450,
+    steps = 12_000,
+    sleepMinutes = 540,
     energyKcal = -300,
     proteinGrams = 120,
     activeMinutes = 150,
