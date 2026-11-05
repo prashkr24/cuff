@@ -99,6 +99,7 @@
              only the system can actually send it. -->
         <receiver
             android:name=".widget.StripWidgetReceiver"
+            android:label="@string/widget_strip_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -109,6 +110,7 @@
         </receiver>
         <receiver
             android:name=".widget.SquareWidgetReceiver"
+            android:label="@string/widget_square_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -119,6 +121,7 @@
         </receiver>
         <receiver
             android:name=".widget.RowWidgetReceiver"
+            android:label="@string/widget_row_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -129,6 +132,7 @@
         </receiver>
         <receiver
             android:name=".widget.WideWidgetReceiver"
+            android:label="@string/widget_wide_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -139,6 +143,7 @@
         </receiver>
         <receiver
             android:name=".widget.TallWidgetReceiver"
+            android:label="@string/widget_tall_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -147,6 +152,24 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_tall" />
         </receiver>
+        <receiver
+            android:name=".widget.StackWidgetReceiver"
+            android:label="@string/widget_stack_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_stack" />
+        </receiver>
+        <!-- The cards inside a stack. BIND_REMOTEVIEWS is held by the system
+             alone, so declaring it here means only the platform can bind
+             this service and ask it for the contents of somebody's stack. -->
+        <service
+            android:name=".widget.StackWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
 
         <!-- The catalogue, and the add flow. Exported because the launcher
              starts it on behalf of the home screen; it does nothing without a

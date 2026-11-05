@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The sixth entry in the picker, and the only one that is not a Glance
+     widget. Dropping it places one cell; what goes in that cell is several
+     designs, chosen in WidgetConfigActivity and swiped through on the home
+     screen.
+
+     Four by two to begin with, and resizable: every card inside is composed
+     at whatever cell the stack is actually in, so the stack has no size of
+     its own to declare beyond a sensible start. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="310dp"
+    android:minHeight="150dp"
+    android:minResizeWidth="150dp"
+    android:minResizeHeight="150dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable"
+    android:configure="com.srineere.airbridge.widget.WidgetConfigActivity"
+    android:description="@string/widget_stack_description"
+    android:previewImage="@drawable/widget_stack_preview"
+    android:initialLayout="@layout/widget_stack" />

@@ -84,8 +84,10 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
         ScreenTitle("Widgets", onBack = onBack)
 
         Text(
-            "Long-press your home screen, choose Widgets, then Air Bridge. There are five sizes; " +
-                "dropping one opens this app, where you pick which of these it shows.",
+            "Long-press your home screen, choose Widgets, then Air Bridge. Five of the six " +
+                "entries are sizes: dropping one opens this app, where you pick which of these " +
+                "it shows. The sixth is a stack — one cell holding as many of them as you like, " +
+                "swiped through in place.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -161,6 +163,8 @@ internal fun WidgetGallery(
     inks: PaperInks,
     fits: (WidgetDesign) -> Boolean = { true },
     onPick: ((WidgetDesign) -> Unit)? = null,
+    /** Where this design sits in a stack being built, counting from one. */
+    place: ((WidgetDesign) -> Int?)? = null,
 ) {
     val families = remember { WidgetCatalogue.families() }
     val expanded = remember { mutableStateMapOf<WidgetFamily, Boolean>() }
@@ -186,7 +190,7 @@ internal fun WidgetGallery(
             color = MaterialTheme.extras.disabled,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
         )
-        PreviewGrid(shown, snapshot, now, inks, fits, onPick)
+        PreviewGrid(shown, snapshot, now, inks, fits, onPick, place)
     }
 }
 
@@ -199,6 +203,7 @@ private fun PreviewGrid(
     inks: PaperInks,
     fits: (WidgetDesign) -> Boolean = { true },
     onPick: ((WidgetDesign) -> Unit)? = null,
+    place: ((WidgetDesign) -> Int?)? = null,
 ) {
     designs.chunked(2).forEach { pair ->
         Row(
@@ -243,13 +248,36 @@ private fun PreviewGrid(
                             }
                         }
                     } else {
-                        WidgetPreview(
-                            face,
-                            snapshot.colourFor(design),
-                            Modifier.fillMaxWidth(),
-                            cardless = design.family == WidgetFamily.Type,
-                            caps = design.family != WidgetFamily.Tiles,
-                        )
+                        Box(Modifier.fillMaxWidth()) {
+                            WidgetPreview(
+                                face,
+                                snapshot.colourFor(design),
+                                Modifier.fillMaxWidth(),
+                                cardless = design.family == WidgetFamily.Type,
+                                caps = design.family != WidgetFamily.Tiles,
+                            )
+                            // Its place in the stack, not a tick: the order
+                            // cards were chosen in is the order they are
+                            // swiped through, and a tick would not say so.
+                            place?.invoke(design)?.let { at ->
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = CircleShape,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(6.dp)
+                                        .size(22.dp),
+                                ) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text(
+                                            "$at",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                     Text(
                         design.title,
@@ -332,9 +360,16 @@ private fun PlacedRow(config: WidgetConfig, snapshot: WidgetSnapshot, now: Long)
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(config.design.title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                config.design.summary,
+                if (config.designs.size > 1) "A stack of ${config.designs.size}" else config.design.title,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                if (config.designs.size > 1) {
+                    config.designs.joinToString(" · ") { it.title }
+                } else {
+                    config.design.summary
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

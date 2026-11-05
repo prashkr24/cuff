@@ -7,6 +7,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Button
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import com.srineere.airbridge.ui.SectionHeader
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -74,8 +89,9 @@ class WidgetConfigActivity : ComponentActivity() {
         }
 
         AppSettings.load(this)
-        val cell = cellFor(appWidgetId)
-        val changing = WidgetStore.read(this, appWidgetId) != null
+        val stack = isStack(appWidgetId)
+        val cell = cellFor(appWidgetId, stack)
+        val existing = WidgetStore.read(this, appWidgetId)
 
         setContent {
             val appearance by AppSettings.appearance.collectAsState()
@@ -95,27 +111,43 @@ class WidgetConfigActivity : ComponentActivity() {
                 Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxSize()) {
                     AddWidget(
                         cell = cell,
-                        changing = changing,
+                        stack = stack,
+                        existing = existing,
                         onCancel = ::finish,
-                        onPick = { design -> place(appWidgetId, WidgetConfig(design)) },
+                        onPick = { picked -> place(appWidgetId, WidgetConfig(picked), stack) },
                     )
                 }
             }
         }
     }
 
-    private fun place(appWidgetId: Int, config: WidgetConfig) {
+    private fun place(appWidgetId: Int, config: WidgetConfig, stack: Boolean) {
         WidgetStore.write(this, appWidgetId, config)
         WidgetRefresh.schedule(this)
         setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId))
         // Drawn before finishing, so the widget is never blank on arrival --
         // and by id, because the launcher composed it once already, before
         // there was anything to draw.
+        //
+        // A stack is told directly rather than looked up: the launcher does
+        // not list the id under its provider until this activity returns
+        // OK, so asking which provider owns it here answers "none".
         lifecycleScope.launch {
-            refreshWidget(applicationContext, appWidgetId)
+            if (stack) {
+                refreshStacks(applicationContext, intArrayOf(appWidgetId))
+            } else {
+                refreshWidget(applicationContext, appWidgetId)
+            }
             finish()
         }
     }
+
+    private fun isStack(appWidgetId: Int): Boolean = providerOf(appWidgetId)
+        ?.endsWith("StackWidgetReceiver") == true
+
+    private fun providerOf(appWidgetId: Int): String? = runCatching {
+        AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)?.provider?.className
+    }.getOrNull()
 
     /**
      * Which cell was dropped, from the provider that launched this.
@@ -125,10 +157,22 @@ class WidgetConfigActivity : ComponentActivity() {
      * configuration activity starts. The provider is certain: there is one
      * per size, which is the whole point of having five.
      */
-    private fun cellFor(appWidgetId: Int): WidgetSize {
-        val name = runCatching {
-            AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)?.provider?.className
-        }.getOrNull()
+    private fun cellFor(appWidgetId: Int, stack: Boolean): WidgetSize {
+        // The stack is the one provider without a size of its own, so it is
+        // the one that has to ask the options bundle. It is also the one
+        // that can afford to: a stack is resizable and recomposes its cards
+        // when it moves, so a cell read a moment too early costs a redraw
+        // rather than a wrong face.
+        if (stack) {
+            val options = runCatching {
+                AppWidgetManager.getInstance(this).getAppWidgetOptions(appWidgetId)
+            }.getOrNull()
+            val width = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0) ?: 0
+            val height = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0) ?: 0
+            if (width > 0 && height > 0) return WidgetSize.nearest(width, height)
+            return WidgetSize.Wide
+        }
+        val name = providerOf(appWidgetId)
         return when {
             name == null -> WidgetSize.Wide
             name.endsWith("StripWidgetReceiver") -> WidgetSize.Strip
@@ -154,9 +198,10 @@ class WidgetConfigActivity : ComponentActivity() {
 @Composable
 private fun AddWidget(
     cell: WidgetSize,
-    changing: Boolean,
+    stack: Boolean,
+    existing: WidgetConfig?,
     onCancel: () -> Unit,
-    onPick: (WidgetDesign) -> Unit,
+    onPick: (List<WidgetDesign>) -> Unit,
 ) {
     val context = LocalContext.current
     // A made-up person's week, as the catalogue and the tile editor use. The
@@ -167,6 +212,13 @@ private fun AddWidget(
     val now = remember { System.currentTimeMillis() }
     val inks = remember(context) { widgetColours(context).paperInks }
     val fitting = remember(cell) { WidgetCatalogue.forSize(cell).size }
+    val changing = existing != null
+
+    // A stack is built rather than chosen, so the list is held here until
+    // there is something to place. Order is the order they were tapped,
+    // which is the order they are swiped through -- and can be changed
+    // afterwards without starting again.
+    val chosen = remember { mutableStateListOf<WidgetDesign>().apply { addAll(existing?.designs.orEmpty()) } }
 
     Column(
         Modifier
@@ -176,39 +228,171 @@ private fun AddWidget(
             // activity drawing edge to edge, so without them the title
             // sat level with the clock and the last row of previews ran
             // under the home indicator.
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
-            .verticalScroll(rememberScrollState()),
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical)),
     ) {
-        ScreenTitle(if (changing) "Change this widget" else "Add a widget", onBack = onCancel)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-        ) {
-            Text(
-                "$fitting fit this space. Tap one to place it.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            ScreenTitle(
+                when {
+                    stack && changing -> "Change this stack"
+                    stack -> "Build a stack"
+                    changing -> "Change this widget"
+                    else -> "Add a widget"
+                },
+                onBack = onCancel,
             )
-            SizeChip(cell)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            ) {
+                Text(
+                    if (stack) {
+                        "$fitting fit this space. Tap as many as you want; " +
+                            "they go in one cell and you swipe between them."
+                    } else {
+                        "$fitting fit this space. Tap one to place it."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                SizeChip(cell)
+            }
+
+            if (stack && chosen.isNotEmpty()) {
+                StackLayers(
+                    cards = chosen,
+                    onMove = { from, to ->
+                        if (to in chosen.indices) chosen.add(to, chosen.removeAt(from))
+                    },
+                    onRemove = { chosen.removeAt(it) },
+                )
+            }
+
+            WidgetGallery(
+                snapshot = snapshot,
+                now = now,
+                inks = inks,
+                fits = { it.fits(cell) },
+                onPick = { design ->
+                    if (!stack) {
+                        onPick(listOf(design))
+                    } else if (!chosen.remove(design)) {
+                        chosen.add(design)
+                    }
+                },
+                place = if (!stack) null else {
+                    { design -> chosen.indexOf(design).takeIf { it >= 0 }?.plus(1) }
+                },
+            )
+
+            Text(
+                if (stack) {
+                    "Nothing is placed until you tap Add — backing out leaves your home screen " +
+                        "as it was. Tap a card again to take it out. Resize the stack afterwards " +
+                        "and every card redraws itself to suit the new cell."
+                } else {
+                    "Nothing is placed until you pick one — backing out leaves your home screen " +
+                        "as it was. Resize it afterwards and it redraws itself to suit the new " +
+                        "cell, and tapping it opens the screen about what it is showing."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.extras.disabled,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+            )
         }
 
-        WidgetGallery(
-            snapshot = snapshot,
-            now = now,
-            inks = inks,
-            fits = { it.fits(cell) },
-            onPick = onPick,
-        )
+        if (stack) {
+            Button(
+                onClick = { onPick(chosen.toList()) },
+                enabled = chosen.isNotEmpty(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 16.dp)
+                    .heightIn(min = 52.dp),
+            ) {
+                Text(
+                    when (chosen.size) {
+                        0 -> "Pick at least one"
+                        1 -> "Add this one"
+                        else -> "Add these ${chosen.size}"
+                    },
+                )
+            }
+        }
+    }
+}
 
-        Text(
-            "Nothing is placed until you pick one — backing out leaves your home screen as it " +
-                "was. Resize it afterwards and it redraws itself to suit the new cell, and " +
-                "tapping it opens the screen about what it is showing.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.extras.disabled,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-        )
+/**
+ * The cards already in the stack, in the order they will be swiped through.
+ *
+ * Above the catalogue rather than below it. The catalogue is long, and a
+ * list of what you have chosen that only appears after you have scrolled
+ * past everything is a list you will not find.
+ *
+ * Reordering is a pair of arrows rather than a drag. A drag is the nicer
+ * gesture and this list lives inside a scrolling column, where a long press
+ * that starts a drag and a long press that starts a scroll are the same
+ * gesture until it is too late to tell.
+ */
+@Composable
+private fun StackLayers(
+    cards: List<WidgetDesign>,
+    onMove: (from: Int, to: Int) -> Unit,
+    onRemove: (Int) -> Unit,
+) {
+    SectionHeader("Your stack")
+    Text(
+        "Paged through in this order. Every card is drawn at whatever cell the stack is in, so " +
+            "resizing the stack resizes all of them.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.extras.disabled,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 6.dp),
+    )
+    cards.forEachIndexed { index, card ->
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = CircleShape,
+                modifier = Modifier.size(22.dp),
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "${index + 1}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+            }
+            Text(
+                card.title,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(start = 10.dp, end = 6.dp),
+            )
+            IconButton(
+                onClick = { onMove(index, index - 1) },
+                enabled = index > 0,
+                modifier = Modifier.size(38.dp),
+            ) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up")
+            }
+            IconButton(
+                onClick = { onMove(index, index + 1) },
+                enabled = index < cards.lastIndex,
+                modifier = Modifier.size(38.dp),
+            ) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down")
+            }
+            IconButton(onClick = { onRemove(index) }, modifier = Modifier.size(38.dp)) {
+                Icon(Icons.Default.Close, contentDescription = "Take out of the stack")
+            }
+        }
     }
 }
 

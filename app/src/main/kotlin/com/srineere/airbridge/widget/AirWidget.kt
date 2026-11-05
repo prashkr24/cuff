@@ -82,15 +82,7 @@ class AirWidget : GlanceAppWidget() {
             NeedsSetup(appWidgetId, colours, cell)
             return
         }
-        val face = config.face(cell)
-        val onClick = openFor(config)
-        when (val design = config.design) {
-            is WidgetDesign.OfTile -> TileWidget(design.kind, face, snapshot, colours, onClick)
-            is WidgetDesign.OfBand -> BandWidget(design.face, face, snapshot, colours, onClick, now)
-            is WidgetDesign.OfRings -> RingsWidget(design.face, face, snapshot, colours, onClick)
-            is WidgetDesign.OfDials -> DialsWidget(design.face, face, snapshot, colours, onClick)
-            is WidgetDesign.OfType -> TypeWidget(design.face, face, snapshot, colours, onClick, now)
-        }
+        WidgetFace(config.design, cell, snapshot, colours, now, openFor(config.design))
     }
 
     @Composable
@@ -124,8 +116,24 @@ class AirWidget : GlanceAppWidget() {
  * falls through to the tab, which is the honest answer rather than a
  * setting.
  */
-private fun openFor(config: WidgetConfig): Action {
-    val route = when (val design = config.design) {
+private fun openFor(design: WidgetDesign): Action {
+    val route = routeFor(design)
+    return actionStartActivity(
+        MainActivity::class.java,
+        if (route == null) actionParametersOf() else actionParametersOf(WidgetRouteKey to route),
+    )
+}
+
+/**
+ * The screen behind a design, or null where there is no single one.
+ *
+ * Pulled out of [openFor] because a card inside a stack cannot carry a
+ * Glance action: a child of a collection is clicked through a fill-in
+ * intent against the collection's own template, so the stack needs the
+ * route as a value rather than as an [Action].
+ */
+internal fun routeFor(design: WidgetDesign): String? {
+    return when (design) {
         is WidgetDesign.OfTile -> design.kind.route
         is WidgetDesign.OfBand -> DEVICE_ROUTE
         // Several readings at once, so there is no one screen behind them.
@@ -141,10 +149,34 @@ private fun openFor(config: WidgetConfig): Action {
             else -> DEVICE_ROUTE
         }
     }
-    return actionStartActivity(
-        MainActivity::class.java,
-        if (route == null) actionParametersOf() else actionParametersOf(WidgetRouteKey to route),
-    )
+}
+
+/**
+ * One design, drawn at one cell size.
+ *
+ * The dispatch is here rather than inside the widget class because the
+ * stack draws the same faces without being a [GlanceAppWidget] at all: it
+ * composes each card through `GlanceRemoteViews` and hands the results to a
+ * `StackView`. Two copies of this `when` is two places for a family to be
+ * forgotten.
+ */
+@Composable
+internal fun WidgetFace(
+    design: WidgetDesign,
+    cell: WidgetSize,
+    snapshot: WidgetSnapshot,
+    colours: WidgetColours,
+    now: Long,
+    onClick: Action?,
+) {
+    val face = WidgetConfig.faceSizeOf(design, cell)
+    when (design) {
+        is WidgetDesign.OfTile -> TileWidget(design.kind, face, snapshot, colours, onClick)
+        is WidgetDesign.OfBand -> BandWidget(design.face, face, snapshot, colours, onClick, now)
+        is WidgetDesign.OfRings -> RingsWidget(design.face, face, snapshot, colours, onClick)
+        is WidgetDesign.OfDials -> DialsWidget(design.face, face, snapshot, colours, onClick)
+        is WidgetDesign.OfType -> TypeWidget(design.face, face, snapshot, colours, onClick, now)
+    }
 }
 
 internal const val DEVICE_ROUTE = "device"
@@ -200,7 +232,8 @@ internal suspend fun refreshWidgets(context: Context, reread: Boolean = true) {
     if (reread) WidgetSnapshotCache.invalidate()
     val manager = GlanceAppWidgetManager(context)
     val widget = AirWidget()
-    liveIds(context).forEach { id ->
+    refreshStacks(context)
+    glanceIds(context).forEach { id ->
         // One failure is one widget, not all of them: an id the launcher
         // reported and has since dropped must not stop the rest redrawing.
         runCatching { widget.update(context, manager.getGlanceIdBy(id)) }
@@ -209,6 +242,10 @@ internal suspend fun refreshWidgets(context: Context, reread: Boolean = true) {
 
 /** Redraws one, which is what placing or reconfiguring a widget needs. */
 internal suspend fun refreshWidget(context: Context, appWidgetId: Int) {
+    if (appWidgetId in stackIds(context)) {
+        refreshStacks(context, intArrayOf(appWidgetId))
+        return
+    }
     runCatching {
         AirWidget().update(context, GlanceAppWidgetManager(context).getGlanceIdBy(appWidgetId))
     }

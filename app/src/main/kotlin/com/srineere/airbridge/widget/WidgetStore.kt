@@ -13,18 +13,40 @@ import android.content.Context
  * the home screen redraws it, and a tap opens the screen about the thing
  * on the card.
  */
-data class WidgetConfig(val design: WidgetDesign) {
+data class WidgetConfig(val designs: List<WidgetDesign>) {
+    constructor(design: WidgetDesign) : this(listOf(design))
+
+    init {
+        require(designs.isNotEmpty()) { "a widget with no design is not a widget" }
+    }
+
     /**
-     * The face to draw in a cell of this size.
+     * What a single-card widget draws, and the first card of a stack.
      *
-     * A design that refuses the cell falls back to the nearest size it can
-     * honestly fill, never to an empty card. Nearest in both directions:
-     * falling back to the largest would draw a four-cell face in a strip,
-     * which is the worse of the two mistakes.
+     * A stack is the same row with more than one id in it rather than a
+     * store of its own: a stack holds the same designs as everything else,
+     * and two stores would be two answers to what a widget id was told to
+     * show.
      */
-    fun face(cell: WidgetSize): WidgetSize {
-        if (design.fits(cell)) return cell
-        return design.sizes.minByOrNull { kotlin.math.abs(it.ordinal - cell.ordinal) } ?: cell
+    val design: WidgetDesign get() = designs.first()
+
+    /** The face to draw in a cell of this size. */
+    fun face(cell: WidgetSize): WidgetSize = faceSizeOf(design, cell)
+
+    companion object {
+        /** Kept so a list of designs reads the same at every call site. */
+        fun of(designs: List<WidgetDesign>): WidgetConfig = WidgetConfig(designs)
+
+        /**
+         * A design that refuses the cell falls back to the nearest size it
+         * can honestly fill, never to an empty card. Nearest in both
+         * directions: falling back to the largest would draw a four-cell
+         * face in a strip, which is the worse of the two mistakes.
+         */
+        fun faceSizeOf(design: WidgetDesign, cell: WidgetSize): WidgetSize {
+            if (design.fits(cell)) return cell
+            return design.sizes.minByOrNull { kotlin.math.abs(it.ordinal - cell.ordinal) } ?: cell
+        }
     }
 }
 
@@ -39,6 +61,9 @@ object WidgetStore {
     private const val PREFS = "air_health"
     private const val PREFIX = "widget:"
     private const val FIELD = '\u001F'
+
+    /** Between a design and the face it was pinned to. */
+    private const val SIZE = '@'
 
     fun read(context: Context, appWidgetId: Int): WidgetConfig? =
         decode(
@@ -83,7 +108,8 @@ object WidgetStore {
         remove(context, stale.toIntArray())
     }
 
-    internal fun encode(config: WidgetConfig): String = config.design.id
+    internal fun encode(config: WidgetConfig): String =
+        config.designs.joinToString(FIELD.toString()) { it.id }
 
     /**
      * Null for anything this build cannot make sense of.
@@ -99,7 +125,10 @@ object WidgetStore {
      */
     internal fun decode(raw: String?): WidgetConfig? {
         if (raw.isNullOrEmpty()) return null
-        val design = WidgetCatalogue.byId(raw.substringBefore(FIELD)) ?: return null
-        return WidgetConfig(design)
+        // Anything after the separator is let go: a build in between
+        // stored a pinned face per card, and every card follows the cell
+        // now, so those rows are read for their designs alone.
+        val designs = raw.split(FIELD).mapNotNull { WidgetCatalogue.byId(it.substringBefore(SIZE)) }
+        return if (designs.isEmpty()) null else WidgetConfig(designs)
     }
 }

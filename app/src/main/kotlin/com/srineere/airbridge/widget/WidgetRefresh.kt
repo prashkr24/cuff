@@ -70,7 +70,13 @@ object WidgetRefresh {
     }
 }
 
-/** What the launcher actually has, across all five providers. */
+/**
+ * What the launcher actually has, across all six providers.
+ *
+ * The stack is in here with the other five and has to be: this set is what
+ * `prune` keeps, and a stack left out of it would have its row deleted the
+ * first time the worker ran.
+ */
 internal fun liveIds(context: Context): Set<Int> {
     val manager = AppWidgetManager.getInstance(context) ?: return emptySet()
     return RECEIVERS.flatMap { receiver ->
@@ -80,10 +86,40 @@ internal fun liveIds(context: Context): Set<Int> {
     }.toSet()
 }
 
+/** The ids drawn by Glance, which is every provider except the stack. */
+internal fun glanceIds(context: Context): Set<Int> {
+    val manager = AppWidgetManager.getInstance(context) ?: return emptySet()
+    return RECEIVERS.filterNot { it == StackWidgetReceiver::class.java }.flatMap { receiver ->
+        runCatching {
+            manager.getAppWidgetIds(ComponentName(context, receiver)).toList()
+        }.getOrDefault(emptyList())
+    }.toSet()
+}
+
+internal fun stackIds(context: Context): IntArray = runCatching {
+    AppWidgetManager.getInstance(context)
+        .getAppWidgetIds(ComponentName(context, StackWidgetReceiver::class.java))
+}.getOrDefault(IntArray(0))
+
+/**
+ * Rebuilds the frame and tells the platform the cards are stale.
+ *
+ * Two calls, not one. Updating the RemoteViews alone leaves the adapter
+ * holding the cards it composed last time; notifying alone leaves a stack
+ * whose frame was built for a different cell.
+ */
+internal fun refreshStacks(context: Context, ids: IntArray = stackIds(context)) {
+    if (ids.isEmpty()) return
+    val manager = AppWidgetManager.getInstance(context) ?: return
+    ids.forEach { runCatching { manager.updateAppWidget(it, stackViews(context, it)) } }
+    runCatching { manager.notifyAppWidgetViewDataChanged(ids, com.srineere.airbridge.R.id.stack_view) }
+}
+
 private val RECEIVERS = listOf(
     StripWidgetReceiver::class.java,
     SquareWidgetReceiver::class.java,
     RowWidgetReceiver::class.java,
     WideWidgetReceiver::class.java,
     TallWidgetReceiver::class.java,
+    StackWidgetReceiver::class.java,
 )

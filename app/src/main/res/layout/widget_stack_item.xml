@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One card of a stack.
+
+     Every item is this same layout, holding whatever Glance composed for
+     that design. It exists so the adapter has exactly one view type: a
+     RemoteViews straight out of Glance carries a different generated
+     layout id per card, and a collection recycling two of those against
+     one another draws the wrong card into the wrong frame. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/stack_item"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

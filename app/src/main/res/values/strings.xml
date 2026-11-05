@@ -16,4 +16,18 @@
     <string name="widget_row_description">A reading across a whole row. You pick which after you drop it.</string>
     <string name="widget_wide_description">A reading, its goal and its week. You pick which after you drop it.</string>
     <string name="widget_tall_description">The whole story, for the readings that fill it.</string>
+    <!-- Shown under each entry in the launcher's picker. Without these
+         every provider is called after the app, so the picker is six rows
+         of the same name and the only thing telling them apart is a
+         sentence under a thumbnail. -->
+    <string name="widget_strip_label">Small widget</string>
+    <string name="widget_square_label">Square widget</string>
+    <string name="widget_row_label">Row widget</string>
+    <string name="widget_wide_label">Wide widget</string>
+    <string name="widget_tall_label">Tall widget</string>
+    <string name="widget_stack_label">Stack</string>
+    <string name="widget_stack_description">Several widgets in one cell. Swipe through them.</string>
+    <string name="widget_stack_empty">Tap to choose what this stack holds</string>
+    <string name="widget_stack_previous">Previous card</string>
+    <string name="widget_stack_next">Next card</string>
 </resources>

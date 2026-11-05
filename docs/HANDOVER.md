@@ -483,13 +483,68 @@ Widgets lists them with a drawing of each.
 | The band | 6: the band, charge, last buzz, relaying, quiet, buzzes | nothing |
 | Rings | 3: three arcs, summary, trends | a bitmap for the arcs |
 | Dials | 3: sleep score, three dials, seven nights | a bitmap for the arcs |
-| Paper | 4: figure, sentence, rail, day | the light half of the palette |
 | Type alone | 4: steps, sleep, battery, relaying | the wallpaper's own hint |
 
-Still designed and not built: the three band widgets with **buttons** (Stop,
-Buzz, Find), **stacks**, and the one Dials face that wants a *line* --
-today's burn climbing against yesterday -- which needs a second bitmap
-renderer. `WidgetAddHow` on the canvas has what Android allows for stacks.
+Paper was built and then cut. Still designed and not built: the three band
+widgets with **buttons** (Stop, Buzz, Find).
+
+**Stacks.** A sixth provider, `StackWidgetReceiver`, and the only one that
+is not a Glance widget. One cell holds several cards; the frame is built by
+hand and each card is composed through `GlanceRemoteViews` from the same
+`WidgetFace` the five single-card providers draw, at the whole cell, so a
+resize redraws them all.
+
+**Nothing in a widget scrolls sideways.** `HorizontalScrollView` is not a
+remote view, and the adapter-backed ones that are (`ListView`, `GridView`,
+`StackView` and the two flippers) are vertical or do not scroll. Nor can a
+vertical list be made to snap. So the stack is an `AdapterViewFlipper`,
+which shows exactly one child and is therefore paged by construction, and
+the two chevrons in the bottom corners are how a page turns.
+
+Two earlier answers and why they went: a `StackView` genuinely stacks and
+swipes, but the swipe never arrived on the test launcher and it measures
+its children about a tenth smaller than the cell, so a card composed to the
+cell overflowed. A `ListView` scrolled reliably but scrolled like a list,
+resting between two cards.
+
+**Five things here will each cost you an afternoon.**
+
+* **Only certain views may appear in the layout.** `android.view.View` is
+  not one of them, and neither is `Space`. One of either anywhere in
+  `widget_stack.xml` and the launcher draws "an error occurred when loading
+  widget" in place of the whole thing, with
+  `getDefaultView couldn't find any view` the only clue, in the launcher's
+  log rather than ours. The chevrons are placed with `layout_gravity`
+  rather than by a row with a spacer for exactly this reason.
+* **The flipper's animations are animators, and must be a single
+  `objectAnimator`.** `AdapterViewAnimator` loads `android:inAnimation` with
+  `AnimatorInflater` and casts to `ObjectAnimator`, so a tween from
+  `res/anim` throws, and so does a `<set>` from `res/animator`, which
+  inflates to an `AnimatorSet`. Two properties in one animator is what
+  `propertyValuesHolder` is for.
+* **The animation cannot have a direction.** A RemoteViews cannot set a
+  flipper's animations, so the only way to animate backwards is to send a
+  different layout, and a different layout makes the host inflate the
+  widget again. The new flipper's adapter has not loaded yet, and
+  `setDisplayedChild` against an empty adapter clamps to zero, so every tap
+  on the back arrow jumped to the first card. It is a fade.
+* **The page is ours, in `StackPage`, not the flipper's.** `showNext`
+  through `partiallyUpdateAppWidget` arrives, returns cleanly, and does
+  nothing visible: it means "one more than wherever you are", and the host
+  rebinds and rebuilds that view whenever it likes. A stored index plus
+  `setDisplayedChild` on *every* update says exactly which card and
+  survives the rebuild.
+* **Every card is wrapped in `widget_stack_item.xml`, and cannot carry its
+  own click.** Glance hands back a RemoteViews whose layout id comes from
+  its generated pool and differs card by card; an adapter returning those
+  directly claims one view type while having several, and the recycler
+  draws one card's chart into another's frame. And a child of a collection
+  taps through a fill-in intent against the collection's template, so cards
+  are composed with `onClick = null` and `routeFor` supplies the route as a
+  value. That template is the one mutable `PendingIntent` in the app.
+
+The cards are composed in `onDataSetChanged`, which is allowed to be slow,
+never in `getViewAt`, which the launcher waits on.
 
 **The shape of it.** Five `AppWidgetProvider`s, one per cell size
 (`WidgetSize`), all backed by one `AirWidget : GlanceAppWidget`. Each has

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The glyph carries its own backdrop rather than the ImageView carrying
+     a background: the ImageView is the full height of the card so it is an
+     easy target, and a background on it would be a dark strip down the
+     whole edge. Drawn at its intrinsic size and centred, this is a pill
+     over the card instead. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="30dp"
+    android:height="30dp"
+    android:viewportWidth="30"
+    android:viewportHeight="30">
+    <path
+        android:fillColor="#A6000000"
+        android:pathData="M15,0 A15,15 0 1 1 15,30 A15,15 0 1 1 15,0 Z" />
+    <path
+        android:fillColor="#FFF2F4F6"
+        android:pathData="M18.1,9.6 L16.7,8.2 l-6,6.8 6,6.8 1.4,-1.4 -4.8,-5.4 z" />
+</vector>
