@@ -143,18 +143,27 @@ internal fun Bars(
 ) {
     if (values.isEmpty()) return
     val ceiling = top ?: values.maxOrNull()?.takeIf { it > 0f } ?: 1f
+    // A day is twenty-four slots, and twenty-three gaps of three points
+    // would be most of the chart. The more columns there are the less room
+    // there is to spend between them.
+    val between = if (values.size > 12) 1.5.dp else gap
     Row(
         modifier = GlanceModifier.fillMaxWidth().height(height),
         verticalAlignment = Alignment.Bottom,
     ) {
         values.forEachIndexed { index, value ->
-            if (index > 0) Spacer(GlanceModifier.width(gap))
+            if (index > 0) Spacer(GlanceModifier.width(between))
             // An hour with no reading keeps its slot and draws nothing. The
             // slot is the point: three readings on a day that is two hours
             // old should be three narrow bars at the left of a day, not
             // three slabs filling the card.
             if (blankZeros && value <= 0f) {
-                Spacer(GlanceModifier.defaultWeight())
+                // With a height, because a weighted child with no size at
+                // all is not measured and collapses: the five hours that
+                // held a reading shared the whole chart between them as if
+                // the day were five hours long. One transparent pixel is
+                // enough to make it a view that takes its share.
+                Box(modifier = GlanceModifier.defaultWeight().height(1.dp)) {}
                 return@forEachIndexed
             }
             val tall = (height.value * (value / ceiling)).coerceAtLeast(MIN_BAR).dp
@@ -247,6 +256,30 @@ internal fun Meter(
                     ),
             ) {}
         }
+    }
+}
+
+/**
+ * A filled pill, which is what the tab's `TileChip` is.
+ *
+ * Coloured words were close enough to read and not close enough to be the
+ * same component; side by side on a home screen and a tab the difference is
+ * the first thing you see.
+ */
+@Composable
+internal fun Chip(text: String, ink: ColorProvider, wash: ColorProvider, size: Int = 10) {
+    Box(
+        modifier = GlanceModifier.background(
+            imageProvider = ImageProvider(R.drawable.widget_pill),
+            contentScale = ContentScale.FillBounds,
+            colorFilter = ColorFilter.tint(wash),
+        ).padding(horizontal = 7.dp, vertical = 1.dp),
+    ) {
+        Text(
+            text,
+            style = TextStyle(color = ink, fontSize = size.sp, fontWeight = FontWeight.Medium),
+            maxLines = 1,
+        )
     }
 }
 

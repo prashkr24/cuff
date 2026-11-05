@@ -230,6 +230,42 @@ private fun MiniChart(chart: Chart?, colour: TileColour, paper: PaperInks? = nul
             }
         }
 
+        // The tile's own scatter, drawn natively. Compose can place a dot;
+        // Glance cannot, which is why the widget pays for a bitmap and this
+        // does not. Same quarter-span padding, same twelve per cent band.
+        is Chart.Scatter -> Canvas(Modifier.fillMaxWidth().height(24.dp)) {
+            val values = chart.values
+            if (values.isEmpty()) return@Canvas
+            val lowest = values.min()
+            val highest = values.max()
+            val span = (highest - lowest).takeIf { it > 0.0 } ?: 1.0
+            val low = lowest - span * 0.25
+            val high = highest + span * 0.25
+            fun y(value: Double) = (size.height - (value - low) / (high - low) * size.height).toFloat()
+            if (chart.low != null && chart.high != null) {
+                val top = y(chart.high)
+                drawRect(
+                    color = tint.copy(alpha = 0.12f),
+                    topLeft = Offset(0f, top),
+                    size = Size(size.width, (y(chart.low) - top).coerceAtLeast(1f)),
+                )
+            }
+            val radius = 1.8.dp.toPx()
+            val usable = (size.width - radius * 2).coerceAtLeast(1f)
+            values.forEachIndexed { index, value ->
+                val last = index == values.lastIndex
+                drawCircle(
+                    color = if (last) tint else tint.copy(alpha = 0.8f),
+                    radius = if (last) radius * 1.5f else radius,
+                    center = Offset(
+                        if (values.size <= 1) size.width / 2f
+                        else radius + usable * index / (values.size - 1f),
+                        y(value),
+                    ),
+                )
+            }
+        }
+
         // The same arcs the widget draws, drawn natively. Compose can make a
         // curve; Glance cannot, which is why the widget pays for a bitmap
         // and this does not.

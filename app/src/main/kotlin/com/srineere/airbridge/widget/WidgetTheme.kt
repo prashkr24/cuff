@@ -55,6 +55,19 @@ internal class WidgetColours(
         provide(mode, extraOf(lightExtras, colour, lightAccent), extraOf(darkExtras, colour, darkAccent))
 
     /**
+     * A health colour at the strength the tab's chips use behind their text.
+     *
+     * The tile draws its change chip as a filled pill at fourteen per cent,
+     * not as coloured words. The widget drew words, which is why the two
+     * never looked like the same component.
+     */
+    fun tileWash(colour: TileColour): ColorProvider = provide(
+        mode,
+        extraOf(lightExtras, colour, lightAccent).copy(alpha = CHIP_ALPHA),
+        extraOf(darkExtras, colour, darkAccent).copy(alpha = CHIP_ALPHA),
+    )
+
+    /**
      * The same colour, stepped back for the part of a chart that is not
      * today. Mixed toward the card rather than made transparent: a
      * translucent bar over a wallpaper is a bar whose colour depends on the
@@ -182,6 +195,29 @@ internal class WidgetColours(
         false -> ColorProvider(extraOf(darkExtras, colour, darkAccent))
     }
 
+    /** The stepped-back colour, as an ARGB int for the Canvas. */
+    fun tileDimArgb(colour: TileColour, dark: Boolean): Int {
+        val full = extraOf(
+            if (dark) darkExtras else lightExtras,
+            colour,
+            if (dark) darkAccent else lightAccent,
+        )
+        return argbOf(if (dark) darkTrackOf(full) else lightTrackOf(full))
+    }
+
+    /** A sleep stage, as an ARGB int. The stages keep their own palette. */
+    fun sleepStageArgb(stage: SleepStage, dark: Boolean): Int {
+        val extras = if (dark) darkExtras else lightExtras
+        return argbOf(
+            when (stage) {
+                SleepStage.Deep -> extras.sleepDeep
+                SleepStage.Light -> extras.sleepLight
+                SleepStage.Rem -> extras.sleepRem
+                SleepStage.Awake -> extras.sleepAwake
+            },
+        )
+    }
+
     /** The unfilled part of an arc. */
     fun trackArgb(dark: Boolean): Int =
         argbOf(if (dark) darkTrackOf(darkAccent) else lightTrackOf(lightAccent))
@@ -196,6 +232,9 @@ internal class PaperInks(
     val edge: Color,
     val tile: (TileColour) -> Color,
 )
+
+/** What the tab fills a chip with, from `TileChip`. */
+private const val CHIP_ALPHA = 0.14f
 
 private fun argbOf(colour: Color): Int = android.graphics.Color.argb(
     (colour.alpha * 255 + 0.5f).toInt(),

@@ -1,6 +1,13 @@
 package com.srineere.airbridge.widget
 
 import androidx.compose.runtime.Composable
+import androidx.glance.layout.height
+import androidx.glance.layout.ContentScale
+import androidx.glance.LocalContext
+import androidx.glance.ImageProvider
+import androidx.glance.Image
+import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.action.Action
@@ -33,7 +40,7 @@ import kotlin.math.roundToInt
  * label never moves, and a swipe or a resize changes the reading, not the
  * layout.
  */
-internal class Face(
+internal data class Face(
     val kicker: String,
     val figure: String,
     val sub: String,
@@ -42,6 +49,10 @@ internal class Face(
     val chart: Chart? = null,
     val meter: Float? = null,
     val chip: String? = null,
+    /** The tab's head shows "\u00b7 30 days" once the card is wide enough. */
+    val window: String? = null,
+    /** The full name, for the widths that have room for it. */
+    val longKicker: String? = null,
 )
 
 internal sealed interface Chart {
@@ -81,6 +92,15 @@ internal sealed interface Chart {
      * rectangles, so the one that costs a bitmap.
      */
     class Arcs(val parts: List<Pair<Float, TileColour>>) : Chart
+
+    /**
+     * One dot a reading, over the band half of them land in.
+     *
+     * A bar says "this much" and a dot says "here, against where you
+     * usually are" -- and six of the tiles say the second thing. Glance
+     * cannot draw a dot, so this one costs a bitmap.
+     */
+    class Scatter(val values: List<Double>, val low: Double?, val high: Double?) : Chart
 
     /** Arcs side by side, each with its figure in the middle. */
     class Dials(val parts: List<DialReading>) : Chart
@@ -170,7 +190,7 @@ private fun DrawFace(
             }
 
             WidgetSize.Square -> {
-                Head(face, tint, colours, showTrends)
+                Head(face, colour, tint, colours, showTrends, wide = false)
                 Gap(7.dp)
                 FigureAndUnit(face, 26, colours)
                 Gap(3.dp)
@@ -190,8 +210,34 @@ private fun DrawFace(
                 )
             }
 
-            WidgetSize.Wide, WidgetSize.Tall -> {
-                Head(face, tint, colours, showTrends)
+            // The tall face stacks, as the tile's XL does: the figure across
+            // the top and the chart under it with the whole width. Only the
+            // wide face puts them side by side.
+            WidgetSize.Tall -> {
+                Head(face, colour, tint, colours, showTrends, wide = true)
+                Gap(8.dp)
+                FigureAndUnit(face, 32, colours)
+                Gap(3.dp)
+                Sub(face.sub, colours.muted, size = 11)
+                face.detail?.let {
+                    Gap(3.dp)
+                    Sub(it, colours.faint, size = 10)
+                }
+                face.meter?.let {
+                    Gap(8.dp)
+                    Meter(it, innerWidth(padding), tint, colours.track, height = 5.dp)
+                }
+                Gap(10.dp)
+                DrawChart(
+                    face.chart, colour, colours,
+                    height = (innerHeight(padding).value - TALL_ABOVE_CHART)
+                        .coerceIn(40f, 260f).dp,
+                    width = innerWidth(padding),
+                )
+            }
+
+            WidgetSize.Wide -> {
+                Head(face, colour, tint, colours, showTrends, wide = true)
                 Gap(6.dp)
                 // All of it. A cap here was what left a field of empty card
                 // under the chart: a launcher's 4x4 is taller than the 300dp
@@ -199,6 +245,7 @@ private fun DrawFace(
                 // space it was given.
                 val chartHeight = (innerHeight(padding).value - WIDE_ABOVE_CHART)
                     .coerceIn(44f, 400f).dp
+                @Suppress("UNUSED_EXPRESSION") size
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     Column(modifier = GlanceModifier.width(FIGURE_COLUMN)) {
                         FigureAndUnit(face, if (size == WidgetSize.Tall) 30 else 25, colours)
@@ -227,18 +274,34 @@ private fun DrawFace(
     }
 }
 
+/**
+ * The tile's own heading.
+ *
+ * The full name and the window appear together once the card is wide
+ * enough, exactly as `TileHead` does it: of name, window and chip, the
+ * window is the one the screen behind the tile repeats in full, so it goes
+ * in before the long name does.
+ */
 @Composable
 private fun Head(
     face: Face,
+    colour: TileColour,
     tint: androidx.glance.unit.ColorProvider,
     colours: WidgetColours,
     showTrends: Boolean,
+    wide: Boolean,
 ) {
     Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Kicker(face.kicker, tint)
+        Kicker(if (wide) face.longKicker ?: face.kicker else face.kicker, tint)
+        if (wide) {
+            face.window?.let {
+                Spacer(GlanceModifier.width(4.dp))
+                Sub("· $it", colours.faint, size = 10)
+            }
+        }
         if (showTrends && face.chip != null) {
             Spacer(GlanceModifier.defaultWeight())
-            Sub(face.chip, tint, size = 10)
+            Chip(face.chip, tint, colours.tileWash(colour))
         }
     }
 }
@@ -266,25 +329,19 @@ private fun DrawChart(
 ) {
     when (chart) {
         null -> Unit
-        is Chart.Bars -> Bars(
-            chart.values,
-            colours.tile(colour),
-            colours.tileDim(colour),
-            height,
-            blankZeros = chart.blankZeros,
-            top = chart.ceiling,
-            highlightLast = chart.highlightLast,
+        is Chart.Bars -> BarsImage(chart, colour, colours, height, width)
+        is Chart.Stages -> StripeImage(
+            chart.parts.map { (share, stage) -> share to colours.sleepStageArgb(stage, colours.darkNow()) },
+            height.value.coerceAtMost(STRIPE_MAX).dp,
+            width,
         )
-        is Chart.Stages -> Stripe(
-            chart.parts.map { (share, stage) -> share to colours.sleepStage(stage) },
-            height = height.value.coerceAtMost(STRIPE_MAX).dp,
-            width = width,
+        is Chart.Split -> StripeImage(
+            chart.parts.map { (share, each) -> share to colours.tileArgb(each, colours.darkNow()) },
+            height.value.coerceAtMost(STRIPE_MAX).dp,
+            width,
         )
-        is Chart.Split -> Stripe(
-            chart.parts.map { (share, each) -> share to colours.tile(each) },
-            height = height.value.coerceAtMost(STRIPE_MAX).dp,
-            width = width,
-        )
+        is Chart.Scatter -> ScatterImage(chart, colour, colours, height, width)
+
         is Chart.Arcs -> RingImage(chart.parts, colours, height)
 
         // Only the thumbnail draws this; the widget lays its own
@@ -320,17 +377,29 @@ private fun DrawChart(
 
 // ------------------------------------------------------------- the reading
 
-internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
+/**
+ * What a tile says, as the tile itself says it.
+ *
+ * The head's name and the full title both come from the kind here rather
+ * than from each branch, so the rule the tab uses -- short where the card
+ * is narrow, full where it is wide -- cannot drift one kind at a time.
+ */
+internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? =
+    bodyFor(kind, snapshot)?.copy(kicker = kind.short, longKicker = kind.title)
+
+private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
     val health = snapshot.health
     val data = health.snapshot
     return when (kind) {
         TileKind.Heart -> health.restingTrend?.let { trend ->
             Face(
-                kicker = "Resting",
+                kicker = "",
+                window = "30 days",
                 figure = trend.latest.roundToInt().toString(),
                 unit = "bpm",
-                sub = "usual ${trend.usual.low.roundToInt()}–${trend.usual.high.roundToInt()}",
-                chart = Chart.Bars(trend.readings.tail(14)),
+                sub = usualBand(trend, 0),
+                // The whole month, as the tile plots it.
+                chart = scatterOf(trend, 30),
                 chip = chipOf(trend, "bpm"),
             )
         }
@@ -340,7 +409,8 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
             val low = samples.minOf { it.bpm }
             val high = samples.maxOf { it.bpm }
             Face(
-                kicker = "Heart",
+                kicker = "",
+                window = "today",
                 figure = latest.toString(),
                 unit = "bpm",
                 sub = "$low–$high today",
@@ -351,7 +421,8 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
         TileKind.Sleep -> health.lastNight?.let { night ->
             val score = health.sleepScore?.total
             Face(
-                kicker = "Sleep",
+                kicker = "",
+                window = "${health.nights.size} nights",
                 figure = night.asleep.asHoursMinutes(),
                 sub = if (score != null) "score $score" else "no score yet",
                 detail = "woke " + night.end.atZone(java.time.ZoneId.systemDefault())
@@ -363,10 +434,13 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
 
         TileKind.Steps -> {
             val goal = snapshot.goals.steps
+            val percent = if (goal > 0) (health.stepProgress(goal) * 100).roundToInt() else 0
             Face(
-                kicker = "Steps",
+                kicker = "",
+                window = "7 days",
                 figure = "%,d".format(health.stepsToday),
-                sub = if (goal > 0) "of %,d".format(goal) else "today",
+                // The tab's own line: a share of the goal, not the remainder.
+                sub = if (goal > 0) "$percent%% of %,d".format(goal) else "today",
                 detail = if (goal > 0 && health.stepsToGo(goal) > 0) {
                     "%,d to go".format(health.stepsToGo(goal))
                 } else if (goal > 0) "goal met" else null,
@@ -381,7 +455,7 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
             val eaten = data.eatenToday ?: 0.0
             val burned = data.burnedToday ?: 0.0
             Face(
-                kicker = "Energy",
+                kicker = "",
                 figure = signed(balance.roundToInt()),
                 unit = "kcal",
                 sub = if (balance < 0) "under" else "over",
@@ -397,14 +471,24 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
         }
 
         TileKind.Activity -> {
-            val daily = data.sessions.toDailyMinutes()
-            val today = daily.lastOrNull()?.value?.roundToInt() ?: 0
+            val sessions = data.sessions
+            // The tile totals the sessions themselves rather than a daily
+            // series, so the two agreed on the week and disagreed on today.
+            val minutes = sessions.sumOf {
+                java.time.Duration.between(it.start, it.end).toMinutes()
+            }
             Face(
-                kicker = "Activity",
-                figure = today.toString(),
+                kicker = "",
+                window = "7 days",
+                figure = minutes.toString(),
                 unit = "min",
-                sub = sessionNote(data.sessions.size),
-                chart = Chart.Bars(daily.tail(7)),
+                sub = sessionNote(sessions.size),
+                chart = Chart.Bars(
+                    sessions.map {
+                        java.time.Duration.between(it.start, it.end).toMinutes().toFloat()
+                    }.takeLast(7),
+                    highlightLast = false,
+                ),
                 chip = health.activityTrend?.let { chipOf(it, "min", decimals = 0) },
             )
         }
@@ -419,21 +503,26 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                     ?.let { Triple("SpO₂", "${it.value.roundToInt()}%", TileColour.Sleep) },
             )
             if (rows.isEmpty()) return null
+            val inRange = health.vitals.count { it.latestIsUsual }
             Face(
-                kicker = "Vitals",
-                figure = rows.first().second,
-                sub = rows.first().first.lowercase(),
+                kicker = "",
+                // The tile's own sentence: how many of them are where they
+                // usually are, which is the only figure Vitals has.
+                figure = inRange.toString(),
+                unit = "of ${health.vitals.size}",
+                sub = "in range",
                 chart = Chart.Rows(rows),
             )
         }
 
         TileKind.Hrv -> health.hrvTrend?.let { trend ->
             Face(
-                kicker = "HRV",
+                kicker = "",
+                window = "14 nights",
                 figure = trend.latest.roundToInt().toString(),
                 unit = "ms",
-                sub = "usual ${trend.usual.low.roundToInt()}–${trend.usual.high.roundToInt()}",
-                chart = Chart.Bars(trend.readings.tail(14)),
+                sub = usualBand(trend, 0),
+                chart = scatterOf(trend, 14),
                 chip = chipOf(trend, "ms"),
             )
         }
@@ -444,7 +533,7 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
             val carbs = data.carbsToday ?: 0.0
             val fat = data.fatToday ?: 0.0
             Face(
-                kicker = "Food",
+                kicker = "",
                 figure = "%,d".format(eaten.roundToInt()),
                 unit = "kcal",
                 sub = mealNote(data.mealsDaily.values.lastOrNull() ?: 0),
@@ -462,48 +551,84 @@ internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
 
         TileKind.Weight -> health.weightTrend?.let { trend ->
             Face(
-                kicker = "Weight",
+                kicker = "",
+                window = "30 days",
                 figure = "%.1f".format(trend.latest),
                 unit = "kg",
-                sub = "usual %.1f–%.1f".format(trend.usual.low, trend.usual.high),
-                chart = Chart.Bars(trend.readings.tail(14)),
+                sub = usualBand(trend, 1),
+                chart = scatterOf(trend, 30),
                 chip = chipOf(trend, "kg", decimals = 1),
             )
         }
 
         TileKind.Breathing -> health.breathingTrend?.let { trend ->
             Face(
-                kicker = "Breathing",
+                kicker = "",
+                window = "30 nights",
                 figure = "%.1f".format(trend.latest),
                 unit = "br/min",
-                sub = "usual %.1f–%.1f".format(trend.usual.low, trend.usual.high),
-                chart = Chart.Bars(trend.readings.tail(14)),
+                sub = usualBand(trend, 1),
+                chart = scatterOf(trend, 14),
                 chip = chipOf(trend, "", decimals = 1),
             )
         }
 
         TileKind.Skin -> health.skinTrend?.let { trend ->
             Face(
-                kicker = "Skin temp",
+                kicker = "",
+                window = "30 nights",
                 figure = signedDecimal(trend.latest),
                 unit = "°C",
-                sub = "vs your baseline",
-                chart = Chart.Bars(trend.readings.tail(14)),
+                // A band either side of zero: a dash between two signed
+                // numbers reads as a subtraction, so it is spelled out.
+                sub = usualBand(trend, 1, signed = true),
+                chart = scatterOf(trend, 14),
                 chip = chipOf(trend, "", decimals = 1),
             )
         }
 
         TileKind.Oxygen -> health.oxygenTrend?.let { trend ->
             Face(
-                kicker = "SpO₂",
+                kicker = "",
+                window = "30 nights",
                 figure = trend.latest.roundToInt().toString(),
                 unit = "%",
-                sub = "overnight",
-                chart = Chart.Bars(trend.readings.tail(14)),
+                sub = usualBand(trend, 0),
+                chart = scatterOf(trend, 14),
                 chip = chipOf(trend, "", decimals = 0),
             )
         }
     }
+}
+
+/** The tile's own scatter: the newest [count] readings, and the usual band. */
+private fun scatterOf(trend: Trend, count: Int): Chart.Scatter = Chart.Scatter(
+    values = trend.readings.takeLast(count).map { it.value },
+    low = trend.usual.low,
+    high = trend.usual.high,
+)
+
+/**
+ * "usual 54-59", at the decimals that metric is worth.
+ *
+ * Where a bound is negative the dash is spelled out, because a hyphen
+ * between two signed numbers reads as a subtraction: "-0.2--0.4".
+ */
+private fun usualBand(trend: Trend, decimals: Int, signed: Boolean = false): String {
+    val from = bound(trend.usual.low, decimals, signed)
+    val to = bound(trend.usual.high, decimals, signed)
+    val join = if (trend.usual.low < 0 || trend.usual.high < 0) " to " else "–"
+    return "usual $from$join$to"
+}
+
+private fun bound(value: Double, decimals: Int, signed: Boolean): String {
+    val text = if (decimals == 0) {
+        value.roundToInt().toString()
+    } else {
+        "%.${decimals}f".format(value)
+    }
+    val typographic = text.replace("-", "−")
+    return if (signed && value > 0) "+$typographic" else typographic
 }
 
 // ------------------------------------------------------------------ pieces
@@ -515,6 +640,9 @@ private const val SQUARE_ABOVE_CHART = 78f
 
 /** The kicker and its gap: the rest of a wide card is the chart's row. */
 private const val WIDE_ABOVE_CHART = 26f
+
+/** The head, the figure and its two lines, above a tall card's chart. */
+private const val TALL_ABOVE_CHART = 118f
 private val FIGURE_COLUMN = 96.dp
 
 private fun List<Reading>.tail(count: Int): List<Float> =
@@ -608,4 +736,92 @@ private fun chipOfMinutes(trend: Trend): String {
     val arrow = if (minutes > 0) "↑" else "↓"
     val size = abs(minutes)
     return if (size < 60) "$arrow ${size}m" else "$arrow ${size / 60}h ${size % 60}m"
+}
+
+/**
+ * The tile's scatter, drawn to a bitmap and shown as an Image.
+ *
+ * Sized from the cell rather than a constant, and keyed on everything that
+ * changes a pixel so scrolling past a widget does not redraw a Canvas that
+ * would come out identical.
+ */
+@Composable
+private fun ScatterImage(
+    chart: Chart.Scatter,
+    colour: TileColour,
+    colours: WidgetColours,
+    height: Dp,
+    width: Dp,
+) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val argb = colours.tileArgb(colour, colours.isDark(context))
+    val widthPx = (width.value * density).toInt()
+    val heightPx = (height.value * density).toInt()
+    val bitmap = remember(widthPx, heightPx, chart.values, chart.low, chart.high, argb) {
+        ScatterBitmap.draw(widthPx, heightPx, chart.values, chart.low, chart.high, argb, density)
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.fillMaxWidth().height(height),
+    )
+}
+
+/** Which half of the palette a bitmap should be painted from. */
+@Composable
+internal fun WidgetColours.darkNow(): Boolean = isDark(LocalContext.current)
+
+/**
+ * A bar chart as one Image.
+ *
+ * Not as a Row of Boxes: Glance containers hold ten children and quietly
+ * drop the rest, so a week came out as five days and a day as five hours.
+ */
+@Composable
+private fun BarsImage(
+    chart: Chart.Bars,
+    colour: TileColour,
+    colours: WidgetColours,
+    height: Dp,
+    width: Dp,
+) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val dark = colours.isDark(context)
+    val ink = colours.tileArgb(colour, dark)
+    val dim = colours.tileDimArgb(colour, dark)
+    val widthPx = (width.value * density).toInt()
+    val heightPx = (height.value * density).toInt()
+    val bitmap = remember(widthPx, heightPx, chart.values, chart.ceiling, ink, dim) {
+        ChartBitmap.bars(
+            widthPx, heightPx, chart.values, chart.ceiling, ink, dim,
+            chart.highlightLast, chart.blankZeros, density,
+        )
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.fillMaxWidth().height(height),
+    )
+}
+
+/** Proportional segments as one Image, for the same reason. */
+@Composable
+private fun StripeImage(parts: List<Pair<Float, Int>>, height: Dp, width: Dp) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val widthPx = (width.value * density).toInt()
+    val heightPx = (height.value * density).toInt()
+    val bitmap = remember(widthPx, heightPx, parts) {
+        ChartBitmap.stripe(widthPx, heightPx, parts, density)
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.fillMaxWidth().height(height),
+    )
 }
