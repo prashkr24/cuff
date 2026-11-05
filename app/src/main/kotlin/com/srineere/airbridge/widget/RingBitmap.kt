@@ -25,6 +25,22 @@ internal object RingBitmap {
     const val MAX_PX = 192
 
     /**
+     * How thick an arc is, and how far apart two of them sit, as shares of
+     * the width.
+     *
+     * The gap was 0.035 to begin with and three closed rings came out as a
+     * bullseye: four pixels between them at thumbnail size, which is to say
+     * none. A ring has to read as a ring on the day everything is finished,
+     * because that is the day someone most wants to look at it. So the gap
+     * is wider and the stroke a little thinner to pay for it.
+     *
+     * Three arcs at these numbers spend 0.405 of the width and leave a hole
+     * about a fifth of it, which is enough to see.
+     */
+    const val STROKE = 0.095f
+    const val GAP = 0.06f
+
+    /**
      * @param arcs outermost first, each a fraction of a full circle
      * @param stroke how thick each arc is, as a share of the bitmap's width
      * @param gap the space between two arcs, as the same share
@@ -33,8 +49,8 @@ internal object RingBitmap {
         sizePx: Int,
         arcs: List<Pair<Float, Int>>,
         track: Int,
-        stroke: Float = 0.105f,
-        gap: Float = 0.035f,
+        stroke: Float = STROKE,
+        gap: Float = GAP,
     ): Bitmap {
         val side = sizePx.coerceIn(24, MAX_PX)
         val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)

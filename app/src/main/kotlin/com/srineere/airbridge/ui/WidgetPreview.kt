@@ -32,6 +32,7 @@ import com.srineere.airbridge.health.TileColour
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.widget.Chart
 import com.srineere.airbridge.widget.Face
+import com.srineere.airbridge.widget.RingBitmap
 
 /**
  * A widget at thumbnail size.
@@ -214,8 +215,11 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
         // and this does not.
         is Chart.Arcs -> Canvas(Modifier.fillMaxWidth().height(46.dp)) {
             val side = kotlin.math.min(size.width, size.height)
-            val strokePx = side * 0.115f
-            val gapPx = side * 0.04f
+            // The widget's own numbers, not a second set: a thumbnail whose
+            // rings are a different thickness is a thumbnail of a different
+            // widget.
+            val strokePx = side * RingBitmap.STROKE
+            val gapPx = side * RingBitmap.GAP
             var inset = strokePx / 2f
             arcColours.forEachIndexed { index, colour ->
                 val box = side - inset * 2f
