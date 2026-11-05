@@ -111,19 +111,34 @@ internal data class RelaySilence(
     val quietEnabled: Boolean = false,
     val startMinute: Int = 1320,
     val endMinute: Int = 420,
+    /**
+     * Calls still reach the wrist inside the quiet window; everything else
+     * waits for morning.
+     *
+     * The window exists so a night of messages cannot wake you, and that is
+     * a different wish from not wanting to know the phone is ringing. A pause
+     * is untouched by this: it is an answer to "not now" given by hand a few
+     * minutes ago, and a window set once months ago does not outrank it.
+     */
+    val callsStillRing: Boolean = false,
 ) {
     init {
         require(pauseUntil >= -1 && startMinute in 0..1439 && endMinute in 0..1439)
         require(!quietEnabled || startMinute != endMinute) { "Choose different start and end times" }
     }
-    fun reason(now: Long, zone: TimeZone = TimeZone.getDefault()): String? {
+    /**
+     * Why the band must stay still, or null when it may buzz. [isCall] is the
+     * one thing [callsStillRing] can let through the quiet window.
+     */
+    fun reason(now: Long, zone: TimeZone = TimeZone.getDefault(), isCall: Boolean = false): String? {
         if (pauseUntil == -1L || pauseUntil > now) return "paused"
         if (!quietEnabled) return null
         val local = Calendar.getInstance(zone).apply { timeInMillis = now }
         val minute = local.get(Calendar.HOUR_OF_DAY) * 60 + local.get(Calendar.MINUTE)
         val quiet = if (startMinute < endMinute) minute >= startMinute && minute < endMinute
             else minute >= startMinute || minute < endMinute
-        return if (quiet) "quiet_hours" else null
+        if (!quiet) return null
+        return if (isCall && callsStillRing) null else "quiet_hours"
     }
 
     /**
@@ -248,7 +263,12 @@ internal data class RelayRuleConfig(
 }
 
 /** Latest wins ties; a person-specific rule outranks an app default. */
-internal data class RelayBurstChoice(val match: RelayMatch, val receivedAt: Long) {
+internal data class RelayBurstChoice(
+    val match: RelayMatch,
+    val receivedAt: Long,
+    /** Kept so a burst waiting out its cooldown still knows if a call is in it. */
+    val kind: RelayAlertKind = RelayAlertKind.MESSAGE,
+) {
     fun prefer(other: RelayBurstChoice): RelayBurstChoice =
         if (other.match.specificity > match.specificity ||
             (other.match.specificity == match.specificity && other.receivedAt >= receivedAt)) other else this

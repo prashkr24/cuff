@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.ui.theme.extras
 import kotlinx.coroutines.delay
@@ -280,8 +281,49 @@ fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: Str
 )
 
 /**
+ * The switch that lives in a row, as against the one in a [StatusToggle].
+ *
+ * Material gives every switch one size, so the switch that turns the whole
+ * relay on and the switch beside the twelfth item in a list were drawn at
+ * exactly the same weight. A list of them reads as a list of equals, and the
+ * card at the top stops looking like the thing that decides.
+ *
+ * Scaled rather than rebuilt: the modifier changes what is drawn and not what
+ * is measured, so the switch still answers to a full 52 x 32dp of finger.
+ */
+@Composable
+fun RowSwitch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?) = Switch(
+    checked = checked,
+    onCheckedChange = onCheckedChange,
+    modifier = Modifier.scale(ROW_SWITCH),
+)
+
+private const val ROW_SWITCH = 0.82f
+
+/**
+ * How far a sub-option sits in from the row it belongs to.
+ *
+ * A setting that only exists while another is on is a child of it, and the
+ * indent is what says so. Two values, not a free number: [UnderIcon] lines a
+ * child up with the title of a parent that carries an icon, [UnderTitle] is
+ * one step in from a parent that does not, and a third screen cannot invent
+ * a third indent.
+ */
+object Indent {
+    /** 20dp gutter + a 38dp icon + the 14dp gap after it. */
+    val UnderIcon = 72.dp
+
+    /** 20dp gutter + one step. */
+    val UnderTitle = 40.dp
+}
+
+/**
  * A tappable row. Presses settle with a spring rather than snapping, which is
  * the motion the whole app uses.
+ *
+ * [indent] makes it a sub-option of the row above: set in, set smaller, and
+ * without an icon of its own, because a child that is drawn exactly like its
+ * parent is not read as a child.
  */
 @Composable
 fun SettingsRow(
@@ -291,7 +333,9 @@ fun SettingsRow(
     onClick: (() -> Unit)? = null,
     leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    indent: Dp = 0.dp,
 ) {
+    val nested = indent > 0.dp
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -309,8 +353,13 @@ fun SettingsRow(
                 if (onClick == null) Modifier
                 else Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick)
             )
-            .heightIn(min = 56.dp)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .heightIn(min = if (nested) 48.dp else 56.dp)
+            .padding(
+                start = if (nested) indent else 20.dp,
+                end = 20.dp,
+                top = if (nested) 6.dp else 10.dp,
+                bottom = if (nested) 6.dp else 10.dp,
+            ),
     ) {
         if (leading != null) leading()
         else if (icon != null) {
@@ -325,11 +374,16 @@ fun SettingsRow(
             }
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                title,
+                style = if (nested) MaterialTheme.typography.bodyMedium
+                    else MaterialTheme.typography.bodyLarge,
+            )
             if (subtitle != null) {
                 Text(
                     subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = if (nested) MaterialTheme.typography.bodySmall
+                        else MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )

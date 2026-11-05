@@ -66,6 +66,24 @@ class RelayRulePolicyTest {
         assertNull(silence.reason(time(18), TimeZone.getTimeZone("UTC")))
         assertNull(RelaySilence(startMinute = 0, endMinute = 0).reason(time(12)))
     }
+    @Test fun `calls cross the quiet window only when asked and never a pause`() {
+        val utc = TimeZone.getTimeZone("UTC")
+        val strict = RelaySilence(quietEnabled = true)
+        // Off by default: the window silences a call exactly as it always did.
+        assertEquals("quiet_hours", strict.reason(time(23), utc, isCall = true))
+
+        val open = RelaySilence(quietEnabled = true, callsStillRing = true)
+        assertNull(open.reason(time(23), utc, isCall = true))
+        assertEquals("quiet_hours", open.reason(time(23), utc, isCall = false))
+        // Outside the window nothing is silenced either way.
+        assertNull(open.reason(time(12), utc, isCall = false))
+
+        // A pause is by hand and recent; the window is neither, so it cannot
+        // overrule one.
+        val paused = RelaySilence(pauseUntil = -1, quietEnabled = true, callsStillRing = true)
+        assertEquals("paused", paused.reason(time(23), utc, isCall = true))
+        assertEquals("paused", paused.reason(time(12), utc, isCall = true))
+    }
     @Test(expected = IllegalArgumentException::class) fun `equal enabled times rejected`() { RelaySilence(quietEnabled = true, startMinute = 0, endMinute = 0) }
 
     // The relay schedules one wake-up for this instead of looking every

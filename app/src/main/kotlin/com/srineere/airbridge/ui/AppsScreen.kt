@@ -31,7 +31,6 @@ import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -218,7 +217,7 @@ private fun AppRow(
     ) {
         AppIcon(app, size = 34)
         Text(app.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Switch(checked = enabled, onCheckedChange = onToggle)
+        RowSwitch(checked = enabled, onCheckedChange = onToggle)
     }
     if (enabled) {
         AlertKinds(app, rule, callers, onOpen)

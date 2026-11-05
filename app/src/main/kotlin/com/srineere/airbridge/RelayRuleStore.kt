@@ -83,7 +83,11 @@ internal object RelayRuleStore {
                 SavedChat(chat.getString("packageName"), chat.getString("label"), chat.getString("kind"),
                     if (chat.isNull("preset")) null else RelayPreset.parse(chat.getString("preset")))
             },
-            silence = RelaySilence(quiet.getLong("pauseUntil"), quiet.getBoolean("quietEnabled"), quiet.getInt("startMinute"), quiet.getInt("endMinute")),
+            // Configs written before calls could cross the quiet window have
+            // no such key, and false is exactly how they behaved.
+            silence = RelaySilence(quiet.getLong("pauseUntil"), quiet.getBoolean("quietEnabled"),
+                quiet.getInt("startMinute"), quiet.getInt("endMinute"),
+                quiet.optBoolean("callsStillRing", false)),
             // Configs written before the ring held its session stored a
             // per-pulse reconnect interval, which no longer means anything.
             ring = if (ring == null) RelayRingSettings() else RelayRingSettings(
@@ -138,7 +142,8 @@ internal object RelayRuleStore {
             .put("defaultAppCallPreset", config.defaultAppCallPreset.id)
             .put("apps", apps).put("chats", chats).put("everyoneElseSilent", config.everyoneElseSilent)
             .put("silence", JSONObject().put("pauseUntil", s.pauseUntil).put("quietEnabled", s.quietEnabled)
-                .put("startMinute", s.startMinute).put("endMinute", s.endMinute))
+                .put("startMinute", s.startMinute).put("endMinute", s.endMinute)
+                .put("callsStillRing", s.callsStillRing))
             .put("ring", JSONObject().put("gapMillis", config.ring.gapMillis)
                 .put("maxSeconds", config.ring.maxSeconds))
         return json

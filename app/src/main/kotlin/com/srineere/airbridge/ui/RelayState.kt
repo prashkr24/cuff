@@ -370,6 +370,11 @@ internal class RelayState(private val context: Context, private val invalidate: 
         config.copy(silence = config.silence.copy(quietEnabled = enabled))
     }
 
+    /** Whether a call may still reach the wrist inside the quiet window. */
+    fun setCallsStillRing(enabled: Boolean) = update { config ->
+        config.copy(silence = config.silence.copy(callsStillRing = enabled))
+    }
+
     /**
      * Both ends at once, because the rules refuse a window that ends when it
      * starts and setting one end at a time would walk through that state.

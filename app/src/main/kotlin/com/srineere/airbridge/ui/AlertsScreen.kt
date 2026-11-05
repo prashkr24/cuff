@@ -12,10 +12,8 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.People
-import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -166,7 +164,7 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
         icon = Icons.Outlined.DirectionsWalk,
         onClick = { onOpen("vibration/${VibrationTarget.StepGoal.encode()}") },
         trailing = {
-            Switch(
+            RowSwitch(
                 checked = settings.buzzOnGoal,
                 onCheckedChange = { update(settings.copy(buzzOnGoal = it)) },
             )
@@ -180,7 +178,7 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
         icon = Icons.Outlined.Schedule,
         onClick = { onOpen("vibration/${VibrationTarget.HourlyNudge.encode()}") },
         trailing = {
-            Switch(
+            RowSwitch(
                 checked = settings.hourlyNudge,
                 onCheckedChange = { update(settings.copy(hourlyNudge = it)) },
             )
@@ -191,12 +189,12 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
     // whether it happens at all.
     if (settings.hourlyNudge) {
         SettingsRow(
+            indent = Indent.UnderIcon,
             title = "Also show it on this phone",
             subtitle = "A silent notification each time it nudges. Change its sound " +
                 "or hide it in Android's own notification settings.",
-            icon = Icons.Outlined.PhoneAndroid,
             trailing = {
-                Switch(
+                RowSwitch(
                     checked = settings.nudgeOnPhone,
                     onCheckedChange = { update(settings.copy(nudgeOnPhone = it)) },
                 )

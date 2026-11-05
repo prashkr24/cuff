@@ -12,13 +12,18 @@ class RelayRuleStoreTest {
                 "com.calendar" to RelayAppRule(false)),
             chats = mapOf("private-chat-hash" to SavedChat("com.whatsapp", "Chat", "name", RelayPreset.MUTE),
                 "other-hash" to SavedChat("com.whatsapp.w4b", "Shop")),
-            silence = RelaySilence(-1, true, 540, 1020),
+            silence = RelaySilence(-1, true, 540, 1020, callsStillRing = true),
             ring = RelayRingSettings(450, 120), everyoneElseSilent = true)
         val actual = RelayRuleStore.decode(JSONObject(RelayRuleStore.encode(expected).toString()))
         assertEquals(expected, actual)
         assertNull(actual.apps["com.calendar"]!!.preset)
         assertNull(actual.apps["com.calendar"]!!.callPreset)
         assertTrue(actual.apps["com.whatsapp"]!!.enabled)
+    }
+    @Test fun `settings saved before calls could cross the quiet window keep it shut`() {
+        val before = RelayRuleStore.encode(RelayRuleConfig(silence = RelaySilence(quietEnabled = true)))
+        before.getJSONObject("silence").remove("callsStillRing")
+        assertFalse(RelayRuleStore.decode(before).silence.callsStillRing)
     }
     @Test(expected = IllegalArgumentException::class) fun `newer schema is not treated as an empty default`() {
         val json = RelayRuleStore.encode(RelayRuleConfig()).put("version", 7)

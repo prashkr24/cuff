@@ -76,6 +76,12 @@ class CalendarRelayService : Service() {
         val packageName: String,
         val callerId: String?,
         val match: RelayMatch,
+        /**
+         * Whether a call started this, which the preset cannot answer: a
+         * message rule set to Ring rings exactly the same way, and only one
+         * of the two may cross a quiet window set to let calls through.
+         */
+        val kind: RelayAlertKind,
         val startedAt: Long,
         /**
          * The audio mode when the ring began. Some apps already hold the audio
@@ -176,6 +182,8 @@ class CalendarRelayService : Service() {
             .setContentText(when {
                 ring != null -> "Ringing your Air · tap Silence to stop"
                 silence == "paused" -> "Paused · No notification vibrations"
+                silence == "quiet_hours" && RelayRuleStore.read(this).silence.callsStillRing ->
+                    "Quiet hours · Calls only"
                 silence == "quiet_hours" -> "Quiet hours · No notification vibrations"
                 else -> "Listening for your notification rules"
             })
@@ -198,6 +206,14 @@ class CalendarRelayService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val coalescer = RelayCoalescer()
     private var holdingFollowUp = false
+    /**
+     * Whether a call is among the alerts waiting out the cooldown.
+     *
+     * The follow-up asks about the silence before it knows what it is holding
+     * -- it has to, because being silenced means dropping the burst rather
+     * than taking it -- so the one fact it needs is carried here instead.
+     */
+    private var followUpHasCall = false
     private val followUp = Runnable { sendFollowUp() }
     private val watchdog = Runnable {
         saveOutcome("Relay command exceeded its deadline; stopped. Delivery is uncertain; no retry.")
@@ -383,7 +399,7 @@ class CalendarRelayService : Service() {
             record(nextId(), packageName, postedAt, "filtered")
             return
         }
-        val silence = config.silence.reason(now)
+        val silence = config.silence.reason(now, isCall = kind == RelayAlertKind.CALL)
         if (silence != null) {
             Log.i(TAG, "dropped pkg=$packageName kind=$kind by=$silence")
             cancelWaiting(silence)
@@ -396,10 +412,10 @@ class CalendarRelayService : Service() {
         if (ring != null) { record(nextId(), packageName, postedAt, "ringing"); return }
         if (match.preset == RelayPreset.RING) {
             if (rangAlready(key, now)) { record(nextId(), packageName, postedAt, "ring_done"); return }
-            startRing(key, packageName, match, callerId)
+            startRing(key, packageName, match, callerId, kind)
             return
         }
-        submit(packageName, postedAt, match, callerId = callerId)
+        submit(packageName, postedAt, match, callerId = callerId, kind = kind)
     }
 
     /**
@@ -441,8 +457,10 @@ class CalendarRelayService : Service() {
         packageName: String,
         match: RelayMatch,
         callerId: String?,
+        kind: RelayAlertKind,
     ) {
-        val session = RingSession(key, packageName, callerId, match, System.currentTimeMillis(),
+        val session = RingSession(key, packageName, callerId, match, kind,
+            System.currentTimeMillis(),
             audioMode(), RelayRuleStore.read(this).ringFor(packageName, callerId))
         ring = session
         Log.i(TAG, "ring start pkg=$packageName gap=${session.settings.gapMillis}ms max=${session.settings.maxSeconds}s mode=${session.startMode}")
@@ -499,7 +517,9 @@ class CalendarRelayService : Service() {
         val session = ring ?: return
         if (stopping || !ready) { stopRing("cancelled"); return }
         if (answered(session)) { stopRing("answered"); return }
-        RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())?.let { stopRing(it); return }
+        RelayRuleStore.read(this).silence
+            .reason(System.currentTimeMillis(), isCall = session.kind == RelayAlertKind.CALL)
+            ?.let { stopRing(it); return }
         if (air == null) { stopRing("worker_unavailable"); return }
         val id = nextId()
         begin()
@@ -530,7 +550,8 @@ class CalendarRelayService : Service() {
     }
 
     private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch,
-                       completion: ((RelayWorkerResult) -> Unit)? = null, callerId: String? = null) {
+                       completion: ((RelayWorkerResult) -> Unit)? = null, callerId: String? = null,
+                       kind: RelayAlertKind = RelayAlertKind.MESSAGE) {
         val id = nextId()
         if (choices.size >= 256) {
             record(id, sbnPackage, postedAt, "queue_full")
@@ -538,13 +559,14 @@ class CalendarRelayService : Service() {
             return
         }
         if (completion != null) previewReplies[id] = completion
-        choices[id] = RelayBurstChoice(match, System.currentTimeMillis())
+        choices[id] = RelayBurstChoice(match, System.currentTimeMillis(), kind)
         record(id, sbnPackage, postedAt, "detected", match = match, callerId = callerId)
         val now = System.currentTimeMillis()
         when (val decision = coalescer.onAlert(id, now)) {
             RelayCoalescer.Decision.DispatchNow ->
-                dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match, callerId)
+                dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match, callerId, kind)
             is RelayCoalescer.Decision.Merged -> {
+                if (kind == RelayAlertKind.CALL) followUpHasCall = true
                 if (!holdingFollowUp) { holdingFollowUp = true; begin() }
                 inFlight[id] = sbnPackage to postedAt
                 record(id, sbnPackage, postedAt, "merged", match = match, callerId = callerId)
@@ -555,6 +577,7 @@ class CalendarRelayService : Service() {
 
     private fun cancelWaiting(reason: String) {
         handler.removeCallbacks(followUp)
+        followUpHasCall = false
         coalescer.cancelFollowUp().forEach { id ->
             choices.remove(id)
             previewReplies.remove(id)?.invoke(RelayWorkerResult("failed", "SUPPRESSED"))
@@ -569,8 +592,9 @@ class CalendarRelayService : Service() {
         // place; stopRing schedules it again once the call is over.
         if (ring != null) return
         val now = System.currentTimeMillis()
-        val silence = RelayRuleStore.read(this).silence.reason(now)
+        val silence = RelayRuleStore.read(this).silence.reason(now, isCall = followUpHasCall)
         if (silence != null) { cancelWaiting(silence); return }
+        followUpHasCall = false
         val members = coalescer.takeFollowUp().mapNotNull { id ->
             val source = inFlight.remove(id)
             val choice = choices.remove(id)
@@ -587,7 +611,8 @@ class CalendarRelayService : Service() {
             val id = nextId()
             val replies = fresh.mapNotNull { previewReplies.remove(it.first) }
             if (replies.isNotEmpty()) previewReplies[id] = { result -> replies.forEach { it(result) } }
-            dispatch(id, winner.second.first, winner.second.second, winner.second.second + 30_000, winner.third.match)
+            dispatch(id, winner.second.first, winner.second.second, winner.second.second + 30_000,
+                winner.third.match, kind = winner.third.kind)
         } else coalescer.onFinished(now)
         holdingFollowUp = false
         end()
@@ -871,7 +896,8 @@ class CalendarRelayService : Service() {
     }
 
     private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long,
-                         match: RelayMatch, callerId: String? = null) {
+                         match: RelayMatch, callerId: String? = null,
+                         kind: RelayAlertKind = RelayAlertKind.MESSAGE) {
         val preset = match.preset
         begin()
         refreshDeadline()
@@ -887,7 +913,8 @@ class CalendarRelayService : Service() {
             coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
             end()
         }
-        val silence = RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())
+        val silence = RelayRuleStore.read(this).silence
+            .reason(System.currentTimeMillis(), isCall = kind == RelayAlertKind.CALL)
         if (silence != null || System.currentTimeMillis() >= expiresAt) {
             finished(RelayWorkerResult(silence ?: "expired", null)); return
         }

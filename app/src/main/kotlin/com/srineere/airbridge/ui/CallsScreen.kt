@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,7 +65,7 @@ internal fun CallsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     title = "Only these people ring",
                     subtitle = "Everyone else stays silent",
                     trailing = {
-                        Switch(
+                        RowSwitch(
                             checked = state.config.onlySavedCallers,
                             onCheckedChange = { wanted ->
                                 // Turning this on silences everyone who has no

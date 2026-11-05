@@ -15,7 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -109,12 +108,30 @@ internal fun ScheduleScreen(onBack: () -> Unit) {
             title = "Every night",
             subtitle = "The band stays still between these times",
             trailing = {
-                Switch(
+                RowSwitch(
                     checked = silence.quietEnabled,
                     onCheckedChange = { state.setQuiet(it) },
                 )
             },
         )
+
+        // Under the window rather than beside it, because it is a hole in
+        // that window and means nothing without one. Only while the window
+        // is on, for the same reason.
+        if (silence.quietEnabled) {
+            SettingsRow(
+                indent = Indent.UnderTitle,
+                title = "Let calls through",
+                subtitle = "A call still rings the band between these times. " +
+                    "Messages and everything else wait for morning.",
+                trailing = {
+                    RowSwitch(
+                        checked = silence.callsStillRing,
+                        onCheckedChange = { state.setCallsStillRing(it) },
+                    )
+                },
+            )
+        }
 
         SettingsRow(
             title = "From",
@@ -149,8 +166,12 @@ internal fun ScheduleScreen(onBack: () -> Unit) {
         }
 
         Text(
-            "A call from someone with their own vibration is silenced by quiet hours too. " +
-                "Nothing here lets a rule through the quiet.",
+            if (silence.quietEnabled && silence.callsStillRing)
+                "Only calls cross the quiet window, and a caller you have silenced stays " +
+                    "silenced. A pause is absolute: nothing crosses that, calls included."
+            else
+                "A call from someone with their own vibration is silenced by quiet hours too. " +
+                    "Nothing here lets a rule through the quiet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.extras.disabled,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -191,7 +212,8 @@ internal fun scheduleSummary(state: RelayState): String {
         silence.pauseUntil > System.currentTimeMillis() ->
             "Paused until " + format.format(Date(silence.pauseUntil))
         silence.quietEnabled ->
-            "Quiet " + label(format, silence.startMinute) + " to " + label(format, silence.endMinute)
+            "Quiet " + label(format, silence.startMinute) + " to " + label(format, silence.endMinute) +
+                if (silence.callsStillRing) " · calls still ring" else ""
         else -> "Always on, no quiet hours"
     }
 }
