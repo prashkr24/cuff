@@ -3,6 +3,7 @@ package com.srineere.airbridge.widget
 import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.glance.color.ColorProvider
+import androidx.glance.color.isNightMode
 import androidx.glance.unit.ColorProvider
 import com.srineere.airbridge.health.SleepStage
 import com.srineere.airbridge.health.TileColour
@@ -78,7 +79,41 @@ internal class WidgetColours(
     /** Green for a surplus of the good kind, and nothing else. */
     val positive: ColorProvider
         get() = provide(mode, lightExtras.positive, darkExtras.positive)
+
+    /**
+     * Which half of the palette is actually on screen.
+     *
+     * A [ColorProvider] carries both and lets the launcher choose, which is
+     * all a Text or a Box needs. A bitmap cannot do that: the pixels are
+     * decided when it is drawn. So an arc has to know, and this is the only
+     * place in the widget code that resolves the question.
+     */
+    fun isDark(context: Context): Boolean = when (mode) {
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+        ThemeMode.System -> context.isNightMode
+    }
+
+    /** A health colour as an ARGB int, for the Canvas that draws the arcs. */
+    fun tileArgb(colour: TileColour, dark: Boolean): Int = argbOf(
+        extraOf(
+            if (dark) darkExtras else lightExtras,
+            colour,
+            if (dark) darkAccent else lightAccent,
+        ),
+    )
+
+    /** The unfilled part of an arc. */
+    fun trackArgb(dark: Boolean): Int =
+        argbOf(if (dark) darkTrackOf(darkAccent) else lightTrackOf(lightAccent))
 }
+
+private fun argbOf(colour: Color): Int = android.graphics.Color.argb(
+    (colour.alpha * 255 + 0.5f).toInt(),
+    (colour.red * 255 + 0.5f).toInt(),
+    (colour.green * 255 + 0.5f).toInt(),
+    (colour.blue * 255 + 0.5f).toInt(),
+)
 
 private fun extraOf(extras: AirExtraColors, colour: TileColour, accent: Color): Color = when (colour) {
     TileColour.Heart -> extras.heart

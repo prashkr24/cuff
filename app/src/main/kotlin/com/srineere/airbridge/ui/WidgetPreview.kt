@@ -1,5 +1,6 @@
 package com.srineere.airbridge.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +18,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,7 +78,10 @@ internal fun WidgetPreview(face: Face, colour: TileColour, modifier: Modifier = 
                 }
             }
 
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 5.dp)) {
+            if (face.figure.isNotEmpty()) Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.padding(top = 5.dp),
+            ) {
                 Text(
                     face.figure,
                     style = MaterialTheme.typography.titleMedium,
@@ -137,6 +145,10 @@ internal fun WidgetPreview(face: Face, colour: TileColour, modifier: Modifier = 
 private fun MiniChart(chart: Chart?, colour: TileColour) {
     val tint = tileColourOf(colour)
     val dim = tint.copy(alpha = 0.42f)
+    // A DrawScope is not a composable, so anything from the theme has to be
+    // read out here and handed in.
+    val arcColours = (chart as? Chart.Arcs)?.parts?.map { tileColourOf(it.second) }.orEmpty()
+    val trackColour = MaterialTheme.colorScheme.surfaceContainerHighest
     when (chart) {
         null -> Unit
 
@@ -194,6 +206,44 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
                         .clip(RoundedCornerShape(2.dp))
                         .background(tileColourOf(each)),
                 )
+            }
+        }
+
+        // The same arcs the widget draws, drawn natively. Compose can make a
+        // curve; Glance cannot, which is why the widget pays for a bitmap
+        // and this does not.
+        is Chart.Arcs -> Canvas(Modifier.fillMaxWidth().height(46.dp)) {
+            val side = kotlin.math.min(size.width, size.height)
+            val strokePx = side * 0.115f
+            val gapPx = side * 0.04f
+            var inset = strokePx / 2f
+            arcColours.forEachIndexed { index, colour ->
+                val box = side - inset * 2f
+                if (box <= strokePx) return@forEachIndexed
+                val topLeft = Offset((size.width - side) / 2f + inset, inset)
+                val arcSize = Size(box, box)
+                drawArc(
+                    color = trackColour,
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round),
+                )
+                val swept = chart.parts[index].first.coerceIn(0f, 1f) * 360f
+                if (swept > 0f) {
+                    drawArc(
+                        color = colour,
+                        startAngle = -90f,
+                        sweepAngle = swept.coerceAtMost(359.9f),
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round),
+                    )
+                }
+                inset += strokePx + gapPx
             }
         }
 

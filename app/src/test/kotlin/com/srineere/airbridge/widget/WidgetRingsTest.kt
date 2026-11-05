@@ -1,0 +1,152 @@
+package com.srineere.airbridge.widget
+
+import com.srineere.airbridge.health.Goals
+import com.srineere.airbridge.health.HealthSnapshot
+import com.srineere.airbridge.health.Night
+import com.srineere.airbridge.health.Reading
+import com.srineere.airbridge.health.TileColour
+import com.srineere.airbridge.ui.HealthData
+import com.srineere.airbridge.ui.HealthStage
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.Duration
+import java.time.Instant
+
+class WidgetRingsTest {
+
+    private val goals = Goals(steps = 8_000, sleepMinutes = 420)
+
+    private fun night(minutes: Long) = Night(
+        day = 0L,
+        start = Instant.EPOCH,
+        end = Instant.EPOCH.plus(Duration.ofMinutes(minutes)),
+        asleep = Duration.ofMinutes(minutes),
+        awake = Duration.ZERO,
+        light = Duration.ofMinutes(minutes),
+        deep = Duration.ZERO,
+        rem = Duration.ZERO,
+    )
+
+    private fun data(
+        steps: Long? = 4_000,
+        asleep: Long? = 420,
+        burnedToday: Double? = 2_000.0,
+        burnedDaily: List<Double> = listOf(1_800.0, 2_200.0, 2_000.0, 1_900.0, 5_000.0),
+    ) = HealthData(
+        stage = HealthStage.Granted,
+        snapshot = HealthSnapshot(
+            stepsToday = steps,
+            burnedToday = burnedToday,
+            burnedDaily = burnedDaily.mapIndexed { index, value -> Reading(index.toLong(), value) },
+            nights = asleep?.let { listOf(night(it)) } ?: emptyList(),
+        ),
+        nights = asleep?.let { listOf(night(it)) } ?: emptyList(),
+    )
+
+    // -------------------------------------------------------- which rings
+
+    @Test
+    fun `three rings when all three have something behind them`() {
+        val rings = ringsOf(data(), goals)
+        assertEquals(listOf("Steps", "Sleep", "Burn"), rings.map { it.label })
+        assertEquals(
+            listOf(TileColour.Steps, TileColour.Sleep, TileColour.Energy),
+            rings.map { it.colour },
+        )
+    }
+
+    @Test
+    fun `a night nobody recorded is no ring, not an empty one`() {
+        val rings = ringsOf(data(asleep = null), goals)
+        assertEquals(listOf("Steps", "Burn"), rings.map { it.label })
+    }
+
+    @Test
+    fun `a goal of zero drops its ring rather than dividing by it`() {
+        val rings = ringsOf(data(), goals.copy(steps = 0))
+        assertTrue(rings.none { it.label == "Steps" })
+    }
+
+    @Test
+    fun `nothing at all gives no rings`() {
+        val bare = ringsOf(
+            data(steps = null, asleep = null, burnedToday = null, burnedDaily = emptyList()),
+            goals.copy(steps = 0, sleepMinutes = 0),
+        )
+        assertTrue(bare.isEmpty())
+    }
+
+    // ------------------------------------------------------ how far round
+
+    @Test
+    fun `half a goal is half a ring`() {
+        val steps = ringsOf(data(steps = 4_000), goals).first { it.label == "Steps" }
+        assertEquals(0.5f, steps.fraction, 0.001f)
+    }
+
+    @Test
+    fun `beating a goal closes the ring and does not keep going`() {
+        val steps = ringsOf(data(steps = 24_000), goals).first { it.label == "Steps" }
+        assertEquals(1f, steps.fraction, 0.001f)
+    }
+
+    @Test
+    fun `sleep is measured against the stored goal`() {
+        val sleep = ringsOf(data(asleep = 210), goals).first { it.label == "Sleep" }
+        assertEquals(0.5f, sleep.fraction, 0.001f)
+    }
+
+    // -------------------------------------------------------- a usual day
+
+    @Test
+    fun `today is left out of the average it is measured against`() {
+        // Four days of 2,000 behind a today of 6,000. Including today would
+        // drag the usual figure up to 2,800 and make a big day look ordinary.
+        val health = data(
+            burnedToday = 6_000.0,
+            burnedDaily = listOf(2_000.0, 2_000.0, 2_000.0, 2_000.0, 6_000.0),
+        )
+        assertEquals(2_000.0, usualBurn(health)!!, 0.001)
+    }
+
+    @Test
+    fun `fewer than three days behind it is no usual day at all`() {
+        assertNull(usualBurn(data(burnedDaily = listOf(2_000.0, 2_100.0))))
+        assertTrue(ringsOf(data(burnedDaily = listOf(2_000.0, 2_100.0)), goals).none { it.label == "Burn" })
+    }
+
+    @Test
+    fun `a fortnight is the longest window the burn ring looks back over`() {
+        val many = List(40) { 1_000.0 } + List(14) { 3_000.0 } + listOf(0.0)
+        // The last entry is today and is dropped; the fourteen before it are
+        // all 3,000, so the older thousands must not reach the average.
+        assertEquals(3_000.0, usualBurn(data(burnedDaily = many))!!, 0.001)
+    }
+
+    // ------------------------------------------------------- the catalogue
+
+    @Test
+    fun `rings are in the catalogue and their ids round-trip`() {
+        RingFace.entries.forEach { face ->
+            val design = WidgetDesign.OfRings(face)
+            assertTrue(design in WidgetCatalogue.all)
+            assertEquals(design, WidgetCatalogue.byId(design.id))
+        }
+    }
+
+    @Test
+    fun `the rings family is no longer listed as unbuilt`() {
+        assertTrue(WidgetFamily.Rings !in WidgetCatalogue.notBuilt)
+        assertTrue(WidgetCatalogue.families().any { it.first == WidgetFamily.Rings })
+    }
+
+    @Test
+    fun `the arcs face refuses a strip, where three rings would be three dots`() {
+        val arcs = WidgetDesign.OfRings(RingFace.Arcs)
+        assertTrue(arcs.fits(WidgetSize.Square))
+        assertTrue(!arcs.fits(WidgetSize.Strip))
+        assertTrue(!arcs.fits(WidgetSize.Row))
+    }
+}

@@ -97,9 +97,19 @@ sealed interface WidgetDesign {
         override val sizes: Set<WidgetSize> get() = face.sizes
     }
 
+    /** Apple's grammar: arcs that close, a list, a row of arrows. */
+    data class OfRings(val face: RingFace) : WidgetDesign {
+        override val id: String get() = "$RINGS_PREFIX${face.name}"
+        override val title: String get() = face.title
+        override val summary: String get() = face.summary
+        override val family: WidgetFamily get() = WidgetFamily.Rings
+        override val sizes: Set<WidgetSize> get() = face.sizes
+    }
+
     companion object {
         const val TILE_PREFIX = "tile:"
         const val BAND_PREFIX = "band:"
+        const val RINGS_PREFIX = "rings:"
     }
 }
 
@@ -176,7 +186,8 @@ object WidgetCatalogue {
 
     val all: List<WidgetDesign> =
         TileKind.entries.map { WidgetDesign.OfTile(it) } +
-            BandFace.entries.map { WidgetDesign.OfBand(it) }
+            BandFace.entries.map { WidgetDesign.OfBand(it) } +
+            RingFace.entries.map { WidgetDesign.OfRings(it) }
 
     fun forSize(size: WidgetSize): List<WidgetDesign> = all.filter { it.fits(size) }
 
@@ -213,6 +224,10 @@ object WidgetCatalogue {
                 BandFace.entries
                     .firstOrNull { it.name == id.removePrefix(WidgetDesign.BAND_PREFIX) }
                     ?.let { WidgetDesign.OfBand(it) }
+            id.startsWith(WidgetDesign.RINGS_PREFIX) ->
+                RingFace.entries
+                    .firstOrNull { it.name == id.removePrefix(WidgetDesign.RINGS_PREFIX) }
+                    ?.let { WidgetDesign.OfRings(it) }
             else -> null
         }
     }

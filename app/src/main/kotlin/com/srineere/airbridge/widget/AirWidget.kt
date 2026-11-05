@@ -86,6 +86,7 @@ class AirWidget : GlanceAppWidget() {
         when (val design = config.design) {
             is WidgetDesign.OfTile -> TileWidget(design.kind, face, snapshot, colours, onClick)
             is WidgetDesign.OfBand -> BandWidget(design.face, face, snapshot, colours, onClick, now)
+            is WidgetDesign.OfRings -> RingsWidget(design.face, face, snapshot, colours, onClick)
         }
     }
 
@@ -119,6 +120,8 @@ private fun openFor(config: WidgetConfig): Action {
     val route = when (val design = config.design) {
         is WidgetDesign.OfTile -> if (config.opensTab) null else design.kind.route
         is WidgetDesign.OfBand -> if (config.opensTab) null else DEVICE_ROUTE
+        // Several readings at once, so there is no one screen behind them.
+        is WidgetDesign.OfRings -> null
     }
     return actionStartActivity(
         MainActivity::class.java,

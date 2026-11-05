@@ -96,7 +96,12 @@ class WidgetCatalogueTest {
     @Test
     fun `families list in catalogue order and hold only designs that fit`() {
         val families = WidgetCatalogue.families(WidgetSize.Tall)
-        assertEquals(listOf(WidgetFamily.Tiles, WidgetFamily.Band), families.map { it.first })
+        // The order, not the membership: which families have something at a
+        // given size changes every time one is built, and a test that names
+        // them is a test that fails on the good news.
+        val shown = families.map { it.first }
+        assertEquals(shown.sortedBy { it.ordinal }, shown)
+        assertTrue(WidgetFamily.Tiles in shown)
         families.forEach { (family, designs) ->
             designs.forEach {
                 assertEquals(family, it.family)

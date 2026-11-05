@@ -97,10 +97,41 @@ private val SAMPLE_BAND = BandFacts(
 internal fun WidgetSnapshot.colourFor(design: WidgetDesign): TileColour = when (design) {
     is WidgetDesign.OfTile -> colourFor(design.kind)
     is WidgetDesign.OfBand -> TileColour.Accent
+    is WidgetDesign.OfRings -> when (design.face) {
+        RingFace.Arcs -> TileColour.Steps
+        RingFace.Summary, RingFace.Trends -> TileColour.Slate
+    }
 }
 
 /** The reading a design shows, whichever half of the app it comes from. */
 internal fun faceOf(design: WidgetDesign, snapshot: WidgetSnapshot, now: Long): Face? = when (design) {
     is WidgetDesign.OfTile -> faceFor(design.kind, snapshot)
     is WidgetDesign.OfBand -> bandFace(design.face, snapshot.band, now)
+    is WidgetDesign.OfRings -> ringsFace(design.face, snapshot)
+}
+
+/**
+ * A rings face as a [Face], for the thumbnail.
+ *
+ * The arcs face has three readings and no single figure, so its figure is
+ * empty and the preview gives the whole card to the arcs -- which is what
+ * the Square widget does too.
+ */
+private fun ringsFace(face: RingFace, snapshot: WidgetSnapshot): Face? = when (face) {
+    RingFace.Arcs -> ringsOf(snapshot.health, snapshot.goals)
+        .takeIf { it.isNotEmpty() }
+        ?.let { rings ->
+            Face(
+                kicker = "Today",
+                figure = "",
+                sub = rings.joinToString(" · ") { it.label.lowercase() },
+                chart = Chart.Arcs(rings.map { it.fraction to it.colour }),
+            )
+        }
+    RingFace.Summary -> summaryRows(snapshot.health).takeIf { it.isNotEmpty() }?.let {
+        Face(kicker = "Summary", figure = "", sub = "", chart = Chart.Rows(it))
+    }
+    RingFace.Trends -> trendRows(snapshot.health).takeIf { it.isNotEmpty() }?.let {
+        Face(kicker = "Trends", figure = "", sub = "", chart = Chart.Rows(it))
+    }
 }

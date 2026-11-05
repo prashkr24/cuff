@@ -62,6 +62,12 @@ internal sealed interface Chart {
 
     /** Several readings that none of them fills a tile alone. */
     class Rows(val rows: List<Triple<String, String, TileColour>>) : Chart
+
+    /**
+     * Concentric arcs. The one chart here that cannot be made of
+     * rectangles, so the one that costs a bitmap.
+     */
+    class Arcs(val parts: List<Pair<Float, TileColour>>) : Chart
 }
 
 @Composable
@@ -251,6 +257,8 @@ private fun DrawChart(
             height = height.value.coerceAtMost(STRIPE_MAX).dp,
             width = width,
         )
+        is Chart.Arcs -> RingImage(chart.parts, colours, height)
+
         is Chart.Rows -> Column(modifier = GlanceModifier.fillMaxWidth()) {
             chart.rows.forEach { (name, value, each) ->
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
