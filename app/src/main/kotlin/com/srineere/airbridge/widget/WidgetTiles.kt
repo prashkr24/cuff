@@ -84,6 +84,16 @@ internal sealed interface Chart {
 
     /** Arcs side by side, each with its figure in the middle. */
     class Dials(val parts: List<DialReading>) : Chart
+
+    /**
+     * The same readings across rather than down, divided by hairlines.
+     *
+     * A separate type from [Rows] only because a thumbnail has to tell the
+     * two apart: the Rail widget and the Day widget show the same four
+     * readings and are otherwise nothing alike, and two identical pictures
+     * in a catalogue are a catalogue you cannot choose from.
+     */
+    class Rail(val parts: List<Triple<String, String, TileColour>>) : Chart
 }
 
 @Composable
@@ -282,6 +292,18 @@ private fun DrawChart(
         is Chart.Dials -> RingImage(
             chart.parts.map { it.fraction to it.colour }, colours, height,
         )
+
+        // The Paper widget lays its own rail out, with room for hairlines
+        // the thumbnail has no space for. This is the fallback shape.
+        is Chart.Rail -> Row(modifier = GlanceModifier.fillMaxWidth()) {
+            chart.parts.forEach { (name, value, each) ->
+                Column(modifier = GlanceModifier.defaultWeight()) {
+                    Sub(name, colours.muted, size = 9)
+                    Gap(3.dp)
+                    Sub(value, colours.tile(each), size = 12)
+                }
+            }
+        }
 
         is Chart.Rows -> Column(modifier = GlanceModifier.fillMaxWidth()) {
             chart.rows.forEach { (name, value, each) ->

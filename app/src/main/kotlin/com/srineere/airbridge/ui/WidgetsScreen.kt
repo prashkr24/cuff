@@ -34,7 +34,9 @@ import com.srineere.airbridge.widget.WidgetConfig
 import com.srineere.airbridge.widget.WidgetDesign
 import com.srineere.airbridge.widget.WidgetFamily
 import com.srineere.airbridge.widget.WidgetSnapshot
+import com.srineere.airbridge.widget.PaperInks
 import com.srineere.airbridge.widget.WidgetStore
+import com.srineere.airbridge.widget.widgetColours
 import com.srineere.airbridge.widget.colourFor
 import com.srineere.airbridge.widget.faceOf
 import com.srineere.airbridge.widget.liveIds
@@ -72,6 +74,7 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
     // no Health Connect read to open. The colours are the person's own.
     val snapshot = remember(context) { sampleWidgetSnapshot(HealthSettings.tiles(context)) }
     val now = remember { System.currentTimeMillis() }
+    val inks = remember(context) { widgetColours(context).paperInks }
     val families = remember { WidgetCatalogue.families() }
     val notBuilt = remember { WidgetCatalogue.notBuilt }
     val expanded = remember { mutableStateMapOf<WidgetFamily, Boolean>() }
@@ -110,7 +113,7 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
                 color = MaterialTheme.extras.disabled,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
             )
-            PreviewGrid(shown, snapshot, now)
+            PreviewGrid(shown, snapshot, now, inks)
         }
 
         if (notBuilt.isNotEmpty()) {
@@ -152,7 +155,12 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
 
 /** Two to a row, because one preview a row would be a very long screen. */
 @Composable
-private fun PreviewGrid(designs: List<WidgetDesign>, snapshot: WidgetSnapshot, now: Long) {
+private fun PreviewGrid(
+    designs: List<WidgetDesign>,
+    snapshot: WidgetSnapshot,
+    now: Long,
+    inks: PaperInks,
+) {
     designs.chunked(2).forEach { pair ->
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -184,6 +192,7 @@ private fun PreviewGrid(designs: List<WidgetDesign>, snapshot: WidgetSnapshot, n
                             snapshot.colourFor(design),
                             Modifier.fillMaxWidth(),
                             cardless = design.family == WidgetFamily.Type,
+                            paper = inks.takeIf { design.family == WidgetFamily.Paper },
                         )
                     }
                     Text(

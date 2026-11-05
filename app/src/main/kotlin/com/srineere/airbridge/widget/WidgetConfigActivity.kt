@@ -420,6 +420,7 @@ private fun openLabel(design: WidgetDesign): String = when (design) {
     is WidgetDesign.OfBand -> "The Device tab"
     is WidgetDesign.OfRings -> "The Health tab"
     is WidgetDesign.OfDials -> if (design.face == DialFace.Score) "Sleep" else "The Health tab"
+    is WidgetDesign.OfPaper -> if (design.face == PaperFace.Figure) "Steps" else "The Health tab"
     is WidgetDesign.OfType -> when (design.face) {
         TypeFace.Steps -> "Steps"
         TypeFace.Sleep -> "Sleep"
@@ -436,6 +437,7 @@ private fun swatch(design: WidgetDesign): Color {
         is WidgetDesign.OfRings -> TileColour.Steps
         is WidgetDesign.OfDials -> TileColour.Sleep
         is WidgetDesign.OfType -> design.face.colour
+        is WidgetDesign.OfPaper -> TileColour.Sleep
     }
     return when (colour) {
         TileColour.Heart -> extras.heart

@@ -289,10 +289,15 @@ internal fun RingImage(
     colours: WidgetColours,
     side: Dp,
     stroke: Float = RingBitmap.STROKE,
+    /**
+     * Forces the light half, for a family that paints its own pale card.
+     * Null resolves the usual way, from the theme or the launcher.
+     */
+    light: Boolean? = null,
 ) {
     if (parts.isEmpty()) return
     val context = LocalContext.current
-    val dark = colours.isDark(context)
+    val dark = if (light == true) false else colours.isDark(context)
     val density = context.resources.displayMetrics.density
     val sidePx = (side.value * density).toInt()
     val arcs = parts.map { (fraction, colour) -> fraction to colours.tileArgb(colour, dark) }

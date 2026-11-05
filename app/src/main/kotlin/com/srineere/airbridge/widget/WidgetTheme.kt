@@ -43,6 +43,9 @@ internal class WidgetColours(
     private val darkInk: Color,
     private val lightMuted: Color,
     private val darkMuted: Color,
+    private val lightCard: Color,
+    private val lightPage: Color,
+    private val lightEdge: Color,
     private val lightTrackOf: (Color) -> Color,
     private val darkTrackOf: (Color) -> Color,
     private val mode: ThemeMode,
@@ -108,6 +111,51 @@ internal class WidgetColours(
     )
 
     /**
+     * The light half, whatever the phone is doing.
+     *
+     * The Paper family does not follow the system theme, and that is not an
+     * oversight: a pale card is its whole premise. Drawing it dark at night
+     * would make it the other families with different corners.
+     *
+     * It is the *app's* light half, though, not a fixed white: someone who
+     * chose Cream under Appearance gets Cream here. The family borrows a
+     * grammar, not a palette.
+     */
+    val paper: ColorProvider get() = ColorProvider(lightCard)
+    val paperPage: ColorProvider get() = ColorProvider(lightPage)
+    val paperInk: ColorProvider get() = ColorProvider(lightInk)
+    val paperMuted: ColorProvider get() = ColorProvider(lightMuted)
+    val paperEdge: ColorProvider get() = ColorProvider(lightEdge)
+
+    /**
+     * A health colour on paper.
+     *
+     * Always the light value, and that is load-bearing rather than tidy:
+     * the mint that carries steps on a dark tile is 1.81:1 on white, which
+     * is not dim, it is gone.
+     */
+    fun paperTile(colour: TileColour): ColorProvider =
+        ColorProvider(extraOf(lightExtras, colour, lightAccent))
+
+    /**
+     * The same light half as plain colours, for the catalogue's thumbnails.
+     *
+     * Compose has only the scheme that is actually on screen, and a Paper
+     * thumbnail drawn in it would be a dark card at night -- a picture of a
+     * widget this family never draws. One source for both, so the thumbnail
+     * cannot disagree with the thing.
+     */
+    val paperInks: PaperInks
+        get() = PaperInks(
+            fill = lightCard,
+            pane = lightPage,
+            ink = lightInk,
+            muted = lightMuted,
+            edge = lightEdge,
+            tile = { extraOf(lightExtras, it, lightAccent) },
+        )
+
+    /**
      * Ink for type with no card under it, given what the wallpaper wants.
      *
      * Null means the system would not say, and the only thing left is to
@@ -138,6 +186,16 @@ internal class WidgetColours(
     fun trackArgb(dark: Boolean): Int =
         argbOf(if (dark) darkTrackOf(darkAccent) else lightTrackOf(lightAccent))
 }
+
+/** The light half, as Compose colours. See [WidgetColours.paperInks]. */
+internal class PaperInks(
+    val fill: Color,
+    val pane: Color,
+    val ink: Color,
+    val muted: Color,
+    val edge: Color,
+    val tile: (TileColour) -> Color,
+)
 
 private fun argbOf(colour: Color): Int = android.graphics.Color.argb(
     (colour.alpha * 255 + 0.5f).toInt(),
@@ -214,6 +272,12 @@ internal fun widgetColours(context: Context): WidgetColours {
         darkInk = darkScheme.onSurface,
         lightMuted = lightScheme.onSurfaceVariant,
         darkMuted = darkScheme.onSurfaceVariant,
+        lightCard = lightCard,
+        // A shade under the card, for the panes a Paper widget nests inside
+        // itself. On a ground that does not lift its cards there is nothing
+        // to step down to, so it steps up instead.
+        lightPage = if (lightGround.liftsTiles) lightScheme.surface else lightScheme.surfaceContainerHigh,
+        lightEdge = lightScheme.outlineVariant,
         lightTrackOf = { mixToward(it, lightCard, 0.55f) },
         darkTrackOf = { mixToward(it, darkCard, 0.55f) },
         mode = mode,

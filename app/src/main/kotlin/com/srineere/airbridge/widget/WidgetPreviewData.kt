@@ -2,6 +2,7 @@ package com.srineere.airbridge.widget
 
 import com.srineere.airbridge.health.Tile
 import com.srineere.airbridge.health.TileColour
+import com.srineere.airbridge.ui.asHoursMinutes
 import com.srineere.airbridge.ui.sampleGoals
 import com.srineere.airbridge.ui.sampleHealthData
 
@@ -103,6 +104,7 @@ internal fun WidgetSnapshot.colourFor(design: WidgetDesign): TileColour = when (
     }
     is WidgetDesign.OfDials -> TileColour.Sleep
     is WidgetDesign.OfType -> design.face.colour
+    is WidgetDesign.OfPaper -> TileColour.Sleep
 }
 
 /** The reading a design shows, whichever half of the app it comes from. */
@@ -114,6 +116,37 @@ internal fun faceOf(design: WidgetDesign, snapshot: WidgetSnapshot, now: Long): 
     // The reading with its chart taken away, which is the whole style.
     is WidgetDesign.OfType -> typeFaceOf(design.face, snapshot, now)?.let {
         Face(kicker = design.face.word, figure = it.figure, sub = it.sub)
+    }
+    is WidgetDesign.OfPaper -> paperFace(design.face, snapshot)
+}
+
+/** A paper face as a [Face], for the thumbnail. */
+private fun paperFace(face: PaperFace, snapshot: WidgetSnapshot): Face? {
+    val health = snapshot.health
+    return when (face) {
+        PaperFace.Figure -> health.snapshot.stepsToday?.let {
+            Face(kicker = "Steps", figure = "%,d".format(it), sub = "")
+        }
+        PaperFace.Sentence -> health.lastNight?.let {
+            Face(
+                kicker = "Last night",
+                figure = it.asleep.asHoursMinutes(),
+                sub = paperSentence(health, snapshot.goals),
+            )
+        }
+        PaperFace.Rail, PaperFace.Day -> paperReadings(health, snapshot.goals)
+            .takeIf { it.isNotEmpty() }
+            ?.let { readings ->
+                val parts = readings.map { Triple(it.label, it.figure, it.colour) }
+                Face(
+                    kicker = if (face == PaperFace.Rail) "Four readings" else "Today",
+                    figure = "",
+                    sub = "",
+                    // Across for the rail, down for the day, because that is
+                    // the difference between the two widgets.
+                    chart = if (face == PaperFace.Rail) Chart.Rail(parts) else Chart.Rows(parts),
+                )
+            }
     }
 }
 

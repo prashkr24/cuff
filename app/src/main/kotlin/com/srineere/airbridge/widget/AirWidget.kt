@@ -90,6 +90,7 @@ class AirWidget : GlanceAppWidget() {
             is WidgetDesign.OfRings -> RingsWidget(design.face, face, snapshot, colours, onClick)
             is WidgetDesign.OfDials -> DialsWidget(design.face, face, snapshot, colours, onClick)
             is WidgetDesign.OfType -> TypeWidget(design.face, face, snapshot, colours, onClick, now)
+            is WidgetDesign.OfPaper -> PaperWidget(design.face, face, snapshot, colours, onClick)
         }
     }
 
@@ -127,6 +128,8 @@ private fun openFor(config: WidgetConfig): Action {
         is WidgetDesign.OfRings -> null
         is WidgetDesign.OfDials ->
             if (config.opensTab || design.face != DialFace.Score) null else SLEEP_ROUTE
+        is WidgetDesign.OfPaper ->
+            if (config.opensTab || design.face != PaperFace.Figure) null else TileKind.Steps.route
         is WidgetDesign.OfType -> when {
             config.opensTab -> null
             design.face == TypeFace.Steps -> TileKind.Steps.route

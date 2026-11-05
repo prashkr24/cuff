@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +34,7 @@ import com.srineere.airbridge.health.TileColour
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.widget.Chart
 import com.srineere.airbridge.widget.Face
+import com.srineere.airbridge.widget.PaperInks
 import com.srineere.airbridge.widget.RingBitmap
 
 /**
@@ -55,14 +57,20 @@ internal fun WidgetPreview(
     modifier: Modifier = Modifier,
     /** True for a family that paints no card, so the thumbnail paints none either. */
     cardless: Boolean = false,
+    /** The light half, for the family that is always pale. */
+    paper: PaperInks? = null,
 ) {
-    val tint = tileColourOf(colour)
+    val tint = paper?.tile?.invoke(colour) ?: tileColourOf(colour)
     // No border where the card would be, dashed or otherwise. The design
     // sheets drew one to say "these are the widget's bounds", but a sheet
     // is a diagram and this is the thing itself: on a home screen there is
     // nothing there, and the absence is the whole point of the family.
     Surface(
-        color = if (cardless) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
+        color = when {
+            cardless -> Color.Transparent
+            paper != null -> paper.fill
+            else -> MaterialTheme.colorScheme.surfaceContainer
+        },
         shape = RoundedCornerShape(14.dp),
         modifier = modifier.height(78.dp),
     ) {
@@ -97,6 +105,7 @@ internal fun WidgetPreview(
                 Text(
                     face.figure,
                     style = MaterialTheme.typography.titleMedium,
+                    color = paper?.ink ?: MaterialTheme.colorScheme.onSurface,
                     fontSize = 17.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -107,7 +116,7 @@ internal fun WidgetPreview(
                         " $it",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = paper?.muted ?: MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
                 }
@@ -141,12 +150,12 @@ internal fun WidgetPreview(
                         face.sub,
                         style = MaterialTheme.typography.labelMedium,
                         fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = paper?.muted ?: MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 } else {
-                    MiniChart(face.chart, colour)
+                    MiniChart(face.chart, colour, paper)
                 }
             }
         }
@@ -154,8 +163,8 @@ internal fun WidgetPreview(
 }
 
 @Composable
-private fun MiniChart(chart: Chart?, colour: TileColour) {
-    val tint = tileColourOf(colour)
+private fun MiniChart(chart: Chart?, colour: TileColour, paper: PaperInks? = null) {
+    val tint = paper?.tile?.invoke(colour) ?: tileColourOf(colour)
     val dim = tint.copy(alpha = 0.42f)
     // A DrawScope is not a composable, so anything from the theme has to be
     // read out here and handed in.
@@ -314,6 +323,44 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
             }
         }
 
+        // Across, with a hairline between: the one picture that tells the
+        // Rail widget apart from the Day widget, which holds the same four
+        // readings and is nothing like it.
+        is Chart.Rail -> Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            chart.parts.forEachIndexed { index, (name, value, each) ->
+                if (index > 0) {
+                    Box(
+                        Modifier
+                            .width(1.dp)
+                            .height(22.dp)
+                            .background(paper?.edge ?: MaterialTheme.colorScheme.outlineVariant),
+                    )
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 5.dp)) {
+                    Text(
+                        name,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 7.5.sp,
+                        color = paper?.muted ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        value,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = paper?.ink ?: MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+
         // Three readings will not fit under a figure at this size, so the
         // thumbnail shows the two that do and lets the widget show the rest.
         is Chart.Rows -> Column(Modifier.fillMaxWidth()) {
@@ -323,7 +370,7 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
                         name,
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 8.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = paper?.muted ?: MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         modifier = Modifier.weight(1f),
                     )
@@ -332,7 +379,7 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = tileColourOf(each),
+                        color = paper?.tile?.invoke(each) ?: tileColourOf(each),
                         maxLines = 1,
                     )
                 }
