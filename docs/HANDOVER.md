@@ -499,7 +499,7 @@ returns `RESULT_OK`. `WidgetStore` keeps one row per `appWidgetId` in
 `air_health`, beside the tile layout, because a widget's colour is its
 tile's colour and two stores could disagree about that.
 
-**Four things that cost real time, and will again if they are undone:**
+**Five things that cost real time, and will again if they are undone:**
 
 - **A widget provider has to be `exported="true"`.** Declared `false`, all
   five appeared in `dumpsys appwidget` and never once in the launcher's
@@ -514,6 +514,14 @@ tile's colour and two stores could disagree about that.
   nothing, and the widget sits there still showing the "tap to choose" face
   it composed before the choice was stored. `liveIds()` asks the launcher,
   which always knows.
+- **A Glance container holds ten children and drops the rest in silence.**
+  Its generated layouts stop at `..._10children.xml`, so a Row asked for
+  more keeps the first ten and discards the others with no error anywhere.
+  A day binned into twenty-four hours came out as five fat columns and a
+  night's eleven sleep stages came out as five, for weeks, looking merely
+  ugly rather than broken. Anything with more than a handful of parts is a
+  bitmap now: `ChartBitmap` for bars and stripes, `ScatterBitmap` for dots,
+  `RingBitmap` for arcs.
 - **`SizeMode.Exact`, not `Responsive`.** Responsive reports the size you
   *declared*, not the cell you were given. A launcher's 4x4 came back half
   again taller than the 300dp the face was measured for: the RemoteViews
@@ -560,6 +568,15 @@ colour, alignment, decoration and family, and `FontWeight` is exactly
 Normal, Medium and Bold. Paper's look rests on figures tracked at -0.03 em
 on the design sheets and cannot have it without a bitmap per numeral, which
 would also freeze the figure against the system text size.
+
+**The widgets draw what the tiles draw.** The head's window and full name
+come from the kind, the change chip is the tab's filled pill at fourteen per
+cent rather than coloured words, the tall face stacks as the tile's XL does,
+and the six kinds whose tiles plot dots over a usual band -- resting heart
+rate, HRV, breathing, skin temperature, blood oxygen, weight -- plot dots
+here too. `ScatterBitmap` copies `MiniScatter`'s arithmetic on purpose: a
+widget plotting its points differently is a widget showing a different
+chart.
 
 **One `Face`, drawn twice.** `faceFor`, `bandFace`, `ringsFace` and the rest
 produce a `Face`, and both the widget and the catalogue's thumbnail draw
