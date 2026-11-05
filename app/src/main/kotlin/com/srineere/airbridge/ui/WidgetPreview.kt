@@ -49,10 +49,20 @@ import com.srineere.airbridge.widget.RingBitmap
  * at a size where that is all there is room for anyway.
  */
 @Composable
-internal fun WidgetPreview(face: Face, colour: TileColour, modifier: Modifier = Modifier) {
+internal fun WidgetPreview(
+    face: Face,
+    colour: TileColour,
+    modifier: Modifier = Modifier,
+    /** True for a family that paints no card, so the thumbnail paints none either. */
+    cardless: Boolean = false,
+) {
     val tint = tileColourOf(colour)
+    // No border where the card would be, dashed or otherwise. The design
+    // sheets drew one to say "these are the widget's bounds", but a sheet
+    // is a diagram and this is the thing itself: on a home screen there is
+    // nothing there, and the absence is the whole point of the family.
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = if (cardless) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
         shape = RoundedCornerShape(14.dp),
         modifier = modifier.height(78.dp),
     ) {

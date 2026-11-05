@@ -39,6 +39,10 @@ internal class WidgetColours(
     private val darkExtras: AirExtraColors,
     private val lightAccent: Color,
     private val darkAccent: Color,
+    private val lightInk: Color,
+    private val darkInk: Color,
+    private val lightMuted: Color,
+    private val darkMuted: Color,
     private val lightTrackOf: (Color) -> Color,
     private val darkTrackOf: (Color) -> Color,
     private val mode: ThemeMode,
@@ -102,6 +106,33 @@ internal class WidgetColours(
             if (dark) darkAccent else lightAccent,
         ),
     )
+
+    /**
+     * Ink for type with no card under it, given what the wallpaper wants.
+     *
+     * Null means the system would not say, and the only thing left is to
+     * follow the app's own light-or-dark the way every other family does.
+     * A wallpaper that asks for dark text is a pale one, so the answer comes
+     * from the *light* half of the palette even if the phone is in dark
+     * mode: what matters here is the photograph, not the theme.
+     */
+    fun inkOn(darkInkWanted: Boolean?): ColorProvider = when (darkInkWanted) {
+        null -> onBackground
+        true -> ColorProvider(lightInk)
+        false -> ColorProvider(darkInk)
+    }
+
+    fun mutedOn(darkInkWanted: Boolean?): ColorProvider = when (darkInkWanted) {
+        null -> muted
+        true -> ColorProvider(lightMuted)
+        false -> ColorProvider(darkMuted)
+    }
+
+    fun tileOn(colour: TileColour, darkInkWanted: Boolean?): ColorProvider = when (darkInkWanted) {
+        null -> tile(colour)
+        true -> ColorProvider(extraOf(lightExtras, colour, lightAccent))
+        false -> ColorProvider(extraOf(darkExtras, colour, darkAccent))
+    }
 
     /** The unfilled part of an arc. */
     fun trackArgb(dark: Boolean): Int =
@@ -179,6 +210,10 @@ internal fun widgetColours(context: Context): WidgetColours {
         darkExtras = darkExtras,
         lightAccent = lightScheme.primary,
         darkAccent = darkScheme.primary,
+        lightInk = lightScheme.onSurface,
+        darkInk = darkScheme.onSurface,
+        lightMuted = lightScheme.onSurfaceVariant,
+        darkMuted = darkScheme.onSurfaceVariant,
         lightTrackOf = { mixToward(it, lightCard, 0.55f) },
         darkTrackOf = { mixToward(it, darkCard, 0.55f) },
         mode = mode,

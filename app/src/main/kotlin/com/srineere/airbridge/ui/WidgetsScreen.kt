@@ -179,7 +179,12 @@ private fun PreviewGrid(designs: List<WidgetDesign>, snapshot: WidgetSnapshot, n
                             }
                         }
                     } else {
-                        WidgetPreview(face, snapshot.colourFor(design), Modifier.fillMaxWidth())
+                        WidgetPreview(
+                            face,
+                            snapshot.colourFor(design),
+                            Modifier.fillMaxWidth(),
+                            cardless = design.family == WidgetFamily.Type,
+                        )
                     }
                     Text(
                         design.title,

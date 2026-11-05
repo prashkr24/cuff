@@ -102,6 +102,7 @@ internal fun WidgetSnapshot.colourFor(design: WidgetDesign): TileColour = when (
         RingFace.Summary, RingFace.Trends -> TileColour.Slate
     }
     is WidgetDesign.OfDials -> TileColour.Sleep
+    is WidgetDesign.OfType -> design.face.colour
 }
 
 /** The reading a design shows, whichever half of the app it comes from. */
@@ -110,6 +111,10 @@ internal fun faceOf(design: WidgetDesign, snapshot: WidgetSnapshot, now: Long): 
     is WidgetDesign.OfBand -> bandFace(design.face, snapshot.band, now)
     is WidgetDesign.OfRings -> ringsFace(design.face, snapshot)
     is WidgetDesign.OfDials -> dialsFace(design.face, snapshot)
+    // The reading with its chart taken away, which is the whole style.
+    is WidgetDesign.OfType -> typeFaceOf(design.face, snapshot, now)?.let {
+        Face(kicker = design.face.word, figure = it.figure, sub = it.sub)
+    }
 }
 
 /** A dials face as a [Face], for the thumbnail. */

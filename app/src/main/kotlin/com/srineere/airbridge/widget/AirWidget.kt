@@ -17,6 +17,7 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import com.srineere.airbridge.MainActivity
+import com.srineere.airbridge.health.TileKind
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.roundToInt
@@ -88,6 +89,7 @@ class AirWidget : GlanceAppWidget() {
             is WidgetDesign.OfBand -> BandWidget(design.face, face, snapshot, colours, onClick, now)
             is WidgetDesign.OfRings -> RingsWidget(design.face, face, snapshot, colours, onClick)
             is WidgetDesign.OfDials -> DialsWidget(design.face, face, snapshot, colours, onClick)
+            is WidgetDesign.OfType -> TypeWidget(design.face, face, snapshot, colours, onClick, now)
         }
     }
 
@@ -125,6 +127,12 @@ private fun openFor(config: WidgetConfig): Action {
         is WidgetDesign.OfRings -> null
         is WidgetDesign.OfDials ->
             if (config.opensTab || design.face != DialFace.Score) null else SLEEP_ROUTE
+        is WidgetDesign.OfType -> when {
+            config.opensTab -> null
+            design.face == TypeFace.Steps -> TileKind.Steps.route
+            design.face == TypeFace.Sleep -> TileKind.Sleep.route
+            else -> DEVICE_ROUTE
+        }
     }
     return actionStartActivity(
         MainActivity::class.java,
