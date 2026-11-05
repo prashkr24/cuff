@@ -6,6 +6,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,11 +129,33 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
     // screen a colour rather than a tile.
     val tileColours = state.tiles.associate { it.kind to tileColour(it) }
 
+    // Syncing is a round trip through somebody else's app, so the return
+    // leg has to be remembered. Google Health pulls the band when it is
+    // opened; coming back is the first moment there is anything new to
+    // read, and the ordinary resume read is throttled to a minute and
+    // would often skip it.
+    var awaitingSync by remember { mutableStateOf(false) }
+    val resumes = resumeTicks()
+    LaunchedEffect(resumes) {
+        if (awaitingSync) {
+            awaitingSync = false
+            state.refresh(context, force = true)
+        }
+    }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         HealthHeader(
             writtenAt = data.snapshot.writtenAt,
             loading = state.loading,
-            onRefresh = { state.refresh(context, force = true) },
+            onRefresh = {
+                // Re-reading alone cannot help: Health Connect holds only
+                // what Google Health last wrote, and nothing here can make
+                // it write. Opening it does -- it syncs the band on launch
+                // -- so that is what the button does, and the read happens
+                // on the way back.
+                awaitingSync = openBandApp(context)
+                if (!awaitingSync) state.refresh(context, force = true)
+            },
         )
 
         packTiles(state.tiles).forEach { row ->
@@ -185,14 +210,52 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
 }
 
 /**
+ * Opens the app that actually talks to the band, and says whether it could.
+ *
+ * The chain is band, then Google Health, then Health Connect, then us, and
+ * only the first hop reaches the band for readings. There is no API to make
+ * that hop happen -- Health Connect has no refresh, and `getChanges` is a
+ * delta read you still have to ask for. Launching the app does it, because
+ * it syncs the band when it opens.
+ *
+ * Tried by package rather than by an intent filter, because the app has been
+ * renamed once already and the launcher entry is an alias: asking the
+ * package manager for the launch intent follows the alias, and a list leaves
+ * room for the next rename without another guess at what it will be called.
+ */
+private fun openBandApp(context: Context): Boolean {
+    val candidates = listOf("com.fitbit.FitbitMobile", "com.google.android.apps.fitbit")
+    val manager = context.packageManager
+    candidates.forEach { name ->
+        val intent = runCatching { manager.getLaunchIntentForPackage(name) }.getOrNull()
+        if (intent != null) {
+            val started = runCatching {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.isSuccess
+            if (started) return true
+        }
+    }
+    return false
+}
+
+/**
  * The tab's title, how old its figures are, and the one control that makes
  * them newer.
  *
- * What the button does is re-read Health Connect. It cannot make Google
- * Health sync the band -- nothing here can, that is Google Health's own
- * schedule over the band's one session -- so it is drawn as a refresh rather
- * than called a sync, and the age beside it is the honest answer to "is this
- * current": the newest thing anything has filed, not the last time we asked.
+ * The button is a sync, and it was a plain re-read until it was watched
+ * being used. Re-reading cannot help: Health Connect holds only what Google
+ * Health last wrote, so pressing it when nothing has synced reads again,
+ * finds the same thing, and leaves the age one minute *older* than before.
+ * A working press and a dead button looked identical, which is how this was
+ * reported -- as the sync not working.
+ *
+ * So it opens Google Health, which pulls the band on launch, and the read
+ * happens on the way back. That is the only hop to the band anybody has, and
+ * it is not ours. When that app is not installed the press falls back to the
+ * re-read, which is all there ever was.
+ *
+ * The age beside it is still the honest answer to "is this current": the
+ * newest thing anything has filed, not the last time we asked.
  *
  * The age ticks on its own. Left to redraw only when something else changed,
  * a tab held open kept saying "now" an hour later.
@@ -229,7 +292,7 @@ private fun HealthHeader(writtenAt: Instant?, loading: Boolean, onRefresh: () ->
             IconButton(onClick = onRefresh) {
                 Icon(
                     Icons.Outlined.Refresh,
-                    contentDescription = "Read Health Connect again",
+                    contentDescription = "Sync with Google Health",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
