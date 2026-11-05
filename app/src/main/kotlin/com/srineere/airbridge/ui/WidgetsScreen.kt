@@ -2,6 +2,9 @@ package com.srineere.airbridge.ui
 
 import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,9 +78,7 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
     val snapshot = remember(context) { sampleWidgetSnapshot(HealthSettings.tiles(context)) }
     val now = remember { System.currentTimeMillis() }
     val inks = remember(context) { widgetColours(context).paperInks }
-    val families = remember { WidgetCatalogue.families() }
     val notBuilt = remember { WidgetCatalogue.notBuilt }
-    val expanded = remember { mutableStateMapOf<WidgetFamily, Boolean>() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Widgets", onBack = onBack)
@@ -95,26 +96,7 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
             placed.forEach { (_, config) -> PlacedRow(config, snapshot, now) }
         }
 
-        families.forEach { (family, designs) ->
-            val open = expanded[family] == true
-            val shown = if (open || designs.size <= SHOWN) designs else designs.take(SHOWN)
-            SectionHeader(
-                family.label,
-                action = when {
-                    designs.size <= SHOWN -> null
-                    open -> "Fewer"
-                    else -> "All ${designs.size}"
-                },
-                onAction = { expanded[family] = !open },
-            )
-            Text(
-                family.note,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.extras.disabled,
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
-            )
-            PreviewGrid(shown, snapshot, now, inks)
-        }
+        WidgetGallery(snapshot, now, inks)
 
         if (notBuilt.isNotEmpty()) {
             SectionHeader("Other styles")
@@ -153,6 +135,61 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
     }
 }
 
+
+/**
+ * Every design there is, by family, drawn.
+ *
+ * The same view in two places on purpose: here, where it is a catalogue to
+ * look through, and in the add flow, where dropping a widget opens it to be
+ * picked from. Those were two different screens once -- a page of pictures
+ * in the app and a list of names in the add flow -- and the list was the
+ * poorer of the two at the only moment it mattered, which is when somebody
+ * is choosing.
+ *
+ * [fits] says which designs the cell in hand can take. Anything it refuses
+ * stays on the page, dimmed, with the sizes it does take written underneath:
+ * filtering it out instead answers "where is the sleep widget" with silence.
+ *
+ * [onPick] null makes the page a catalogue rather than a chooser. Placing a
+ * widget belongs to the launcher, and this app does not offer a second way
+ * to do it.
+ */
+@Composable
+internal fun WidgetGallery(
+    snapshot: WidgetSnapshot,
+    now: Long,
+    inks: PaperInks,
+    fits: (WidgetDesign) -> Boolean = { true },
+    onPick: ((WidgetDesign) -> Unit)? = null,
+) {
+    val families = remember { WidgetCatalogue.families() }
+    val expanded = remember { mutableStateMapOf<WidgetFamily, Boolean>() }
+    families.forEach { (family, designs) ->
+        // What fits comes first. Four previews of a family, three of them
+        // greyed, says a family is unavailable when the one that fits was
+        // fifth in the list and behind the All button.
+        val ordered = designs.sortedBy { if (fits(it)) 0 else 1 }
+        val open = expanded[family] == true
+        val shown = if (open || ordered.size <= SHOWN) ordered else ordered.take(SHOWN)
+        SectionHeader(
+            family.label,
+            action = when {
+                ordered.size <= SHOWN -> null
+                open -> "Fewer"
+                else -> "All ${ordered.size}"
+            },
+            onAction = { expanded[family] = !open },
+        )
+        Text(
+            family.note,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.extras.disabled,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
+        )
+        PreviewGrid(shown, snapshot, now, inks, fits, onPick)
+    }
+}
+
 /** Two to a row, because one preview a row would be a very long screen. */
 @Composable
 private fun PreviewGrid(
@@ -160,6 +197,8 @@ private fun PreviewGrid(
     snapshot: WidgetSnapshot,
     now: Long,
     inks: PaperInks,
+    fits: (WidgetDesign) -> Boolean = { true },
+    onPick: ((WidgetDesign) -> Unit)? = null,
 ) {
     designs.chunked(2).forEach { pair ->
         Row(
@@ -167,7 +206,24 @@ private fun PreviewGrid(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
         ) {
             pair.forEach { design ->
-                Column(Modifier.weight(1f)) {
+                val available = fits(design)
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .then(
+                            if (onPick != null && available) {
+                                Modifier.clickable { onPick(design) }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        // Dimmed whole, preview and name together: a bright
+                        // title over a grey picture reads as a loading card
+                        // rather than as one that will not go here.
+                        .alpha(if (available) 1f else 0.38f)
+                        .padding(4.dp),
+                ) {
                     val face = faceOf(design, snapshot, now)
                     if (face == null) {
                         // A kind nothing writes still gets a card, because
@@ -192,7 +248,7 @@ private fun PreviewGrid(
                             snapshot.colourFor(design),
                             Modifier.fillMaxWidth(),
                             cardless = design.family == WidgetFamily.Type,
-                            paper = inks.takeIf { design.family == WidgetFamily.Paper },
+                            caps = design.family != WidgetFamily.Tiles,
                         )
                     }
                     Text(
@@ -203,7 +259,11 @@ private fun PreviewGrid(
                         modifier = Modifier.padding(top = 7.dp),
                     )
                     Text(
-                        design.summary,
+                        // What it is, or -- where it will not go in this
+                        // cell -- what it would need instead.
+                        if (available) design.summary else "Needs " + design.sizes
+                            .sortedBy { it.ordinal }
+                            .joinToString(" or ") { it.cells },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
@@ -264,12 +324,17 @@ private fun PlacedRow(config: WidgetConfig, snapshot: WidgetSnapshot, now: Long)
             .heightIn(min = 44.dp),
     ) {
         faceOf(config.design, snapshot, now)?.let { face ->
-            WidgetPreview(face, snapshot.colourFor(config.design), Modifier.weight(0.6f))
+            WidgetPreview(
+                face,
+                snapshot.colourFor(config.design),
+                Modifier.weight(0.6f),
+                caps = config.design.family != WidgetFamily.Tiles,
+            )
         }
         Column(Modifier.weight(1f)) {
             Text(config.design.title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                config.pinned?.let { "${it.label} · ${it.cells}" } ?: "Any size",
+                config.design.summary,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

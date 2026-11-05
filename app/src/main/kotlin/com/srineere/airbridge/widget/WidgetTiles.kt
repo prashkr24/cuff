@@ -12,11 +12,14 @@ import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.action.Action
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.width
+import androidx.glance.text.FontWeight
+import com.srineere.airbridge.health.HealthSnapshot
 import com.srineere.airbridge.health.Night
 import com.srineere.airbridge.health.Reading
 import com.srineere.airbridge.health.SleepStage
@@ -53,7 +56,45 @@ internal data class Face(
     val window: String? = null,
     /** The full name, for the widths that have room for it. */
     val longKicker: String? = null,
+    /**
+     * The figure where two columns cannot hold the long one.
+     *
+     * "−1,533" does not fit a Square and a clipped number is a wrong
+     * number, so Energy steps down to "−1.5k" exactly as its tile does.
+     */
+    val shortFigure: String? = null,
+    /**
+     * A filled pill under the figure -- Energy's "Deficit", Nutrition's
+     * nothing. The tab draws this as `TileChip`; the widget said the same
+     * thing in plain grey words, which is a different component.
+     */
+    val badge: String? = null,
+    /**
+     * A second figure at the far end of the figure's line, with its name
+     * under it. Sleep's score, and only at the size with room for it.
+     */
+    val trailingFigure: String? = null,
+    val trailingLabel: String? = null,
+    /**
+     * A goal ring, where the tile draws one.
+     *
+     * Steps is the only tile on the tab with a ring, and it is the first
+     * thing you see on it -- a 4dp meter said the same fraction and looked
+     * like a different tile. [ringLabel] goes in the hole.
+     */
+    val ring: Float? = null,
+    val ringLabel: String? = null,
+    val ringSub: String? = null,
 )
+
+/**
+ * Whether this card is wide enough for a chart to carry its scale.
+ *
+ * The tab passes `axes` to a tile's chart at L and XL and passes null
+ * below that, so a small tile gets the bare shape. Wide and Tall are those
+ * two sizes, and the rule is the same one.
+ */
+internal fun WidgetSize.scaled(): Boolean = this == WidgetSize.Wide || this == WidgetSize.Tall
 
 internal sealed interface Chart {
     /**
@@ -68,6 +109,13 @@ internal sealed interface Chart {
         val blankZeros: Boolean = false,
         /** What a full-height bar means, when the series has a ceiling of its own. */
         val ceiling: Float? = null,
+        /** The dashed line the tile draws across it, in the series' units. */
+        val goal: Float? = null,
+        val goalLabel: String? = null,
+        /** Positions from 0 to 1 with their labels, for the footer. */
+        val xTicks: List<Pair<Float, String>> = emptyList(),
+        /** Formats a value for the gutter, or null for no gutter. */
+        val yLabel: ((Float) -> String)? = null,
         /**
          * Whether the newest bar is picked out.
          *
@@ -80,6 +128,19 @@ internal sealed interface Chart {
 
     /** A night, in proportion. Keeps the sleep palette whatever colour the tile is. */
     class Stages(val parts: List<Pair<Float, SleepStage>>) : Chart
+
+    /**
+     * A week of nights, each a bar divided into its stages.
+     *
+     * What the tile actually draws. One night as a stripe was a different
+     * chart answering a different question: the tile's sleep chart is
+     * about the week the night sits in, and the goal line is why.
+     */
+    class StageWeek(
+        val nights: List<List<Pair<Float, SleepStage>>>,
+        val goalMinutes: Float?,
+        val xTicks: List<Pair<Float, String>> = emptyList(),
+    ) : Chart
 
     /** Two or three shares that mean different things, each with its own colour. */
     class Split(val parts: List<Pair<Float, TileColour>>) : Chart
@@ -101,6 +162,41 @@ internal sealed interface Chart {
      * cannot draw a dot, so this one costs a bitmap.
      */
     class Scatter(val values: List<Double>, val low: Double?, val high: Double?) : Chart
+
+    /**
+     * One rail a reading: where it sits across its own range, over the
+     * half of that range it usually lands in.
+     *
+     * What `VitalsTile` draws. Naming the readings and their figures was a
+     * list; this is the tile's actual claim, which is positional.
+     */
+    class Rails(val rails: List<Pair<Trend?, TileColour>>) : Chart
+
+    /**
+     * A day of beats, each slice as the range within it.
+     *
+     * `DayHeartLine`'s shape. Binning the day into twenty-four fat columns
+     * answered "what was the highest reading that hour", which is not the
+     * question the tile's chart is about.
+     */
+    class Beats(val samples: List<com.srineere.airbridge.health.HeartSample>) : Chart
+
+    /**
+     * Two running totals on one axis, climbing against each other.
+     *
+     * [ticks] comes from the day rather than from the chart, because the
+     * axis belongs to the reading: the screen marks every few hours the day
+     * has actually reached and then the hour it is now, so the last label
+     * sits under the end of the lines instead of at a round number they
+     * have not got to.
+     */
+    class Climb(
+        val first: List<Float>,
+        val second: List<Float>,
+        val firstColour: TileColour,
+        val secondColour: TileColour,
+        val ticks: List<Pair<Float, String>> = emptyList(),
+    ) : Chart
 
     /** Arcs side by side, each with its figure in the middle. */
     class Dials(val parts: List<DialReading>) : Chart
@@ -126,15 +222,44 @@ internal fun TileWidget(
 ) {
     val colour = snapshot.colourFor(kind)
     if (!snapshot.granted) {
-        Empty(colours, kind.short, notConnected(snapshot), onClick)
+        EmptyTile(kind, colour, colours, notConnected(snapshot), onClick)
         return
     }
     val face = faceFor(kind, snapshot)
     if (face == null) {
-        Empty(colours, kind.short, "Nothing writes this to Health Connect yet", onClick)
+        EmptyTile(kind, colour, colours, "Nothing writes this to Health Connect yet", onClick)
         return
     }
     DrawFace(face, size, colour, colours, onClick, snapshot.showTrends)
+}
+
+/**
+ * A tile with nothing to say, as the tab says it.
+ *
+ * Not the shared [Empty], which leads with a big dash: `TileEmpty` keeps
+ * the head and puts the reason under it in the same small type as any
+ * other sub. A tile that has lost its reading still looks like that tile,
+ * and a dash where the figure goes reads as a reading of nothing.
+ */
+@Composable
+private fun EmptyTile(
+    kind: TileKind,
+    colour: TileColour,
+    colours: WidgetColours,
+    reason: String,
+    onClick: Action?,
+) {
+    WidgetCard(
+        colours,
+        onClick,
+        horizontal = TILE_PAD_H,
+        vertical = TILE_PAD_V,
+        border = colours.outline,
+    ) {
+        Kicker(kind.short, colours.tile(colour), size = KICKER, caps = false)
+        Gap(6.dp)
+        Sub(reason, colours.muted, size = SUB, lines = 3, weight = FontWeight.Medium)
+    }
 }
 
 private fun notConnected(snapshot: WidgetSnapshot): String = when (snapshot.health.stage) {
@@ -154,59 +279,82 @@ private fun DrawFace(
     onClick: Action?,
     showTrends: Boolean,
 ) {
-    val padding = 11.dp
     val tint = colours.tile(colour)
     // A launcher hands out whatever cell it likes, and the nearest declared
     // size is often a little shorter than the space. Centred, so a strip in a
     // slightly taller cell sits in it rather than clinging to the top edge.
-    val alignment =
-        if (size == WidgetSize.Strip || size == WidgetSize.Row) Alignment.CenterVertically
-        else Alignment.Top
-    WidgetCard(colours, onClick, padding, alignment) {
+    //
+    // A stripe is centred for the opposite reason: it is a fixed 14dp
+    // whatever the cell, so a card built round one cannot fill itself the
+    // way a card built round bars does, and the slack is better shared
+    // above and below than banked at the bottom.
+    val alignment = when {
+        size == WidgetSize.Strip || size == WidgetSize.Row -> Alignment.CenterVertically
+        face.chart.isShort() -> Alignment.CenterVertically
+        else -> Alignment.Top
+    }
+    WidgetCard(
+        colours,
+        onClick,
+        verticalAlignment = alignment,
+        horizontal = TILE_PAD_H,
+        vertical = TILE_PAD_V,
+        border = colours.outline,
+    ) {
+        // The one tile on the tab with a ring has a shape of its own, so
+        // the widget borrows that shape rather than the generic one.
+        if (face.ring != null && (size == WidgetSize.Wide || size == WidgetSize.Tall)) {
+            RingFace(face, size, colour, tint, colours, showTrends)
+            return@WidgetCard
+        }
         when (size) {
             WidgetSize.Strip -> {
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Kicker(face.kicker, tint, size = 9)
+                    Kicker(face.kicker, tint, size = KICKER, caps = false)
                     // Two columns leave room for an arrow and nothing else,
                     // and the figure beside it would be cut in half. The
                     // direction is the part that survives at this width.
                     if (showTrends && face.chip != null) {
                         Spacer(GlanceModifier.defaultWeight())
-                        Sub(arrowOf(face.chip), tint, size = 11)
+                        Sub(arrowOf(face.chip), tint, size = 11, weight = FontWeight.Bold)
                     }
                 }
-                Gap(4.dp)
-                FigureAndUnit(face, 20, colours)
+                Gap(3.dp)
+                // Not the tab's 26: a 2x1 cell is a third of the tile's
+                // height and the figure is the only thing that can give way
+                // -- the kicker is already as small as the tab draws one.
+                FigureAndUnit(face, 22, colours)
             }
 
             WidgetSize.Row -> {
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Kicker(face.kicker, tint, size = 9)
+                    Kicker(face.kicker, tint, size = KICKER, caps = false)
                     Spacer(GlanceModifier.width(9.dp))
-                    FigureAndUnit(face, 19, colours)
+                    FigureAndUnit(face, FIGURE, colours)
                     Spacer(GlanceModifier.defaultWeight())
-                    Sub(face.chip ?: face.sub, colours.muted, size = 10)
+                    Sub(face.chip ?: face.sub, colours.muted, size = SUB, weight = FontWeight.Medium)
                 }
             }
 
             WidgetSize.Square -> {
-                Head(face, colour, tint, colours, showTrends, wide = false)
-                Gap(7.dp)
-                FigureAndUnit(face, 26, colours)
-                Gap(3.dp)
-                Sub(face.sub, colours.muted, size = 10)
+                Head(face, size, colour, tint, colours, showTrends, wide = false)
+                Gap(5.dp)
+                FigureAndUnit(face, FIGURE, colours, short = true)
+                Gap(2.dp)
+                Badged(face, tint, colours, colour)
                 face.meter?.let {
                     Gap(7.dp)
-                    Meter(it, innerWidth(padding), tint, colours.track, height = 4.dp)
+                    Meter(it, innerWidth(TILE_PAD_H), tint, colours.track, height = 4.dp)
                 }
                 Grow()
                 DrawChart(
                     face.chart, colour, colours,
                     // What is left under the figure, rather than a constant
                     // that is right in one cell and wrong in every other.
-                    height = (innerHeight(padding).value - SQUARE_ABOVE_CHART)
+                    height = (innerHeight(TILE_PAD_V).value - SQUARE_ABOVE_CHART)
                         .coerceIn(20f, 72f).dp,
-                    width = innerWidth(padding),
+                    width = innerWidth(TILE_PAD_H),
+                    scaled = size.scaled(),
                 )
             }
 
@@ -214,46 +362,71 @@ private fun DrawFace(
             // the top and the chart under it with the whole width. Only the
             // wide face puts them side by side.
             WidgetSize.Tall -> {
-                Head(face, colour, tint, colours, showTrends, wide = true)
-                Gap(8.dp)
-                FigureAndUnit(face, 32, colours)
-                Gap(3.dp)
-                Sub(face.sub, colours.muted, size = 11)
+                Head(face, size, colour, tint, colours, showTrends, wide = true)
+                Gap(5.dp)
+                // The tab's hero is displaySmall, which in this app is 26sp
+                // -- the same as the headlineSmall every other tile size
+                // uses. Thirty-two was a hero the tab does not draw.
+                // The score sits at the far end of the hours it scores, as
+                // the tile puts it, rather than under them as another sub.
+                Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    Column { FigureAndUnit(face, FIGURE, colours) }
+                    face.trailingFigure?.let {
+                        Spacer(GlanceModifier.defaultWeight())
+                        Column(horizontalAlignment = Alignment.End) {
+                            Figure(it, FIGURE, tint, weight = FontWeight.Bold)
+                            face.trailingLabel?.let { name ->
+                                Sub(name, colours.muted, size = SUB, weight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+                Gap(2.dp)
+                Badged(face, tint, colours, colour)
                 face.detail?.let {
                     Gap(3.dp)
-                    Sub(it, colours.faint, size = 10)
+                    Sub(it, colours.faint, size = SUB, weight = FontWeight.Medium)
                 }
                 face.meter?.let {
                     Gap(8.dp)
-                    Meter(it, innerWidth(padding), tint, colours.track, height = 5.dp)
+                    Meter(it, innerWidth(TILE_PAD_H), tint, colours.track, height = 5.dp)
                 }
                 Gap(10.dp)
                 DrawChart(
                     face.chart, colour, colours,
-                    height = (innerHeight(padding).value - TALL_ABOVE_CHART)
+                    height = (innerHeight(TILE_PAD_V).value - TALL_ABOVE_CHART)
                         .coerceIn(40f, 260f).dp,
-                    width = innerWidth(padding),
+                    width = innerWidth(TILE_PAD_H),
+                    scaled = size.scaled(),
                 )
             }
 
             WidgetSize.Wide -> {
-                Head(face, colour, tint, colours, showTrends, wide = true)
+                Head(face, size, colour, tint, colours, showTrends, wide = true)
                 Gap(6.dp)
                 // All of it. A cap here was what left a field of empty card
                 // under the chart: a launcher's 4x4 is taller than the 300dp
                 // the face was drawn for, and a widget should spend the
                 // space it was given.
-                val chartHeight = (innerHeight(padding).value - WIDE_ABOVE_CHART)
+                val chartHeight = (innerHeight(TILE_PAD_V).value - WIDE_ABOVE_CHART)
                     .coerceIn(44f, 400f).dp
                 @Suppress("UNUSED_EXPRESSION") size
-                Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                // Centred, not sat on the floor: every L tile on the tab
+                // puts its figure column level with the chart beside it.
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Column(modifier = GlanceModifier.width(FIGURE_COLUMN)) {
-                        FigureAndUnit(face, if (size == WidgetSize.Tall) 30 else 25, colours)
-                        Gap(3.dp)
-                        Sub(face.sub, colours.tile(colour), size = 10)
+                        FigureAndUnit(face, FIGURE, colours)
+                        Gap(2.dp)
+                        // The tab's `TileSub` is onSurfaceVariant at every
+                        // size. Tinting it here made the one line under the
+                        // figure the only coloured sub in either place.
+                        Badged(face, tint, colours, colour)
                         face.detail?.let {
                             Gap(4.dp)
-                            Sub(it, colours.faint, size = 9, lines = 2)
+                            Sub(it, colours.faint, size = SUB, lines = 2, weight = FontWeight.Medium)
                         }
                         face.meter?.let {
                             Gap(7.dp)
@@ -265,7 +438,8 @@ private fun DrawFace(
                         DrawChart(
                             face.chart, colour, colours,
                             height = chartHeight,
-                            width = innerWidth(padding).value.minus(FIGURE_COLUMN.value + 12).dp,
+                            width = innerWidth(TILE_PAD_H).value.minus(FIGURE_COLUMN.value + 12).dp,
+                            scaled = size.scaled(),
                         )
                     }
                 }
@@ -273,6 +447,13 @@ private fun DrawFace(
         }
     }
 }
+
+/**
+ * Whether this chart draws to a fixed height rather than filling what it
+ * is given. Stripes do; bars, scatters and the sleep week do not.
+ */
+private fun Chart?.isShort(): Boolean =
+    this is Chart.Split || this is Chart.Stages || this is Chart.Rail
 
 /**
  * The tile's own heading.
@@ -285,6 +466,7 @@ private fun DrawFace(
 @Composable
 private fun Head(
     face: Face,
+    size: WidgetSize,
     colour: TileColour,
     tint: androidx.glance.unit.ColorProvider,
     colours: WidgetColours,
@@ -292,30 +474,177 @@ private fun Head(
     wide: Boolean,
 ) {
     Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Kicker(if (wide) face.longKicker ?: face.kicker else face.kicker, tint)
+        Kicker(
+            if (wide) face.longKicker ?: face.kicker else face.kicker,
+            tint,
+            size = KICKER,
+            caps = false,
+        )
         if (wide) {
-            face.window?.let {
-                Spacer(GlanceModifier.width(4.dp))
-                Sub("· $it", colours.faint, size = 10)
-            }
+            // One run beginning with a space, as `TileHead` writes it: a
+            // 4dp spacer put the separator a hair further out than the tab
+            // does, which on two cards side by side is a wobble.
+            face.window?.let { Sub(" · $it", colours.faint, size = KICKER) }
         }
         if (showTrends && face.chip != null) {
             Spacer(GlanceModifier.defaultWeight())
-            Chip(face.chip, tint, colours.tileWash(colour))
+            // Tight at Square, which is the tab's M; Wide and Tall are its
+            // L and XL, where `ChangeChip` is the roomier of its two.
+            Chip(chipAt(face.chip, size), tint, colours.tileWash(colour), tight = !wide)
         }
     }
 }
 
+/**
+ * The chip's words at this width, by `ChangeChip`'s own rule.
+ *
+ * At M the unit goes and the figure stays: the head already names what is
+ * being measured and the value under it carries the unit, so "↑ 2" is the
+ * only part of "↑ 2 bpm" that is not already on the card. A chip whose
+ * last word holds a digit -- sleep's "↑ 1h 20m" -- has no unit to drop.
+ */
+internal fun chipAt(chip: String, size: WidgetSize): String {
+    if (size != WidgetSize.Square) return chip
+    val last = chip.substringAfterLast(' ', "")
+    val isUnit = last.isNotEmpty() && last.none { it.isDigit() }
+    return if (isUnit && chip.count { it == ' ' } >= 2) chip.substringBeforeLast(' ') else chip
+}
+
+/**
+ * A tile built round its goal ring, as `StepsTile` builds one.
+ *
+ * At Wide the ring stands beside the head, the week and the summary, which
+ * is the tile's L. At Tall the ring sits with the head and the figure on
+ * one line and the week takes everything under them, which is its XL.
+ */
 @Composable
-private fun FigureAndUnit(face: Face, size: Int, colours: WidgetColours) {
-    if (face.unit == null) {
-        Figure(face.figure, size, colours.onBackground)
+private fun RingFace(
+    face: Face,
+    size: WidgetSize,
+    colour: TileColour,
+    tint: androidx.glance.unit.ColorProvider,
+    colours: WidgetColours,
+    showTrends: Boolean,
+) {
+    val progress = face.ring ?: return
+    val side = if (size == WidgetSize.Tall) 72.dp else 64.dp
+    val ring = @Composable {
+        Box(contentAlignment = Alignment.Center) {
+            RingImage(listOf(progress to colour), colours, side, stroke = RING_STROKE)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                face.ringLabel?.let { Figure(it, 15, colours.onBackground, weight = FontWeight.Bold) }
+                // The count under the share, as the tile's L has it. At XL
+                // the tile drops it -- the figure beside the ring says it.
+                if (size == WidgetSize.Wide) {
+                    face.ringSub?.let { Sub(it, tint, size = 10, weight = FontWeight.Medium) }
+                }
+            }
+        }
+    }
+    if (size == WidgetSize.Wide) {
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ring()
+            Spacer(GlanceModifier.width(10.dp))
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Head(face, size, colour, tint, colours, showTrends, wide = true)
+                Gap(4.dp)
+                DrawChart(
+                    face.chart, colour, colours,
+                    height = (innerHeight(TILE_PAD_V).value - RING_WIDE_ABOVE_CHART)
+                        .coerceIn(28f, 90f).dp,
+                    width = (innerWidth(TILE_PAD_H).value - side.value - 10f).dp,
+                    scaled = size.scaled(),
+                )
+                face.detail?.let {
+                    Gap(3.dp)
+                    Sub(it, colours.muted, size = SUB, weight = FontWeight.Medium)
+                }
+            }
+        }
+        return
+    }
+    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        ring()
+        Spacer(GlanceModifier.width(12.dp))
+        Column(modifier = GlanceModifier.defaultWeight()) {
+            Head(face, size, colour, tint, colours, showTrends, wide = true)
+            FigureAndUnit(face, FIGURE, colours)
+            Gap(2.dp)
+            face.detail?.let { Sub(it, colours.muted, size = SUB, weight = FontWeight.Medium) }
+        }
+    }
+    Gap(8.dp)
+    DrawChart(
+        face.chart, colour, colours,
+        height = (innerHeight(TILE_PAD_V).value - side.value - 20f).coerceIn(40f, 260f).dp,
+        width = innerWidth(TILE_PAD_H),
+        scaled = size.scaled(),
+    )
+}
+
+/**
+ * One arc, so it can be thicker than the three the Rings family stacks.
+ *
+ * `GoalRing` on the tab is a heavier stroke than a third of a bullseye
+ * needs, and at 64dp the default came out as a wire.
+ */
+private const val RING_STROKE = 0.135f
+
+/** The head and the summary, either side of a ring tile's week. */
+private const val RING_WIDE_ABOVE_CHART = 46f
+
+/**
+ * The sub, or the filled pill that stands where the sub would.
+ *
+ * `TileChip` is a pill at fourteen per cent, a step paler than the change
+ * chip in the head -- the tab draws the two at different strengths and so
+ * does this.
+ */
+@Composable
+private fun Badged(
+    face: Face,
+    tint: androidx.glance.unit.ColorProvider,
+    colours: WidgetColours,
+    colour: TileColour,
+) {
+    face.badge?.let {
+        Chip(it, tint, colours.tileChip(colour), tight = true)
+        return
+    }
+    if (face.sub.isEmpty()) return
+    Sub(face.sub, colours.muted, size = SUB, weight = FontWeight.Medium)
+}
+
+/**
+ * The figure and its unit, as `TileValue` sets them.
+ *
+ * The unit is labelMedium against the figure's bottom whatever the figure
+ * is -- it does not scale with it, because on the tab it never did.
+ */
+@Composable
+private fun FigureAndUnit(
+    face: Face,
+    size: Int,
+    colours: WidgetColours,
+    /** True where two columns cannot hold the long figure. */
+    short: Boolean = false,
+) {
+    val shown = if (short) face.shortFigure ?: face.figure else face.figure
+    // The unit goes with the long figure. `EnergyTile` writes "-1.5k" bare
+    // at S, M and W and "-1,533 kcal" at L and XL, because two columns
+    // that cannot hold the number cannot hold its unit either.
+    val abbreviated = short && face.shortFigure != null
+    if (face.unit == null || abbreviated) {
+        Figure(shown, size, colours.onBackground, weight = FontWeight.Bold)
         return
     }
     Row(verticalAlignment = Alignment.Bottom) {
-        Figure(face.figure, size, colours.onBackground)
+        Figure(shown, size, colours.onBackground, weight = FontWeight.Bold)
         Spacer(GlanceModifier.width(4.dp))
-        Sub(face.unit, colours.muted, size = (size / 2.4f).roundToInt().coerceIn(9, 13))
+        Sub(face.unit, colours.muted, size = KICKER)
     }
 }
 
@@ -326,10 +655,12 @@ private fun DrawChart(
     colours: WidgetColours,
     height: androidx.compose.ui.unit.Dp,
     width: androidx.compose.ui.unit.Dp,
+    /** Null below Wide, where the tab draws the bare shape too. */
+    scaled: Boolean = false,
 ) {
     when (chart) {
         null -> Unit
-        is Chart.Bars -> BarsImage(chart, colour, colours, height, width)
+        is Chart.Bars -> BarsImage(chart, colour, colours, height, width, scaled)
         is Chart.Stages -> StripeImage(
             chart.parts.map { (share, stage) -> share to colours.sleepStageArgb(stage, colours.darkNow()) },
             height.value.coerceAtMost(STRIPE_MAX).dp,
@@ -340,6 +671,14 @@ private fun DrawChart(
             height.value.coerceAtMost(STRIPE_MAX).dp,
             width,
         )
+        is Chart.StageWeek -> StageWeekImage(chart, colours, height, width, scaled)
+
+        is Chart.Rails -> RailsImage(chart, colours, height, width)
+
+        is Chart.Climb -> ClimbImage(chart, colours, height, width, scaled)
+
+        is Chart.Beats -> BeatsImage(chart, colour, colours, height, width, scaled)
+
         is Chart.Scatter -> ScatterImage(chart, colour, colours, height, width)
 
         is Chart.Arcs -> RingImage(chart.parts, colours, height)
@@ -394,12 +733,12 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
         TileKind.Heart -> health.restingTrend?.let { trend ->
             Face(
                 kicker = "",
-                window = "30 days",
+                window = "$WIDGET_WINDOW_DAYS days",
                 figure = trend.latest.roundToInt().toString(),
                 unit = "bpm",
                 sub = usualBand(trend, 0),
                 // The whole month, as the tile plots it.
-                chart = scatterOf(trend, 30),
+                chart = scatterOf(trend, WIDGET_WINDOW_DAYS),
                 chip = chipOf(trend, "bpm"),
             )
         }
@@ -414,7 +753,7 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 figure = latest.toString(),
                 unit = "bpm",
                 sub = "$low–$high today",
-                chart = Chart.Bars(samples.byHour(), blankZeros = true),
+                chart = Chart.Beats(samples),
             )
         }
 
@@ -424,29 +763,76 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 kicker = "",
                 window = "${health.nights.size} nights",
                 figure = night.asleep.asHoursMinutes(),
-                sub = if (score != null) "score $score" else "no score yet",
+                // The tile's sub is how well the night went, not its score:
+                // the score is the big figure at the other end of the line.
+                sub = night.efficiency
+                    ?.let { "${(it * 100).roundToInt()}% efficient" }
+                    ?: "no efficiency yet",
+                trailingFigure = score?.toString(),
+                trailingLabel = if (score != null) "score" else null,
                 detail = "woke " + night.end.atZone(java.time.ZoneId.systemDefault())
                     .toLocalTime().let { "%02d:%02d".format(it.hour, it.minute) },
-                chart = night.stageChart(),
-                chip = health.sleepTrend?.let { chipOfMinutes(it) },
+                chart = health.nights.takeLast(7)
+                    .map { it.stageParts() }
+                    .takeIf { week -> week.any { it.isNotEmpty() } }
+                    ?.let {
+                        Chart.StageWeek(
+                            it,
+                            snapshot.goals.sleepMinutes.toFloat(),
+                            weekdayTicks(health.nights.takeLast(7).map { night -> night.epochDay() }),
+                        )
+                    }
+                    ?: night.stageChart(),
+                chip = health.sleepTrend?.let { chipOf(it, "min") },
             )
         }
 
         TileKind.Steps -> {
             val goal = snapshot.goals.steps
             val percent = if (goal > 0) (health.stepProgress(goal) * 100).roundToInt() else 0
+            // The tile's own summary line, word for word, for the widths
+            // that draw a ring. "5,707 to go" was the widget's own idea.
+            val week = data.steps.takeLast(7)
+            val met = week.count { it.value >= goal }
+            val average = week.map { it.value }.average().takeIf { week.isNotEmpty() }
+            val summary = buildString {
+                average?.let { append("avg %,d".format(it.roundToInt())) }
+                if (average != null) append(" · ")
+                append(
+                    when (met) {
+                        0 -> "goal not met"
+                        1 -> "goal met once"
+                        else -> "goal met $met days"
+                    },
+                )
+            }
             Face(
                 kicker = "",
                 window = "7 days",
                 figure = "%,d".format(health.stepsToday),
                 // The tab's own line: a share of the goal, not the remainder.
                 sub = if (goal > 0) "$percent%% of %,d".format(goal) else "today",
-                detail = if (goal > 0 && health.stepsToGo(goal) > 0) {
-                    "%,d to go".format(health.stepsToGo(goal))
-                } else if (goal > 0) "goal met" else null,
-                chart = Chart.Bars(data.steps.tail(7)),
-                meter = if (goal > 0) health.stepProgress(goal) else null,
-                chip = health.stepsTrend?.let { chipOf(it, "", decimals = 0) },
+                detail = summary,
+                chart = Chart.Bars(
+                    data.steps.tail(7),
+                    goal = goal.takeIf { it > 0 }?.toFloat(),
+                    goalLabel = goal.takeIf { it > 0 }?.let { shortFigure(it.toDouble()) },
+                    xTicks = weekdayTicks(week.map { it.day }),
+                    yLabel = { shortFigure(it.toDouble()) },
+                ),
+                // A ring where the tile draws one, and nothing where it
+                // draws nothing: the tab has no meter on a steps tile at
+                // any size, and the widget's bar was a shape of its own.
+                ring = if (goal > 0) health.stepProgress(goal) else null,
+                ringLabel = if (goal > 0) "$percent%" else null,
+                ringSub = "%,d".format(health.stepsToday),
+                // A share, not a count of steps. "318 fewer steps" means
+                // nothing without a usual day, which is why the tile gives
+                // the drift as a percentage -- and why the tile said
+                // "Steady" where the widget said "↓ 6".
+                chip = health.stepsTrend
+                    ?.let { if (it.average > 0) it.change / it.average * 100 else 0.0 }
+                    ?.let { chipOfChange(it, "%", decimals = 0) },
             )
         }
 
@@ -457,8 +843,13 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
             Face(
                 kicker = "",
                 figure = signed(balance.roundToInt()),
+                shortFigure = shortSigned(balance),
                 unit = "kcal",
-                sub = if (balance < 0) "under" else "over",
+                // The tab puts the word in a filled pill and nothing in the
+                // sub; "under" in grey text was the same claim drawn as a
+                // different thing.
+                sub = "",
+                badge = if (balance < 0) "Deficit" else "Surplus",
                 detail = "%,d in · %,d out".format(eaten.roundToInt(), burned.roundToInt()),
                 chart = Chart.Split(
                     listOf(
@@ -488,21 +879,24 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                         java.time.Duration.between(it.start, it.end).toMinutes().toFloat()
                     }.takeLast(7),
                     highlightLast = false,
+                    yLabel = { it.roundToInt().toString() },
                 ),
                 chip = health.activityTrend?.let { chipOf(it, "min", decimals = 0) },
             )
         }
 
         TileKind.Vitals -> {
-            val rows = listOfNotNull(
-                data.respiratoryRate.lastOrNull()
-                    ?.let { Triple("Breathing", it.value.roundToInt().toString(), TileColour.Activity) },
-                data.skinTemperature.lastOrNull()
-                    ?.let { Triple("Skin", signedDecimal(it.value) + "°", TileColour.Energy) },
-                data.oxygenSaturation.lastOrNull()
-                    ?.let { Triple("SpO₂", "${it.value.roundToInt()}%", TileColour.Sleep) },
+            // Five rails in the order the Vitals screen lists them, so a
+            // metric nothing writes keeps its empty place rather than
+            // shifting the rest up -- `VitalsTile`'s own rule.
+            val rows = listOf(
+                health.restingTrend to TileColour.Heart,
+                health.hrvTrend to TileColour.Hrv,
+                health.breathingTrend to TileColour.Activity,
+                health.skinTrend to TileColour.Energy,
+                health.oxygenTrend to TileColour.Slate,
             )
-            if (rows.isEmpty()) return null
+            if (rows.none { it.first != null }) return null
             val inRange = health.vitals.count { it.latestIsUsual }
             Face(
                 kicker = "",
@@ -511,7 +905,7 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 figure = inRange.toString(),
                 unit = "of ${health.vitals.size}",
                 sub = "in range",
-                chart = Chart.Rows(rows),
+                chart = Chart.Rails(rows),
             )
         }
 
@@ -527,6 +921,28 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
             )
         }
 
+        TileKind.Balance -> {
+            val day = balanceToday(data)
+            if (!day.anything) return null
+            Face(
+                kicker = "",
+                window = "today",
+                figure = signed(day.gap.roundToInt()),
+                unit = "kcal",
+                sub = if (day.gap < 0) "behind, so far today" else "ahead, so far today",
+                detail = "%,d in · %,d out".format(day.lastEaten, day.lastBurned),
+                // Two climbs on one axis, which is the whole reading: the
+                // gap between them is what the figure above says in words.
+                chart = Chart.Climb(
+                    day.burned,
+                    day.eaten,
+                    TileColour.Activity,
+                    TileColour.Energy,
+                    day.hourTicks,
+                ),
+            )
+        }
+
         TileKind.Nutrition -> {
             val eaten = data.eatenToday ?: return null
             val protein = data.proteinToday ?: 0.0
@@ -536,7 +952,14 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 kicker = "",
                 figure = "%,d".format(eaten.roundToInt()),
                 unit = "kcal",
-                sub = mealNote(data.mealsDaily.values.lastOrNull() ?: 0),
+                // The tile's own line. Meals were the widget's own idea of
+                // what a food tile says, and the two never agreed.
+                sub = when {
+                    data.proteinToday == null -> "no macros logged"
+                    snapshot.goals.proteinGrams != null ->
+                        "${protein.roundToInt()} of ${snapshot.goals.proteinGrams} g protein"
+                    else -> "${protein.roundToInt()} g protein"
+                },
                 detail = "P ${protein.roundToInt()} · C ${carbs.roundToInt()} · F ${fat.roundToInt()}",
                 chart = if (protein + carbs + fat <= 0) Chart.Bars(data.eatenDaily.tail(7)) else Chart.Split(
                     listOf(
@@ -552,11 +975,11 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
         TileKind.Weight -> health.weightTrend?.let { trend ->
             Face(
                 kicker = "",
-                window = "30 days",
+                window = "$WIDGET_WINDOW_DAYS days",
                 figure = "%.1f".format(trend.latest),
                 unit = "kg",
                 sub = usualBand(trend, 1),
-                chart = scatterOf(trend, 30),
+                chart = scatterOf(trend, WIDGET_WINDOW_DAYS),
                 chip = chipOf(trend, "kg", decimals = 1),
             )
         }
@@ -635,15 +1058,157 @@ private fun bound(value: Double, decimals: Int, signed: Boolean): String {
 
 private const val STRIPE_MAX = 14f
 
-/** The kicker, the figure and its two lines, above a square's chart. */
-private const val SQUARE_ABOVE_CHART = 78f
+/**
+ * The tab's own tile padding, from `TileFrame`.
+ *
+ * Twelve across and ten down rather than eleven both ways: the difference
+ * is small on one card and is the reason a widget's kicker did not line up
+ * with the tile it was copying.
+ */
+private val TILE_PAD_H = 12.dp
+private val TILE_PAD_V = 10.dp
 
-/** The kicker and its gap: the rest of a wide card is the chart's row. */
-private const val WIDE_ABOVE_CHART = 26f
+/** labelMedium, which is what `TileHead` and `TileValue`'s unit are. */
+private const val KICKER = 11
 
-/** The head, the figure and its two lines, above a tall card's chart. */
-private const val TALL_ABOVE_CHART = 118f
+/** labelSmall, which is what `TileSub` is. */
+private const val SUB = 11
+
+/**
+ * headlineSmall, and displaySmall, which in this app are both 26sp.
+ *
+ * So the tab draws the same figure at S as at XL, and a widget that grew
+ * its hero to 32 was the one card in either place with a different number
+ * on it.
+ */
+private const val FIGURE = 26
+
+/**
+ * What stands above each chart, which is what is left for the chart itself.
+ *
+ * Measured against the declared cell rather than the one a launcher
+ * happens to give, because the declared cell is the smallest it can be.
+ * The head is the chip's height, not the kicker's -- a `ChangeChip` is
+ * taller than the name beside it -- and all three went up when the type
+ * came into line with the tab: a kicker at 11 rather than 9, a sub at 11
+ * rather than 10, and a chip with the tab's padding under it.
+ */
+private const val SQUARE_ABOVE_CHART = 83f
+
+/** The head and its gap: the rest of a wide card is the chart's row. */
+private const val WIDE_ABOVE_CHART = 30f
+
+/**
+ * The head, the figure and its two lines, above a tall card's chart.
+ *
+ * Generous rather than exact: a Column that overruns its card does not
+ * scroll or shrink, it loses its last child -- which on the sleep week was
+ * the footer, so the chart kept its bars and lost the days they were.
+ */
+private const val TALL_ABOVE_CHART = 132f
 private val FIGURE_COLUMN = 96.dp
+
+/**
+ * A weekday letter under each bar, evenly spaced.
+ *
+ * The tab works these out from the days themselves rather than counting
+ * back from today, because a week with a gap in it is still seven bars and
+ * the letters have to name the days that are actually drawn.
+ *
+ * [days] are epoch *days*, which is what `Reading.day` holds -- reading
+ * them as milliseconds put every bar on 1 January 1970 and lettered the
+ * whole week T.
+ */
+private fun weekdayTicks(days: List<Long>): List<Pair<Float, String>> {
+    if (days.size < 2) return emptyList()
+    val locale = java.util.Locale.getDefault()
+    return days.mapIndexed { index, day ->
+        val at = index / (days.size - 1).toFloat()
+        at to java.time.LocalDate.ofEpochDay(day).dayOfWeek
+            .getDisplayName(java.time.format.TextStyle.NARROW, locale)
+    }
+}
+
+/** The night's own day, in the same epoch days the readings use. */
+private fun Night.epochDay(): Long =
+    end.atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+
+/**
+ * Today's burn and today's food, each as a running total up to this hour.
+ *
+ * The Burned-against-eaten screen's own arithmetic, in one place because
+ * three things draw it now -- the Balance tile, the Balance widget and the
+ * Dials burn face -- and three copies of a running total is three chances
+ * for one of them to drift an hour away from the others.
+ *
+ * Both lines stop at the hour it is now. Carrying burn out to midnight
+ * would be a forecast, and none of these has any business making one.
+ */
+internal class DayBalance(
+    val burned: List<Float>,
+    val eaten: List<Float>,
+    val entries: Int,
+    val hourNow: Int,
+) {
+    val lastBurned: Int get() = (burned.lastOrNull() ?: 0f).roundToInt()
+    val lastEaten: Int get() = (eaten.lastOrNull() ?: 0f).roundToInt()
+
+    /** Eaten less burned: negative is behind, which is the usual way round. */
+    val gap: Float get() = (eaten.lastOrNull() ?: 0f) - (burned.lastOrNull() ?: 0f)
+
+    val anything: Boolean get() = lastBurned > 0 || lastEaten > 0
+
+    /**
+     * The screen's axis: a few hours the day has reached, and then now.
+     *
+     * Fixed marks at six, twelve and eighteen were the old answer, and at
+     * nine in the morning that is one label on a chart with nothing under
+     * the end of it.
+     */
+    val hourTicks: List<Pair<Float, String>>
+        get() {
+            if (hourNow < 1) return listOf(0f to "00")
+            val every = (hourNow / 4).coerceAtLeast(1)
+            val hours = (0..hourNow step every).toMutableList()
+            if (hours.last() != hourNow) hours += hourNow
+            return hours.map { it / hourNow.toFloat() to "%02d".format(it) }
+        }
+}
+
+internal fun balanceToday(data: HealthSnapshot): DayBalance {
+    val zone = java.time.ZoneId.systemDefault()
+    val today = java.time.LocalDate.now(zone).toEpochDay()
+    val hourNow = java.time.LocalTime.now(zone).hour.coerceIn(0, 23)
+    // Food arrives as entries at a time rather than as an hourly total, so
+    // the eaten line is built from the entries, as the screen builds it.
+    val eatenByHour = DoubleArray(24)
+    val todays = data.food.filter { it.day == today }
+    todays.forEach { eatenByHour[it.at.atZone(zone).hour] += it.kcal ?: 0.0 }
+    val burnedByHour = data.burnedHourly.takeIf { it.size == 24 } ?: List(24) { 0.0 }
+
+    fun running(hours: List<Double>): List<Float> {
+        var sum = 0.0
+        return (0..hourNow).map { hour ->
+            sum += hours.getOrElse(hour) { 0.0 }
+            sum.toFloat()
+        }
+    }
+    return DayBalance(
+        burned = running(burnedByHour),
+        eaten = running(eatenByHour.toList()),
+        entries = todays.size,
+        hourNow = hourNow,
+    )
+}
+
+/** "7.5k", the way the tab shortens a figure for an axis. */
+internal fun shortFigure(value: Double): String = when {
+    value >= 10_000 -> "${(value / 1000).roundToInt()}k"
+    value >= 1_000 -> "%.1fk".format(value / 1000).removeSuffix(".0k").let {
+        if (it.endsWith("k")) it else it + "k"
+    }
+    else -> value.roundToInt().toString()
+}
 
 private fun List<Reading>.tail(count: Int): List<Float> =
     takeLast(count).map { it.value.toFloat() }
@@ -668,6 +1233,25 @@ private fun List<com.srineere.airbridge.health.HeartSample>.byHour(): List<Float
     // about a day. Three thin columns at the left of twenty-four says it is
     // early, which is the true thing about that chart.
     return (0..23).map { hour -> byHour[hour]?.maxOf { it.bpm }?.toFloat() ?: 0f }
+}
+
+/**
+ * One night as its four stages, bottom up, as `fourStages` divides it.
+ *
+ * A night written without a hypnogram is one plain bar rather than an
+ * invented breakdown -- the tab's rule, kept here so a week of widget bars
+ * and a week of tile bars are the same week.
+ */
+private fun Night.stageParts(): List<Pair<Float, SleepStage>> {
+    if (!hasStages) {
+        return listOf(asleep.toMinutes().toFloat() to SleepStage.Light).filter { it.first > 0f }
+    }
+    return listOf(
+        deep.toMinutes().toFloat() to SleepStage.Deep,
+        light.toMinutes().toFloat() to SleepStage.Light,
+        rem.toMinutes().toFloat() to SleepStage.Rem,
+        awake.toMinutes().toFloat() to SleepStage.Awake,
+    ).filter { it.first > 0f }
 }
 
 /** Last night in proportion, or null for a night written as one block. */
@@ -704,7 +1288,7 @@ private fun mealNote(count: Int): String = when (count) {
     else -> "$count meals"
 }
 
-private fun signed(value: Int): String =
+internal fun signed(value: Int): String =
     if (value < 0) "−${abs(value)}" else "+$value"
 
 private fun signedDecimal(value: Double): String =
@@ -718,25 +1302,26 @@ private fun signedDecimal(value: Double): String =
  * where it would round away it says Steady rather than an arrow pointing at
  * nothing.
  */
-private fun chipOf(trend: Trend, unit: String, decimals: Int = 0): String {
-    val change = trend.change
+private fun chipOf(trend: Trend, unit: String, decimals: Int = 0): String =
+    chipOfChange(trend.change, unit, decimals)
+
+/** The same chip, where the change is worked out rather than read off. */
+private fun chipOfChange(change: Double, unit: String, decimals: Int = 0): String {
     val shown = if (decimals == 0) abs(change).roundToInt().toString() else "%.${decimals}f".format(abs(change))
     if (shown.toDoubleOrNull()?.takeIf { it > 0.0 } == null) return "Steady"
     val arrow = if (change > 0) "↑" else "↓"
     return if (unit.isEmpty()) "$arrow $shown" else "$arrow $shown $unit"
 }
 
+/** Energy's figure where the card is narrow, as `EnergyTile` shortens it. */
+private fun shortSigned(balance: Double): String {
+    val sign = if (balance < 0) "−" else "+"
+    if (abs(balance) < 1000) return sign + abs(balance).roundToInt().toString()
+    return sign + "%.1fk".format(abs(balance) / 1000)
+}
+
 /** The direction on its own, for the width that cannot hold the figure. */
 private fun arrowOf(chip: String): String = chip.take(1).takeIf { it == "↑" || it == "↓" } ?: ""
-
-/** Sleep's trend is in minutes, which reads as hours and minutes. */
-private fun chipOfMinutes(trend: Trend): String {
-    val minutes = trend.change.roundToInt()
-    if (abs(minutes) < 5) return "Steady"
-    val arrow = if (minutes > 0) "↑" else "↓"
-    val size = abs(minutes)
-    return if (size < 60) "$arrow ${size}m" else "$arrow ${size / 60}h ${size % 60}m"
-}
 
 /**
  * The tile's scatter, drawn to a bitmap and shown as an Image.
@@ -786,6 +1371,7 @@ private fun BarsImage(
     colours: WidgetColours,
     height: Dp,
     width: Dp,
+    scaled: Boolean = false,
 ) {
     val context = LocalContext.current
     val density = context.resources.displayMetrics.density
@@ -794,10 +1380,11 @@ private fun BarsImage(
     val dim = colours.tileDimArgb(colour, dark)
     val widthPx = (width.value * density).toInt()
     val heightPx = (height.value * density).toInt()
-    val bitmap = remember(widthPx, heightPx, chart.values, chart.ceiling, ink, dim) {
+    val scale = scaleOf(chart, colours, dark, scaled)
+    val bitmap = remember(widthPx, heightPx, chart.values, chart.ceiling, ink, dim, scale) {
         ChartBitmap.bars(
             widthPx, heightPx, chart.values, chart.ceiling, ink, dim,
-            chart.highlightLast, chart.blankZeros, density,
+            chart.highlightLast, chart.blankZeros, density, scale,
         )
     }
     Image(
@@ -807,6 +1394,247 @@ private fun BarsImage(
         modifier = GlanceModifier.fillMaxWidth().height(height),
     )
 }
+
+/**
+ * The scale a chart carries, or null where the card is too small.
+ *
+ * Built outside `remember` and keyed into it, because a Scale holds a
+ * lambda and two colours and would otherwise be a new object every draw --
+ * which would make the key change every time and redraw a bitmap that came
+ * out identical.
+ */
+private fun scaleOf(
+    chart: Chart.Bars,
+    colours: WidgetColours,
+    dark: Boolean,
+    scaled: Boolean,
+): Scale? {
+    if (!scaled) return null
+    if (chart.goal == null && chart.xTicks.isEmpty() && chart.yLabel == null) return null
+    return Scale(
+        ink = colours.faintArgb(dark),
+        line = colours.trackArgb(dark),
+        xTicks = chart.xTicks,
+        yLabel = chart.yLabel,
+        goal = chart.goal,
+        goalLabel = chart.goalLabel,
+    )
+}
+
+/** A week of nights, stacked, with the goal across them. */
+@Composable
+private fun StageWeekImage(
+    chart: Chart.StageWeek,
+    colours: WidgetColours,
+    height: Dp,
+    width: Dp,
+    scaled: Boolean = false,
+) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val dark = colours.isDark(context)
+    val widthPx = (width.value * density).toInt()
+    val heightPx = (height.value * density).toInt()
+    // Deep at the floor and awake on top, which is the order the tab
+    // stacks them in and the order they read in.
+    val bars = chart.nights.map { night ->
+        night.map { (minutes, stage) -> minutes to colours.sleepStageArgb(stage, dark) }
+    }
+    val goalInk = colours.trackArgb(dark)
+    // Hours, as the tile labels them: minutes in the gutter would be a
+    // four-digit number against a tile that says "8h".
+    val scale = if (!scaled) null else Scale(
+        ink = colours.faintArgb(dark),
+        line = goalInk,
+        xTicks = chart.xTicks,
+        yLabel = { "${(it / 60f).roundToInt()}h" },
+    )
+    val bitmap = remember(widthPx, heightPx, bars, chart.goalMinutes, goalInk, scale) {
+        ChartBitmap.stacked(widthPx, heightPx, bars, chart.goalMinutes, goalInk, density, scale)
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.fillMaxWidth().height(height),
+    )
+}
+
+/** Two climbs on one axis, as one Image. */
+@Composable
+private fun ClimbImage(
+    chart: Chart.Climb,
+    colours: WidgetColours,
+    height: Dp,
+    width: Dp,
+    scaled: Boolean,
+) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val dark = colours.isDark(context)
+    val widthPx = (width.value * density).toInt()
+    val heightPx = (height.value * density).toInt()
+    val first = colours.tileArgb(chart.firstColour, dark)
+    val second = colours.tileArgb(chart.secondColour, dark)
+    val scale = if (!scaled) null else Scale(
+        ink = colours.faintArgb(dark),
+        line = colours.trackArgb(dark),
+        xTicks = chart.ticks,
+        yLabel = { shortFigure(it.toDouble()) },
+    )
+    val bitmap = remember(widthPx, heightPx, chart.first, chart.second, first, second, scale) {
+        ChartBitmap.pair(widthPx, heightPx, chart.first, chart.second, first, second, density, scale)
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.fillMaxWidth().height(height),
+    )
+}
+
+/** The tile's rails, as one Image. */
+@Composable
+internal fun RailsImage(
+    chart: Chart.Rails,
+    colours: WidgetColours,
+    height: Dp,
+    width: Dp,
+) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val dark = colours.isDark(context)
+    val widthPx = (width.value * density).toInt()
+    // Five rails and the gaps between them, at the tile's proportions, so
+    // a rail is a rail rather than a stripe however tall the cell is.
+    val heightPx = (height.value.coerceAtMost(RAILS_MAX) * density).toInt()
+    val quads = chart.rails.map { (trend, colour) ->
+        trend?.let {
+            val ink = colours.tileArgb(colour, dark)
+            val span = (it.highest - it.lowest).takeIf { range -> range > 0.0 } ?: 1.0
+            fun at(value: Double): Float = ((value - it.lowest) / span).toFloat().coerceIn(0f, 1f)
+            Quad(
+                at = at(it.latest),
+                bandFrom = at(it.usual.low),
+                bandTo = at(it.usual.high),
+                dot = ink,
+                // The band at the tab's thirty per cent, mixed rather than
+                // made transparent, as everything on a wallpaper must be.
+                band = colours.tileBandArgb(colour, dark),
+            )
+        }
+    }
+    val track = colours.railTrackArgb(dark)
+    val bitmap = remember(widthPx, heightPx, quads.size, track, chart.rails) {
+        ChartBitmap.rails(widthPx, heightPx, quads, track, density)
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.fillMaxWidth().height(height.coerceAtMost(RAILS_MAX.dp)),
+    )
+}
+
+/** A day of beats as the tile draws it: the range inside each slice. */
+@Composable
+private fun BeatsImage(
+    chart: Chart.Beats,
+    colour: TileColour,
+    colours: WidgetColours,
+    height: Dp,
+    width: Dp,
+    scaled: Boolean,
+) {
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val dark = colours.isDark(context)
+    val ink = colours.tileDimArgb(colour, dark)
+    val newest = colours.tileArgb(colour, dark)
+    val widthPx = (width.value * density).toInt()
+    val heightPx = (height.value * density).toInt()
+    val spans = beatSpans(chart.samples)
+    if (spans.isEmpty()) return
+    val lowest = spans.minOf { it.second }
+    val highest = spans.maxOf { it.third }
+    // A little air either side, and a floor that is not zero: the tile's
+    // own plot sits around the day's readings, not under them.
+    val floor = (lowest - (highest - lowest) * 0.12f).coerceAtLeast(0f)
+    val ceiling = highest + (highest - lowest) * 0.12f
+    val scale = if (!scaled) null else Scale(
+        ink = colours.faintArgb(dark),
+        line = colours.trackArgb(dark),
+        xTicks = chart.samples.hourTicks(),
+        yLabel = { it.roundToInt().toString() },
+        low = floor,
+    )
+    val bitmap = remember(widthPx, heightPx, spans, ink, newest, scale) {
+        ChartBitmap.beats(
+            widthPx, heightPx, spans, floor, ceiling, ink, newest, density, scale,
+        )
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.fillMaxWidth().height(height),
+    )
+}
+
+/**
+ * The day sliced into eighty, each slice its lowest and highest beat.
+ *
+ * `bandsOf` on the tab, to the same count, so the widget's chart and the
+ * tile's are the same reduction of the same readings. A slice the band was
+ * not recording stays out, so a gap is a gap rather than a line through it.
+ */
+private fun beatSpans(
+    samples: List<com.srineere.airbridge.health.HeartSample>,
+): List<Triple<Float, Float, Float>> {
+    if (samples.size < 2) return emptyList()
+    val ordered = samples.sortedBy { it.atMillis }
+    val first = ordered.first().atMillis
+    val span = (ordered.last().atMillis - first).takeIf { it > 0 } ?: return emptyList()
+    val slice = span / BEAT_SLICES
+    if (slice <= 0) return emptyList()
+    val out = ArrayList<Triple<Float, Float, Float>>(BEAT_SLICES)
+    var index = 0
+    for (bucket in 0 until BEAT_SLICES) {
+        val until = first + slice * (bucket + 1)
+        var low = Int.MAX_VALUE
+        var high = Int.MIN_VALUE
+        while (index < ordered.size && ordered[index].atMillis < until) {
+            val bpm = ordered[index].bpm
+            if (bpm < low) low = bpm
+            if (bpm > high) high = bpm
+            index++
+        }
+        if (high >= low) {
+            out += Triple(bucket / (BEAT_SLICES - 1f), low.toFloat(), high.toFloat())
+        }
+    }
+    return out
+}
+
+private const val BEAT_SLICES = 80
+
+/** Every fourth hour the day actually spans, as the tile ticks it. */
+private fun List<com.srineere.airbridge.health.HeartSample>.hourTicks(): List<Pair<Float, String>> {
+    if (size < 2) return emptyList()
+    val zone = java.time.ZoneId.systemDefault()
+    val first = minOf { it.atMillis }
+    val last = maxOf { it.atMillis }
+    val span = (last - first).takeIf { it > 0 } ?: return emptyList()
+    val from = java.time.Instant.ofEpochMilli(first).atZone(zone).hour
+    val to = java.time.Instant.ofEpochMilli(last).atZone(zone).hour
+    return (from..to).filter { it % 4 == 1 }.mapNotNull { hour ->
+        val at = java.time.Instant.ofEpochMilli(first).atZone(zone)
+            .withHour(hour).withMinute(0).toInstant().toEpochMilli()
+        ((at - first).toFloat() / span).takeIf { it in 0f..1f }?.let { it to "%02d".format(hour) }
+    }
+}
+
+internal const val RAILS_MAX = 44f
 
 /** Proportional segments as one Image, for the same reason. */
 @Composable

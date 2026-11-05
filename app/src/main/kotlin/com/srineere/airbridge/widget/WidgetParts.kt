@@ -42,6 +42,17 @@ internal fun WidgetCard(
     onClick: Action?,
     padding: Dp = 11.dp,
     verticalAlignment: Alignment.Vertical = Alignment.Top,
+    /** Apart on the two axes, because the tab's tile is 12 by 10, not 11. */
+    horizontal: Dp = padding,
+    vertical: Dp = padding,
+    /**
+     * A hairline round the card, as `TileFrame` draws one.
+     *
+     * Drawn as a card behind the card rather than as a `<stroke>`: the shape
+     * is tinted by a single `ColorFilter`, so a stroke inside it would come
+     * out the same colour as the fill and be no edge at all.
+     */
+    border: ColorProvider? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val card = GlanceModifier
@@ -51,47 +62,92 @@ internal fun WidgetCard(
             contentScale = ContentScale.FillBounds,
             colorFilter = ColorFilter.tint(colours.background),
         )
-        .padding(padding)
-    Column(
-        modifier = if (onClick != null) card.clickable(onClick) else card,
-        verticalAlignment = verticalAlignment,
-        content = content,
-    )
+        .padding(horizontal = horizontal, vertical = vertical)
+    val column = @Composable {
+        Column(
+            modifier = if (onClick != null && border == null) card.clickable(onClick) else card,
+            verticalAlignment = verticalAlignment,
+            content = content,
+        )
+    }
+    if (border == null) {
+        column()
+        return
+    }
+    val edge = GlanceModifier
+        .fillMaxSize()
+        .background(
+            imageProvider = ImageProvider(R.drawable.widget_card),
+            contentScale = ContentScale.FillBounds,
+            colorFilter = ColorFilter.tint(border),
+        )
+        .padding(1.dp)
+    Box(modifier = if (onClick != null) edge.clickable(onClick) else edge) { column() }
 }
 
-/** The small capitalised line that names the reading. */
+/**
+ * The small line that names the reading.
+ *
+ * [caps] is the Tiles family's exception, and it is the tab's own rule:
+ * every other kicker in the app is uppercased, but `TileHead` is not. A
+ * tile widget that shouted its name was the first thing you saw was
+ * different from the card it was copying. Tracked at nothing either way,
+ * because Glance has no letter spacing and the tab's kickers sit at 1sp.
+ */
 @Composable
-internal fun Kicker(text: String, colour: ColorProvider, size: Int = 10) {
-    // Uppercased here because Glance has no text transform, and tracked at
-    // nothing because it has no letter spacing either -- the tab's kickers
-    // sit at 1sp and these cannot be made to match.
+internal fun Kicker(
+    text: String,
+    colour: ColorProvider,
+    size: Int = 10,
+    caps: Boolean = true,
+) {
     Text(
-        text.uppercase(),
+        if (caps) text.uppercase() else text,
         style = TextStyle(color = colour, fontSize = size.sp, fontWeight = FontWeight.Bold),
         maxLines = 1,
     )
 }
 
-/** The one number the widget is about. */
+/**
+ * The one number the widget is about.
+ *
+ * The tab sets its figures SemiBold and Glance has no such weight: Medium
+ * and Bold sit a hundred either side of it, so neither is nearer by the
+ * numbers. The Tiles family asks for [FontWeight.Bold] because it is the one
+ * of the two that renders as a weight rather than as a named family a
+ * launcher may not have.
+ */
 @Composable
 internal fun Figure(
     text: String,
     size: Int,
     colour: ColorProvider,
     modifier: GlanceModifier = GlanceModifier,
+    weight: FontWeight = FontWeight.Medium,
 ) {
     Text(
         text,
         modifier = modifier,
-        style = TextStyle(color = colour, fontSize = size.sp, fontWeight = FontWeight.Medium),
+        style = TextStyle(color = colour, fontSize = size.sp, fontWeight = weight),
         maxLines = 1,
     )
 }
 
 /** The line under it: the unit, the goal, the age of the reading. */
 @Composable
-internal fun Sub(text: String, colour: ColorProvider, size: Int = 11, lines: Int = 1) {
-    Text(text, style = TextStyle(color = colour, fontSize = size.sp), maxLines = lines)
+internal fun Sub(
+    text: String,
+    colour: ColorProvider,
+    size: Int = 11,
+    lines: Int = 1,
+    /** The tab's `TileSub` is labelSmall, which is Medium rather than Normal. */
+    weight: FontWeight = FontWeight.Normal,
+) {
+    Text(
+        text,
+        style = TextStyle(color = colour, fontSize = size.sp, fontWeight = weight),
+        maxLines = lines,
+    )
 }
 
 @Composable
@@ -260,24 +316,38 @@ internal fun Meter(
 }
 
 /**
- * A filled pill, which is what the tab's `TileChip` is.
+ * A filled pill, which is what the tab's `ChangeChip` is.
  *
  * Coloured words were close enough to read and not close enough to be the
  * same component; side by side on a home screen and a tab the difference is
- * the first thing you see.
+ * the first thing you see. The measurements are `ChangeChip`'s own, down to
+ * [tight]: at S and M it is labelMedium in a six-point pill, and everywhere
+ * else labelLarge in a ten-point one.
  */
 @Composable
-internal fun Chip(text: String, ink: ColorProvider, wash: ColorProvider, size: Int = 10) {
+internal fun Chip(
+    text: String,
+    ink: ColorProvider,
+    wash: ColorProvider,
+    tight: Boolean = false,
+) {
     Box(
         modifier = GlanceModifier.background(
             imageProvider = ImageProvider(R.drawable.widget_pill),
             contentScale = ContentScale.FillBounds,
             colorFilter = ColorFilter.tint(wash),
-        ).padding(horizontal = 7.dp, vertical = 1.dp),
+        ).padding(
+            horizontal = if (tight) 6.dp else 10.dp,
+            vertical = if (tight) 2.dp else 3.dp,
+        ),
     ) {
         Text(
             text,
-            style = TextStyle(color = ink, fontSize = size.sp, fontWeight = FontWeight.Medium),
+            style = TextStyle(
+                color = ink,
+                fontSize = (if (tight) 11 else 13).sp,
+                fontWeight = FontWeight.Bold,
+            ),
             maxLines = 1,
         )
     }

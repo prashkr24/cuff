@@ -18,6 +18,14 @@ import com.srineere.airbridge.health.sleepScoreOf
 import com.srineere.airbridge.ui.HealthData
 import com.srineere.airbridge.health.Goals
 import kotlin.math.roundToInt
+import androidx.compose.runtime.remember
+import androidx.glance.LocalContext
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.layout.ContentScale
+import androidx.glance.layout.height
+import androidx.glance.text.FontWeight
+import kotlin.math.abs
 
 /**
  * The Dials family.
@@ -50,12 +58,38 @@ enum class DialFace(
         "Sleep, steps and burn, each with its figure",
         setOf(WidgetSize.Wide, WidgetSize.Tall),
     ),
-    Week(
-        "Seven nights",
-        "A week of sleep scores, tallest the best",
+    Burn(
+        "Burned against eaten",
+        "Today's burn and today's food, with the gap between them shaded",
         setOf(WidgetSize.Wide, WidgetSize.Tall),
     ),
+    Overview(
+        "The overview",
+        "Three dials, the week under them, and a sentence",
+        setOf(WidgetSize.Tall),
+    ),
 }
+
+/**
+ * Today's burn, hour by hour, against where yesterday's total would put it.
+ *
+ * The only widget in this family that answers "am I ahead", which is a
+ * different question from "how far round has the arc gone" -- so it is the
+ * only one here with no arc on it.
+ */
+internal fun burnToday(health: HealthData): List<Float> {
+    val hourly = health.snapshot.burnedHourly.takeIf { it.size == 24 } ?: return emptyList()
+    val now = java.time.LocalTime.now(java.time.ZoneId.systemDefault()).hour
+    var sum = 0.0
+    return (0..now.coerceIn(0, 23)).map { hour ->
+        sum += hourly.getOrElse(hour) { 0.0 }
+        sum.toFloat()
+    }
+}
+
+/** Yesterday's whole day, which the dashed line is spread across. */
+internal fun burnYesterday(health: HealthData): Float? =
+    health.snapshot.burnedDaily.dropLast(1).lastOrNull()?.value?.toFloat()?.takeIf { it > 0f }
 
 /** One dial: how far round, what colour, and what goes in the middle. */
 data class DialReading(
@@ -150,7 +184,8 @@ internal fun DialsWidget(
     when (face) {
         DialFace.Score -> ScoreFace(size, snapshot, colours, onClick)
         DialFace.Three -> ThreeFace(size, snapshot, colours, onClick)
-        DialFace.Week -> WeekFace(size, snapshot, colours, onClick)
+        DialFace.Burn -> BurnFace(size, snapshot, colours, onClick)
+        DialFace.Overview -> OverviewFace(snapshot, colours, onClick)
     }
 }
 
@@ -216,6 +251,215 @@ private fun ThreeFace(
             }
         }
     }
+}
+
+/**
+ * Burned against eaten, the way the screen of that name draws it.
+ *
+ * Today's climb against yesterday's pace was the old face here, and the
+ * comparison was this app's own invention: a straight line drawn to a
+ * total from a day that is finished, laid over a day that is not. The
+ * screen behind the Energy tile sets today's burn against today's food --
+ * both real, both still running -- and the distance between the two lines
+ * at any hour is the figure at the top of the card.
+ *
+ * So this is that screen at widget size: the same two series, the same
+ * shaded gap, the same stepped food line, and the key underneath saying
+ * which line is which.
+ */
+@Composable
+private fun BurnFace(
+    size: WidgetSize,
+    snapshot: WidgetSnapshot,
+    colours: WidgetColours,
+    onClick: Action?,
+) {
+    val day = balanceToday(snapshot.health.snapshot)
+    if (!day.anything || day.burned.size < 2) {
+        Empty(
+            colours,
+            "Burned against eaten",
+            "Nothing burned or eaten has been read for today yet",
+            onClick,
+        )
+        return
+    }
+    val padding = 12.dp
+    val tall = size == WidgetSize.Tall
+    val burnInk = colours.tile(TileColour.Activity)
+    val foodInk = colours.tile(TileColour.Energy)
+    val context = LocalContext.current
+    val dark = colours.isDark(context)
+    val density = context.resources.displayMetrics.density
+    // The heading, the figure and the key under the chart. Over-estimated
+    // on purpose: the chart is followed by a Grow, so guessing high costs
+    // the chart a few pixels while guessing low clips the key off the card.
+    val above = if (tall) 118f else 92f
+    val chartHeight = (innerHeight(padding).value - above).coerceIn(44f, 200f)
+    val widthPx = (innerWidth(padding).value * density).toInt()
+    val heightPx = (chartHeight * density).toInt()
+    val scale = Scale(
+        ink = colours.faintArgb(dark),
+        line = colours.trackArgb(dark),
+        xTicks = day.hourTicks,
+        yLabel = { shortFigure(it.toDouble()) },
+    )
+    val burnArgb = colours.tileArgb(TileColour.Activity, dark)
+    val foodArgb = colours.tileArgb(TileColour.Energy, dark)
+    val bitmap = remember(widthPx, heightPx, day.burned, day.eaten, dark) {
+        ChartBitmap.pair(
+            widthPx, heightPx, day.burned, day.eaten, burnArgb, foodArgb, density, scale,
+        )
+    }
+    val gap = day.gap
+    WidgetCard(colours, onClick, padding) {
+        Kicker("Burned against eaten", foodInk, size = 10)
+        Gap(if (tall) 7.dp else 5.dp)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Figure(
+                signed(gap.roundToInt()),
+                if (tall) 34 else 27,
+                colours.onBackground,
+                weight = FontWeight.Bold,
+            )
+            Spacer(GlanceModifier.width(6.dp))
+            // "kcal behind, so far today" -- the screen's own line, which
+            // carries the unit so the numeral above it does not have to.
+            Sub(
+                "kcal " + (if (gap < 0) "behind" else "ahead") + ", so far today",
+                colours.faint,
+                size = 11,
+            )
+        }
+        Gap(8.dp)
+        Image(
+            provider = ImageProvider(bitmap),
+            contentDescription = null,
+            contentScale = ContentScale.FillBounds,
+            modifier = GlanceModifier.fillMaxWidth().height(chartHeight.dp),
+        )
+        Grow()
+        Gap(8.dp)
+        // The key, because two unlabelled lines are a picture rather than a
+        // reading. Three Rows and not eleven children: a container here
+        // keeps ten and drops the rest without saying so.
+        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Key("Burned", day.lastBurned, burnInk, colours)
+            Spacer(GlanceModifier.defaultWeight())
+            Key("Eaten", day.lastEaten, foodInk, colours)
+            if (tall) {
+                Spacer(GlanceModifier.defaultWeight())
+                Key("Entries", day.entries, colours.faint, colours, plain = true)
+            }
+        }
+    }
+}
+
+/** One line of the key: its colour, its name, and where it has got to. */
+@Composable
+private fun Key(
+    label: String,
+    value: Int,
+    ink: androidx.glance.unit.ColorProvider,
+    colours: WidgetColours,
+    plain: Boolean = false,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (!plain) {
+            Dot(ink, size = 7.dp)
+            Spacer(GlanceModifier.width(5.dp))
+        }
+        Sub(label, colours.faint, size = 10)
+        Spacer(GlanceModifier.width(5.dp))
+        Figure("%,d".format(value), 14, colours.onBackground, weight = FontWeight.Medium)
+    }
+}
+
+/**
+ * Everything at once: the dials, the week under them, and a sentence.
+ *
+ * The only widget here that writes English. A number tells you what
+ * happened and a sentence tells you whether it was unusual, which is the
+ * thing a glance at a home screen is actually asking.
+ */
+@Composable
+private fun OverviewFace(
+    snapshot: WidgetSnapshot,
+    colours: WidgetColours,
+    onClick: Action?,
+) {
+    val dials = dialsOf(snapshot.health, snapshot.goals)
+    if (dials.isEmpty()) {
+        Empty(colours, "Today", "Nothing here has a ceiling to measure against", onClick)
+        return
+    }
+    val padding = 12.dp
+    val scores = nightScores(snapshot.health)
+    val across = (innerWidth(padding).value - DIAL_GAP.value * (dials.size - 1)) / dials.size
+    WidgetCard(colours, onClick, padding) {
+        Row(modifier = GlanceModifier.fillMaxWidth()) {
+            dials.forEachIndexed { index, dial ->
+                if (index > 0) Spacer(GlanceModifier.width(DIAL_GAP))
+                Column(
+                    modifier = GlanceModifier.defaultWeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        RingImage(listOf(dial.fraction to dial.colour), colours, across.coerceAtMost(76f).dp)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Figure(dial.centre, 20, colours.onBackground, weight = FontWeight.Bold)
+                            Kicker(dial.label, colours.tile(dial.colour), size = 8)
+                        }
+                    }
+                }
+            }
+        }
+        if (scores.isNotEmpty()) {
+            Gap(14.dp)
+            Kicker("Seven nights", colours.tile(TileColour.Sleep), size = 9, caps = false)
+            Gap(6.dp)
+            Bars(
+                values = scores,
+                colour = colours.tile(TileColour.Sleep),
+                dim = colours.tileDim(TileColour.Sleep),
+                height = 46.dp,
+                highlightLast = false,
+                top = 100f,
+            )
+        }
+        Grow()
+        Sub(overviewSentence(snapshot), colours.muted, size = 12, lines = 3)
+    }
+}
+
+/**
+ * One sentence of plain English about today.
+ *
+ * Built from whichever halves are actually there: a phone with no food
+ * logged still has something true to say about last night.
+ */
+private fun overviewSentence(snapshot: WidgetSnapshot): String {
+    val health = snapshot.health
+    val parts = mutableListOf<String>()
+    health.sleepTrend?.let { trend ->
+        val minutes = trend.change.roundToInt()
+        if (abs(minutes) >= 5) {
+            val size = if (abs(minutes) < 60) "${abs(minutes)} minutes" else "${abs(minutes) / 60}h ${abs(minutes) % 60}m"
+            parts += "You slept $size ${if (minutes > 0) "longer" else "shorter"} than your usual night"
+        }
+    }
+    burnYesterday(health)?.let { yesterday ->
+        val climb = burnToday(health)
+        val now = climb.lastOrNull() ?: 0f
+        val hours = climb.size
+        val paceNow = yesterday * ((hours - 1).coerceAtLeast(1) / 23f)
+        val gap = (now - paceNow).roundToInt()
+        if (abs(gap) >= 40) {
+            parts += "you are ${abs(gap)} kcal ${if (gap > 0) "ahead of" else "behind"} yesterday at this hour"
+        }
+    }
+    if (parts.isEmpty()) return "Nothing unusual so far today."
+    return parts.joinToString(", and ") + "."
 }
 
 @Composable

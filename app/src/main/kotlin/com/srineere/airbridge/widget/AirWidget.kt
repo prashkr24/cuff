@@ -90,7 +90,6 @@ class AirWidget : GlanceAppWidget() {
             is WidgetDesign.OfRings -> RingsWidget(design.face, face, snapshot, colours, onClick)
             is WidgetDesign.OfDials -> DialsWidget(design.face, face, snapshot, colours, onClick)
             is WidgetDesign.OfType -> TypeWidget(design.face, face, snapshot, colours, onClick, now)
-            is WidgetDesign.OfPaper -> PaperWidget(design.face, face, snapshot, colours, onClick)
         }
     }
 
@@ -116,24 +115,29 @@ class AirWidget : GlanceAppWidget() {
  * Where a tap lands.
  *
  * A widget opens the screen about the thing it is drawing, which is the one
- * place every number on it is explained. The Health tab is offered as an
- * alternative because someone with four widgets may want the tab rather than
- * four different screens.
+ * place every number on it is explained. This used to be a choice, with the
+ * Health tab as the alternative; it is not any more, because a widget that
+ * draws resting heart rate has exactly one screen behind it and asking
+ * somebody to confirm that was asking them to agree with the app.
+ *
+ * A face that draws several readings at once has no single screen, so it
+ * falls through to the tab, which is the honest answer rather than a
+ * setting.
  */
 private fun openFor(config: WidgetConfig): Action {
     val route = when (val design = config.design) {
-        is WidgetDesign.OfTile -> if (config.opensTab) null else design.kind.route
-        is WidgetDesign.OfBand -> if (config.opensTab) null else DEVICE_ROUTE
+        is WidgetDesign.OfTile -> design.kind.route
+        is WidgetDesign.OfBand -> DEVICE_ROUTE
         // Several readings at once, so there is no one screen behind them.
         is WidgetDesign.OfRings -> null
-        is WidgetDesign.OfDials ->
-            if (config.opensTab || design.face != DialFace.Score) null else SLEEP_ROUTE
-        is WidgetDesign.OfPaper ->
-            if (config.opensTab || design.face != PaperFace.Figure) null else TileKind.Steps.route
-        is WidgetDesign.OfType -> when {
-            config.opensTab -> null
-            design.face == TypeFace.Steps -> TileKind.Steps.route
-            design.face == TypeFace.Sleep -> TileKind.Sleep.route
+        is WidgetDesign.OfDials -> when (design.face) {
+            DialFace.Score -> SLEEP_ROUTE
+            DialFace.Burn -> TileKind.Balance.route
+            else -> null
+        }
+        is WidgetDesign.OfType -> when (design.face) {
+            TypeFace.Steps -> TileKind.Steps.route
+            TypeFace.Sleep -> TileKind.Sleep.route
             else -> DEVICE_ROUTE
         }
     }

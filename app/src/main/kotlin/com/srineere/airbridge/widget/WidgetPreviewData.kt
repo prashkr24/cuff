@@ -1,5 +1,6 @@
 package com.srineere.airbridge.widget
 
+import kotlin.math.roundToInt
 import com.srineere.airbridge.health.Tile
 import com.srineere.airbridge.health.TileColour
 import com.srineere.airbridge.ui.asHoursMinutes
@@ -29,21 +30,10 @@ internal fun bandFace(face: BandFace, band: BandFacts, now: Long): Face {
             sub = if (band.batteryAt == 0L) "not checked yet" else "read " + ago(band.batteryAt, now),
             meter = band.battery?.div(100f),
         )
-        BandFace.LastBuzz -> Face(
-            kicker = "Last buzz",
-            figure = band.lastBuzzWho
-                ?: if (band.lastBuzzAt == 0L) "–" else if (band.lastBuzzWasCall) "A call" else "A message",
-            sub = if (band.lastBuzzAt == 0L) "nothing yet" else ago(band.lastBuzzAt, now),
-        )
         BandFace.Relay -> Face(
             kicker = "Relay",
             figure = stateWordFor(band, now),
             sub = if (band.quietEnabled) "quiet from " + clock(band.quietStartMinute) else "no quiet hours",
-        )
-        BandFace.Quiet -> Face(
-            kicker = "Quiet",
-            figure = clock(band.quietStartMinute),
-            sub = "→ " + clock(band.quietEndMinute),
         )
         BandFace.Buzzes -> Face(
             kicker = "Today",
@@ -104,7 +94,6 @@ internal fun WidgetSnapshot.colourFor(design: WidgetDesign): TileColour = when (
     }
     is WidgetDesign.OfDials -> TileColour.Sleep
     is WidgetDesign.OfType -> design.face.colour
-    is WidgetDesign.OfPaper -> TileColour.Sleep
 }
 
 /** The reading a design shows, whichever half of the app it comes from. */
@@ -117,38 +106,8 @@ internal fun faceOf(design: WidgetDesign, snapshot: WidgetSnapshot, now: Long): 
     is WidgetDesign.OfType -> typeFaceOf(design.face, snapshot, now)?.let {
         Face(kicker = design.face.word, figure = it.figure, sub = it.sub)
     }
-    is WidgetDesign.OfPaper -> paperFace(design.face, snapshot)
 }
 
-/** A paper face as a [Face], for the thumbnail. */
-private fun paperFace(face: PaperFace, snapshot: WidgetSnapshot): Face? {
-    val health = snapshot.health
-    return when (face) {
-        PaperFace.Figure -> health.snapshot.stepsToday?.let {
-            Face(kicker = "Steps", figure = "%,d".format(it), sub = "")
-        }
-        PaperFace.Sentence -> health.lastNight?.let {
-            Face(
-                kicker = "Last night",
-                figure = it.asleep.asHoursMinutes(),
-                sub = paperSentence(health, snapshot.goals),
-            )
-        }
-        PaperFace.Rail, PaperFace.Day -> paperReadings(health, snapshot.goals)
-            .takeIf { it.isNotEmpty() }
-            ?.let { readings ->
-                val parts = readings.map { Triple(it.label, it.figure, it.colour) }
-                Face(
-                    kicker = if (face == PaperFace.Rail) "Four readings" else "Today",
-                    figure = "",
-                    sub = "",
-                    // Across for the rail, down for the day, because that is
-                    // the difference between the two widgets.
-                    chart = if (face == PaperFace.Rail) Chart.Rail(parts) else Chart.Rows(parts),
-                )
-            }
-    }
-}
 
 /** A dials face as a [Face], for the thumbnail. */
 private fun dialsFace(face: DialFace, snapshot: WidgetSnapshot): Face? = when (face) {
@@ -158,7 +117,26 @@ private fun dialsFace(face: DialFace, snapshot: WidgetSnapshot): Face? = when (f
     DialFace.Three -> dialsOf(snapshot.health, snapshot.goals).takeIf { it.isNotEmpty() }?.let {
         Face(kicker = "Today", figure = "", sub = "", chart = Chart.Dials(it))
     }
-    DialFace.Week -> nightScores(snapshot.health).takeIf { it.isNotEmpty() }?.let {
+    // Both lines, as the face draws them. Bars were wrong twice over: the
+    // widget draws lines, and a running total drawn as columns reads as
+    // twenty-four separate hours rather than one day adding up.
+    DialFace.Burn -> balanceToday(snapshot.health.snapshot)
+        .takeIf { it.anything && it.burned.size > 1 }?.let {
+            Face(
+                kicker = "Burned against eaten",
+                figure = signed(it.gap.roundToInt()),
+                sub = "",
+                chart = Chart.Climb(
+                    it.burned,
+                    it.eaten,
+                    TileColour.Activity,
+                    TileColour.Energy,
+                    it.hourTicks,
+                ),
+            )
+        }
+
+    DialFace.Overview -> nightScores(snapshot.health).takeIf { it.isNotEmpty() }?.let {
         Face(
             kicker = "Seven nights",
             figure = "",
@@ -186,10 +164,30 @@ private fun ringsFace(face: RingFace, snapshot: WidgetSnapshot): Face? = when (f
                 chart = Chart.Arcs(rings.map { it.fraction to it.colour }),
             )
         }
-    RingFace.Summary -> summaryRows(snapshot.health).takeIf { it.isNotEmpty() }?.let {
-        Face(kicker = "Summary", figure = "", sub = "", chart = Chart.Rows(it))
-    }
-    RingFace.Trends -> trendRows(snapshot.health).takeIf { it.isNotEmpty() }?.let {
-        Face(kicker = "Trends", figure = "", sub = "", chart = Chart.Rows(it))
-    }
+    // The thumbnail keeps the names and the figures and drops the
+    // sparklines and rails, which at 78dp would be three grey smudges.
+    RingFace.Summary -> summaryRows(snapshot.health, snapshot.goals)
+        .takeIf { it.isNotEmpty() }
+        ?.let { rows ->
+            Face(
+                kicker = "Summary",
+                figure = "",
+                sub = "",
+                chart = Chart.Rows(
+                    rows.map { Triple(it.label, it.figure, it.colour) },
+                ),
+            )
+        }
+    RingFace.Trends -> trendRows(snapshot.health)
+        .takeIf { it.isNotEmpty() }
+        ?.let { rows ->
+            Face(
+                kicker = "Trends",
+                figure = "",
+                sub = "",
+                chart = Chart.Rows(
+                    rows.take(3).map { Triple(it.label, it.phrase, it.colour) },
+                ),
+            )
+        }
 }

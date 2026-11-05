@@ -21,10 +21,13 @@ import androidx.glance.layout.size
 import androidx.glance.layout.width
 import com.srineere.airbridge.health.Goals
 import com.srineere.airbridge.health.TileColour
+import com.srineere.airbridge.health.Trend
 import com.srineere.airbridge.ui.HealthData
 import com.srineere.airbridge.ui.asHoursMinutes
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.glance.text.FontWeight
+import androidx.glance.layout.height
 
 /**
  * What the Rings family can offer.
@@ -63,6 +66,15 @@ data class Ring(
     val colour: TileColour,
     val figure: String,
     val of: String,
+    /**
+     * The window this ring is about.
+     *
+     * Three arcs side by side look like three answers to one question, and
+     * they are not: steps is today, active minutes is the week, sleep is
+     * last night. Saying so at the end of each line is the difference
+     * between a summary and three numbers that happen to be adjacent.
+     */
+    val note: String,
 )
 
 /**
@@ -94,6 +106,24 @@ internal fun ringsOf(health: HealthData, goals: Goals): List<Ring> {
             colour = TileColour.Steps,
             figure = "%,d".format(steps),
             of = "of %,d".format(goals.steps),
+            note = "today",
+        )
+    }
+
+    // Active minutes, not burn. Burn was measured against its own fortnight
+    // average, which is a denominator this app invented; active minutes has
+    // a goal the person actually set, which is what an arc that closes
+    // needs. Burn keeps its place on the Summary face, where a figure does
+    // not have to be a fraction of anything.
+    val active = activeMinutesThisWeek(health)
+    if (active != null && goals.activeMinutes > 0) {
+        rings += Ring(
+            label = "Active",
+            fraction = (active.toFloat() / goals.activeMinutes).coerceIn(0f, 1f),
+            colour = TileColour.Activity,
+            figure = "$active",
+            of = "of ${goals.activeMinutes} min",
+            note = "this week",
         )
     }
 
@@ -106,22 +136,24 @@ internal fun ringsOf(health: HealthData, goals: Goals): List<Ring> {
             colour = TileColour.Sleep,
             figure = asleep.asHoursMinutes(),
             of = "of ${goals.sleepMinutes / 60}h",
-        )
-    }
-
-    val burned = health.snapshot.burnedToday
-    val usual = usualBurn(health)
-    if (burned != null && usual != null && usual > 0) {
-        rings += Ring(
-            label = "Burn",
-            fraction = (burned / usual).toFloat().coerceIn(0f, 1f),
-            colour = TileColour.Energy,
-            figure = "%,d".format(burned.roundToInt()),
-            of = "usual %,d".format(usual.roundToInt()),
+            note = "last night",
         )
     }
 
     return rings
+}
+
+/** Minutes of logged exercise since the week began. */
+internal fun activeMinutesThisWeek(health: HealthData): Long? {
+    val sessions = health.snapshot.sessions
+    if (sessions.isEmpty()) return null
+    val zone = java.time.ZoneId.systemDefault()
+    val monday = java.time.LocalDate.now(zone)
+        .with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        .atStartOfDay(zone).toInstant()
+    return sessions
+        .filter { !it.start.isBefore(monday) }
+        .sumOf { java.time.Duration.between(it.start, it.end).toMinutes() }
 }
 
 /**
@@ -138,18 +170,58 @@ internal fun usualBurn(health: HealthData): Double? {
     return before.map { it.value }.average().takeIf { it > 0.0 }
 }
 
-/** The four readings the Summary face lists, in the order it lists them. */
-internal fun summaryRows(health: HealthData): List<Triple<String, String, TileColour>> =
-    listOfNotNull(
-        health.snapshot.stepsToday?.let { Triple("Steps", "%,d".format(it), TileColour.Steps) },
-        health.lastNight?.let { Triple("Sleep", it.asleep.asHoursMinutes(), TileColour.Sleep) },
-        health.restingTrend?.let {
-            Triple("Resting", "${it.latest.roundToInt()} bpm", TileColour.Heart)
-        },
-        health.snapshot.burnedToday?.let {
-            Triple("Burn", "%,d kcal".format(it.roundToInt()), TileColour.Energy)
-        },
-    )
+/**
+ * One line of the Summary face.
+ *
+ * A name and a value was a list; this is a reading. The week behind each
+ * figure is the part that says whether the figure is unusual, and it is
+ * the one thing a list of four numbers could never tell you.
+ */
+internal data class SummaryRow(
+    val label: String,
+    val figure: String,
+    /** The unit, or what the figure is a share of. */
+    val of: String?,
+    /** A change, or a score -- whichever that reading actually has. */
+    val chip: String?,
+    val colour: TileColour,
+    /** The last seven, oldest first, for the bars beside it. */
+    val spark: List<Float>,
+)
+
+/** The readings the Summary face lists, in the order it lists them. */
+internal fun summaryRows(health: HealthData, goals: Goals): List<SummaryRow> = listOfNotNull(
+    health.restingTrend?.let { trend ->
+        SummaryRow(
+            label = "Resting heart",
+            figure = trend.latest.roundToInt().toString(),
+            of = "bpm",
+            chip = arrowed(trend.change, 0, ""),
+            colour = TileColour.Heart,
+            spark = trend.readings.takeLast(7).map { it.value.toFloat() },
+        )
+    },
+    health.snapshot.stepsToday?.let { steps ->
+        SummaryRow(
+            label = "Steps",
+            figure = "%,d".format(steps),
+            of = goals.steps.takeIf { it > 0 }?.let { "of %,d".format(it) },
+            chip = null,
+            colour = TileColour.Steps,
+            spark = health.snapshot.steps.takeLast(7).map { it.value.toFloat() },
+        )
+    },
+    health.lastNight?.let { night ->
+        SummaryRow(
+            label = "Sleep",
+            figure = night.asleep.asHoursMinutes(),
+            of = null,
+            chip = health.sleepScore?.total?.toString(),
+            colour = TileColour.Sleep,
+            spark = health.nights.takeLast(7).map { it.asleep.toMinutes().toFloat() },
+        )
+    },
+)
 
 /**
  * The same four, as a direction and a size rather than a value.
@@ -158,13 +230,74 @@ internal fun summaryRows(health: HealthData): List<Triple<String, String, TileCo
  * read. A reading whose change rounds away says Steady, because an arrow
  * pointing at nothing is worse than no arrow.
  */
-internal fun trendRows(health: HealthData): List<Triple<String, String, TileColour>> =
-    listOfNotNull(
-        health.stepsTrend?.let { Triple("Steps", arrowed(it.change, 0, ""), TileColour.Steps) },
-        health.sleepTrend?.let { Triple("Sleep", arrowedMinutes(it.change), TileColour.Sleep) },
-        health.restingTrend?.let { Triple("Resting", arrowed(it.change, 0, "bpm"), TileColour.Heart) },
-        health.hrvTrend?.let { Triple("HRV", arrowed(it.change, 0, "ms"), TileColour.Hrv) },
+internal data class TrendRow(
+    val label: String,
+    val colour: TileColour,
+    /** Null where the change rounds away, and the arrow goes with it. */
+    val up: Boolean?,
+    /** Where the reading stands now: "56 bpm". */
+    val value: String,
+    /** What moved, in words: "2 bpm lower". */
+    val phrase: String,
+    val trend: Trend,
+    /** "usual 56-61", the band the dot is sitting against. */
+    val usual: String,
+)
+
+/**
+ * The same readings as a direction and a size rather than a value.
+ *
+ * Resting heart and HRV lead, because they are the two the rail says most
+ * about: both are a single figure a night against a settled band, so "here
+ * against where you usually are" is a sentence they can actually finish.
+ */
+internal fun trendRows(health: HealthData): List<TrendRow> = listOfNotNull(
+    health.restingTrend?.let { trendRow("Resting heart", TileColour.Heart, it, "bpm", 0) },
+    health.hrvTrend?.let { trendRow("HRV", TileColour.Hrv, it, "ms", 0) },
+    health.stepsTrend?.let { trendRow("Steps", TileColour.Steps, it, "", 0) },
+    health.sleepTrend?.let { sleepTrendRow(it) },
+)
+
+private fun trendRow(
+    label: String,
+    colour: TileColour,
+    trend: Trend,
+    unit: String,
+    decimals: Int,
+): TrendRow {
+    val size = if (decimals == 0) {
+        abs(trend.change).roundToInt().toString()
+    } else {
+        "%.${decimals}f".format(abs(trend.change))
+    }
+    val moved = (size.toDoubleOrNull() ?: 0.0) > 0.0
+    val suffix = if (unit.isEmpty()) "" else " $unit"
+    return TrendRow(
+        label = label,
+        colour = colour,
+        up = if (!moved) null else trend.change > 0,
+        value = trend.latest.roundToInt().toString() + suffix,
+        phrase = if (!moved) "steady" else "$size$suffix ${if (trend.change > 0) "higher" else "lower"}",
+        trend = trend,
+        usual = "usual ${trend.usual.low.roundToInt()}–${trend.usual.high.roundToInt()}",
     )
+}
+
+/** Sleep moves in minutes, which read as hours and minutes. */
+private fun sleepTrendRow(trend: Trend): TrendRow {
+    val minutes = trend.change.roundToInt()
+    val moved = abs(minutes) >= 5
+    val size = if (abs(minutes) < 60) "${abs(minutes)}m" else "${abs(minutes) / 60}h ${abs(minutes) % 60}m"
+    return TrendRow(
+        label = "Sleep",
+        colour = TileColour.Sleep,
+        up = if (!moved) null else minutes > 0,
+        value = java.time.Duration.ofMinutes(trend.latest.roundToInt().toLong()).asHoursMinutes(),
+        phrase = if (!moved) "steady" else "$size ${if (minutes > 0) "longer" else "shorter"}",
+        trend = trend,
+        usual = "usual ${trend.usual.low.roundToInt() / 60}h–${trend.usual.high.roundToInt() / 60}h",
+    )
+}
 
 private fun arrowed(change: Double, decimals: Int, unit: String): String {
     val shown = if (decimals == 0) {
@@ -209,20 +342,8 @@ internal fun RingsWidget(
     }
     when (face) {
         RingFace.Arcs -> ArcsFace(size, snapshot, colours, onClick)
-        RingFace.Summary -> ListFace(
-            kicker = "Summary",
-            rows = summaryRows(snapshot.health),
-            colours = colours,
-            onClick = onClick,
-            empty = "Nothing has been read yet",
-        )
-        RingFace.Trends -> ListFace(
-            kicker = "Trends · your fortnight",
-            rows = trendRows(snapshot.health),
-            colours = colours,
-            onClick = onClick,
-            empty = "A fortnight of nights gives a trend",
-        )
+        RingFace.Summary -> SummaryFace(size, snapshot, colours, onClick)
+        RingFace.Trends -> TrendsFace(size, snapshot, colours, onClick)
     }
 }
 
@@ -261,19 +382,46 @@ private fun ArcsFace(
             ) {
                 Arcs(rings, colours, arcSide)
                 Spacer(GlanceModifier.width(14.dp))
+                // One child per ring, and that is load-bearing: a Glance
+                // container keeps ten children and silently drops the rest,
+                // and three rings written as kicker-gap-row came to eleven
+                // -- which is why Burn used to show its name and no figure.
                 Column(modifier = GlanceModifier.defaultWeight()) {
                     rings.forEachIndexed { index, ring ->
-                        if (index > 0) Gap(if (size == WidgetSize.Tall) 12.dp else 7.dp)
-                        Kicker(ring.label, colours.tile(ring.colour), size = 9)
-                        Gap(2.dp)
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Figure(ring.figure, if (size == WidgetSize.Tall) 20 else 16, colours.onBackground)
-                            Spacer(GlanceModifier.width(5.dp))
-                            Sub(ring.of, colours.faint, size = 10)
-                        }
+                        RingRow(ring, size, colours, first = index == 0)
                     }
                 }
             }
+        }
+    }
+}
+
+/** One ring's line: a dot, its name, its figure, and the window it covers. */
+@Composable
+private fun RingRow(ring: Ring, size: WidgetSize, colours: WidgetColours, first: Boolean) {
+    val tint = colours.tile(ring.colour)
+    Column {
+        if (!first) Gap(if (size == WidgetSize.Tall) 12.dp else 8.dp)
+        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Dot(tint, size = 7.dp)
+                    Spacer(GlanceModifier.width(6.dp))
+                    Kicker(ring.label, tint, size = 9)
+                }
+                Gap(1.dp)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Figure(
+                        ring.figure,
+                        if (size == WidgetSize.Tall) 20 else 17,
+                        colours.onBackground,
+                        weight = androidx.glance.text.FontWeight.Bold,
+                    )
+                    Spacer(GlanceModifier.width(5.dp))
+                    Sub(ring.of, colours.faint, size = 10)
+                }
+            }
+            Sub(ring.note, colours.faint, size = 9, lines = 2)
         }
     }
 }
@@ -351,6 +499,189 @@ private fun ListFace(
         }
     }
 }
+
+/**
+ * Three readings, each with the week behind it.
+ *
+ * One child per row, as everywhere else in this family: a Glance container
+ * keeps ten children and drops the rest without saying so.
+ */
+@Composable
+private fun SummaryFace(
+    size: WidgetSize,
+    snapshot: WidgetSnapshot,
+    colours: WidgetColours,
+    onClick: Action?,
+) {
+    val rows = summaryRows(snapshot.health, snapshot.goals)
+    if (rows.isEmpty()) {
+        Empty(colours, "Summary", "Nothing has been read yet", onClick)
+        return
+    }
+    val padding = 12.dp
+    val spark = (innerWidth(padding).value * 0.32f).coerceIn(56f, 120f).dp
+    WidgetCard(colours, onClick, padding) {
+        FaceHead("Summary", snapshot.readAt, colours)
+        rows.forEachIndexed { index, row ->
+            SummaryLine(row, size, colours, spark, first = index == 0)
+        }
+    }
+}
+
+@Composable
+private fun SummaryLine(
+    row: SummaryRow,
+    size: WidgetSize,
+    colours: WidgetColours,
+    sparkWidth: Dp,
+    first: Boolean,
+) {
+    val tint = colours.tile(row.colour)
+    Column {
+        Gap(if (first) 8.dp else if (size == WidgetSize.Tall) 14.dp else 9.dp)
+        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Kicker(row.label, tint, size = 9)
+                Gap(1.dp)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Figure(row.figure, if (size == WidgetSize.Tall) 20 else 18, colours.onBackground, weight = FontWeight.Bold)
+                    row.of?.let {
+                        Spacer(GlanceModifier.width(5.dp))
+                        Sub(it, colours.faint, size = 10)
+                    }
+                    row.chip?.let {
+                        Spacer(GlanceModifier.width(7.dp))
+                        Chip(it, tint, colours.tileWash(row.colour), tight = true)
+                    }
+                }
+            }
+            Spark(row.spark, row.colour, colours, sparkWidth, if (size == WidgetSize.Tall) 30.dp else 24.dp)
+        }
+    }
+}
+
+/** The week behind a figure, as bars. The newest is picked out. */
+@Composable
+private fun Spark(
+    values: List<Float>,
+    colour: TileColour,
+    colours: WidgetColours,
+    width: Dp,
+    height: Dp,
+) {
+    if (values.size < 2) return
+    val context = LocalContext.current
+    val density = context.resources.displayMetrics.density
+    val dark = colours.isDark(context)
+    val ink = colours.tileArgb(colour, dark)
+    val dim = colours.tileDimArgb(colour, dark)
+    val widthPx = (width.value * density).toInt()
+    val heightPx = (height.value * density).toInt()
+    val bitmap = remember(widthPx, heightPx, values, ink, dim) {
+        ChartBitmap.bars(widthPx, heightPx, values, null, ink, dim, true, false, density)
+    }
+    Image(
+        provider = ImageProvider(bitmap),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = GlanceModifier.width(width).height(height),
+    )
+}
+
+/**
+ * Each reading against its own fortnight, as a sentence and a rail.
+ *
+ * The rail is the part a list could not do: an arrow says something moved
+ * and a figure says how far, but neither says whether where you have
+ * landed is anywhere unusual for you.
+ */
+@Composable
+private fun TrendsFace(
+    size: WidgetSize,
+    snapshot: WidgetSnapshot,
+    colours: WidgetColours,
+    onClick: Action?,
+) {
+    val all = trendRows(snapshot.health)
+    if (all.isEmpty()) {
+        Empty(colours, "Trends", "A fortnight of nights gives a trend", onClick)
+        return
+    }
+    // Two on a 4x2 and four on a 4x4: a trend row is three lines tall, and
+    // a row squeezed to one line is the list this replaced.
+    val rows = all.take(if (size == WidgetSize.Tall) 4 else 2)
+    val padding = 12.dp
+    val railWidth = (innerWidth(padding).value - ARROW_COLUMN - USUAL_COLUMN).coerceAtLeast(40f).dp
+    WidgetCard(colours, onClick, padding) {
+        FaceHead("Trends · your fortnight", snapshot.readAt, colours)
+        rows.forEachIndexed { index, row ->
+            TrendLine(row, colours, railWidth, first = index == 0)
+        }
+    }
+}
+
+@Composable
+private fun TrendLine(row: TrendRow, colours: WidgetColours, railWidth: Dp, first: Boolean) {
+    val tint = colours.tile(row.colour)
+    Column {
+        Gap(if (first) 10.dp else 14.dp)
+        Row(modifier = GlanceModifier.fillMaxWidth()) {
+            // The direction, large, at the left: the one thing worth
+            // reading from across a room.
+            Figure(
+                when (row.up) {
+                    true -> "↑"
+                    false -> "↓"
+                    null -> "–"
+                },
+                22,
+                tint,
+                weight = FontWeight.Bold,
+            )
+            Spacer(GlanceModifier.width(10.dp))
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Kicker(row.label, tint, size = 9)
+                    Spacer(GlanceModifier.defaultWeight())
+                    Sub(row.value, colours.muted, size = 11)
+                }
+                Gap(2.dp)
+                Sub(row.phrase, colours.onBackground, size = 13)
+                Gap(5.dp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = GlanceModifier.width(railWidth)) {
+                        RailsImage(
+                            Chart.Rails(listOf(row.trend to row.colour)),
+                            colours,
+                            height = 6.dp,
+                            width = railWidth,
+                        )
+                    }
+                    Spacer(GlanceModifier.width(8.dp))
+                    Sub(row.usual, colours.faint, size = 9)
+                }
+            }
+        }
+    }
+}
+
+/** A face's name, and the clock time the reading behind it was taken. */
+@Composable
+private fun FaceHead(title: String, readAt: Long, colours: WidgetColours) {
+    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Kicker(title, colours.muted, size = 10)
+        Spacer(GlanceModifier.defaultWeight())
+        if (readAt > 0) {
+            val at = java.time.Instant.ofEpochMilli(readAt)
+                .atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+            Sub("%02d:%02d".format(at.hour, at.minute), colours.faint, size = 9)
+        }
+    }
+}
+
+/** The arrow and the gutter the usual band's words need. */
+private const val ARROW_COLUMN = 32f
+private const val USUAL_COLUMN = 74f
 
 /** An arc larger than this stops looking like a widget and starts looking like a clock. */
 private val ARC_MAX = 132.dp

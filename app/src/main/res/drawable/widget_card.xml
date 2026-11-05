@@ -3,6 +3,6 @@
      this app goes back to 28, so every rounded surface in a widget is this
      shape with a ColorFilter on it rather than a corner radius. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <corners android:radius="22dp" />
+    <corners android:radius="20dp" />
     <solid android:color="#FFFFFFFF" />
 </shape>

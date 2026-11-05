@@ -44,9 +44,16 @@ data class WidgetSnapshot(
 /**
  * Everything the widgets need, read off the main thread.
  *
- * Fourteen days rather than the tab's thirty: the longest window any widget
- * face draws is a fortnight, and a widget redrawn every half hour in the
- * background should ask for what it uses and no more.
+ * The tab's thirty days, and it has to be. A fortnight was the old answer,
+ * on the premise that no widget face drew longer than one -- but the Heart
+ * and Weight faces head themselves "30 days" and the three nightly vitals
+ * "30 nights", exactly as their tiles do, so the premise was already false.
+ * What the shorter window actually bought was a tile and a widget side by
+ * side with the same heading over different arithmetic: a usual band and a
+ * change chip from two weeks, labelled as a month.
+ *
+ * It costs a wider read every half hour. The alternative was to relabel
+ * five faces away from the tiles they exist to mirror.
  */
 internal suspend fun readWidgetSnapshot(context: Context, days: Int = WIDGET_WINDOW_DAYS): WidgetSnapshot =
     WidgetSnapshot(
@@ -61,4 +68,4 @@ internal suspend fun readWidgetSnapshot(context: Context, days: Int = WIDGET_WIN
         readAt = System.currentTimeMillis(),
     )
 
-internal const val WIDGET_WINDOW_DAYS = 14
+internal const val WIDGET_WINDOW_DAYS = 30

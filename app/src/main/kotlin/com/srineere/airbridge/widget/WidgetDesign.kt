@@ -34,8 +34,6 @@ enum class WidgetSize(
     ;
 
     companion object {
-        fun named(name: String?): WidgetSize? = entries.firstOrNull { it.name == name }
-
         /**
          * The size a cell of this many dp is closest to.
          *
@@ -58,7 +56,6 @@ enum class WidgetFamily(val label: String, val note: String) {
     Band("The band", "What no health app can show"),
     Rings("Rings", "Three arcs that close"),
     Dials("Dials", "Big scores on black"),
-    Paper("Paper", "Pale, for a light wallpaper"),
     Type("Type alone", "No card, straight on the wallpaper"),
 }
 
@@ -124,22 +121,12 @@ sealed interface WidgetDesign {
         override val sizes: Set<WidgetSize> get() = face.sizes
     }
 
-    /** The pale family, which does not follow the phone's light-or-dark. */
-    data class OfPaper(val face: PaperFace) : WidgetDesign {
-        override val id: String get() = "$PAPER_PREFIX${face.name}"
-        override val title: String get() = face.title
-        override val summary: String get() = face.summary
-        override val family: WidgetFamily get() = WidgetFamily.Paper
-        override val sizes: Set<WidgetSize> get() = face.sizes
-    }
-
     companion object {
         const val TILE_PREFIX = "tile:"
         const val BAND_PREFIX = "band:"
         const val RINGS_PREFIX = "rings:"
         const val DIALS_PREFIX = "dials:"
         const val TYPE_PREFIX = "type:"
-        const val PAPER_PREFIX = "paper:"
     }
 }
 
@@ -166,20 +153,10 @@ enum class BandFace(
         "The last charge read, and when",
         setOf(WidgetSize.Strip, WidgetSize.Square, WidgetSize.Row),
     ),
-    LastBuzz(
-        "Last buzz",
-        "Who, and how long ago",
-        setOf(WidgetSize.Strip, WidgetSize.Square, WidgetSize.Row),
-    ),
     Relay(
         "Relaying",
         "Whether your phone is passing alerts on",
         setOf(WidgetSize.Strip, WidgetSize.Square, WidgetSize.Row),
-    ),
-    Quiet(
-        "Quiet hours",
-        "When the band stops buzzing, and starts again",
-        setOf(WidgetSize.Strip, WidgetSize.Row),
     ),
     Buzzes(
         "Buzzes today",
@@ -198,6 +175,7 @@ private fun tileSummary(kind: TileKind): String = when (kind) {
     TileKind.Vitals -> "Breathing, skin temperature and blood oxygen"
     TileKind.Hrv -> "One figure a night, against its usual band"
     TileKind.Nutrition -> "What you logged, split three ways"
+    TileKind.Balance -> "Today's burn and today's food, climbing against each other"
     TileKind.Weight -> "A fortnight of readings, and the drift"
     TileKind.Breathing -> "Breaths a minute while you slept"
     TileKind.Skin -> "How far last night sat from your baseline"
@@ -219,8 +197,7 @@ object WidgetCatalogue {
             BandFace.entries.map { WidgetDesign.OfBand(it) } +
             RingFace.entries.map { WidgetDesign.OfRings(it) } +
             DialFace.entries.map { WidgetDesign.OfDials(it) } +
-            TypeFace.entries.map { WidgetDesign.OfType(it) } +
-            PaperFace.entries.map { WidgetDesign.OfPaper(it) }
+            TypeFace.entries.map { WidgetDesign.OfType(it) }
 
     fun forSize(size: WidgetSize): List<WidgetDesign> = all.filter { it.fits(size) }
 
@@ -269,10 +246,6 @@ object WidgetCatalogue {
                 TypeFace.entries
                     .firstOrNull { it.name == id.removePrefix(WidgetDesign.TYPE_PREFIX) }
                     ?.let { WidgetDesign.OfType(it) }
-            id.startsWith(WidgetDesign.PAPER_PREFIX) ->
-                PaperFace.entries
-                    .firstOrNull { it.name == id.removePrefix(WidgetDesign.PAPER_PREFIX) }
-                    ?.let { WidgetDesign.OfPaper(it) }
             else -> null
         }
     }

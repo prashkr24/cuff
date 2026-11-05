@@ -3,28 +3,28 @@ package com.srineere.airbridge.widget
 import android.content.Context
 
 /**
- * What one placed widget was told to be.
+ * What one placed widget was told to be: the design, and nothing else.
  *
- * [pinned] null means Auto: the widget draws whatever face the cell it is
- * currently in allows, and changes when it is resized. A pinned size keeps
- * one face at every cell, which is the answer to a launcher that reports a
- * cell a little smaller than it looks.
+ * It used to carry two more answers. A pinned face held one size whatever
+ * cell the widget sat in, and a flag sent a tap to the Health tab instead
+ * of to the reading's own screen. Both were questions asked at the moment
+ * somebody was trying to place a widget, and both had a right answer the
+ * app could work out for itself: the face follows the cell, so resizing on
+ * the home screen redraws it, and a tap opens the screen about the thing
+ * on the card.
  */
-data class WidgetConfig(
-    val design: WidgetDesign,
-    val pinned: WidgetSize? = null,
-    /** True to land on the Health tab rather than on this reading's screen. */
-    val opensTab: Boolean = false,
-) {
-    /** The face to draw in a cell of this size. */
+data class WidgetConfig(val design: WidgetDesign) {
+    /**
+     * The face to draw in a cell of this size.
+     *
+     * A design that refuses the cell falls back to the nearest size it can
+     * honestly fill, never to an empty card. Nearest in both directions:
+     * falling back to the largest would draw a four-cell face in a strip,
+     * which is the worse of the two mistakes.
+     */
     fun face(cell: WidgetSize): WidgetSize {
-        val wanted = pinned ?: cell
-        if (design.fits(wanted)) return wanted
-        // A kind that refuses the wanted size falls back to the nearest it
-        // can honestly fill, never to an empty card. Nearest in both
-        // directions: falling back to the largest would draw a four-cell
-        // face in a strip, which is the worse of the two mistakes.
-        return design.sizes.minByOrNull { kotlin.math.abs(it.ordinal - wanted.ordinal) } ?: cell
+        if (design.fits(cell)) return cell
+        return design.sizes.minByOrNull { kotlin.math.abs(it.ordinal - cell.ordinal) } ?: cell
     }
 }
 
@@ -83,11 +83,7 @@ object WidgetStore {
         remove(context, stale.toIntArray())
     }
 
-    internal fun encode(config: WidgetConfig): String = listOf(
-        config.design.id,
-        config.pinned?.name.orEmpty(),
-        if (config.opensTab) "1" else "0",
-    ).joinToString(FIELD.toString())
+    internal fun encode(config: WidgetConfig): String = config.design.id
 
     /**
      * Null for anything this build cannot make sense of.
@@ -95,15 +91,15 @@ object WidgetStore {
      * A design dropped in a later version, a row written by a newer one, a
      * truncated string: all the same answer, and the widget then asks to be
      * set up again rather than drawing a guess.
+     *
+     * Rows written before the pinned face and the tap target were dropped
+     * carry both after a separator. They are read for their design and the
+     * rest is let go, so an upgrade costs a widget its pin rather than its
+     * existence.
      */
     internal fun decode(raw: String?): WidgetConfig? {
         if (raw.isNullOrEmpty()) return null
-        val parts = raw.split(FIELD)
-        val design = WidgetCatalogue.byId(parts.getOrNull(0)) ?: return null
-        return WidgetConfig(
-            design = design,
-            pinned = WidgetSize.named(parts.getOrNull(1)?.takeIf { it.isNotEmpty() }),
-            opensTab = parts.getOrNull(2) == "1",
-        )
+        val design = WidgetCatalogue.byId(raw.substringBefore(FIELD)) ?: return null
+        return WidgetConfig(design)
     }
 }

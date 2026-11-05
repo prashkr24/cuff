@@ -767,6 +767,51 @@ internal fun Trend.rail(colour: Color): BandRail {
 }
 
 /**
+ * Today's one reading, split into the parts it is made of.
+ *
+ * Horizontal, and about a single day: energy in against energy out, or a
+ * plate's three macros, is a proportion of today, and a week of vertical
+ * bars answers a question the figure above it did not ask. The widgets
+ * drew it this way first and were right to.
+ *
+ * Colour carries meaning here -- which part is which -- so these keep
+ * their own palette whatever colour the tile is wearing, exactly as the
+ * sleep stages do.
+ */
+@Composable
+internal fun SplitBar(
+    parts: List<Pair<Double, Color>>,
+    modifier: Modifier = Modifier,
+    height: Dp = 10.dp,
+    gap: Dp = 3.dp,
+) {
+    val shown = parts.filter { it.first > 0.0 }
+    if (shown.isEmpty()) return
+    ChartCanvas(modifier, height, false) {
+        val total = shown.sumOf { it.first }.toFloat().takeIf { it > 0f } ?: return@ChartCanvas
+        val between = gap.toPx()
+        val available = (size.width - between * (shown.size - 1)).coerceAtLeast(1f)
+        val radius = CornerRadius(size.height / 2f, size.height / 2f)
+        var x = 0f
+        shown.forEach { (share, colour) ->
+            // A sliver still has to be visible: a day with four grams of fat
+            // on it is a true thing about that day, and a segment rounded
+            // away to nothing reads as a macro that was not eaten at all.
+            val wide = (available * (share.toFloat() / total)).coerceAtLeast(MIN_SEGMENT.toPx())
+            drawRoundRect(
+                color = colour,
+                topLeft = Offset(x, 0f),
+                size = Size(wide, size.height),
+                cornerRadius = radius,
+            )
+            x += wide + between
+        }
+    }
+}
+
+private val MIN_SEGMENT = 3.dp
+
+/**
  * Bars made of parts, each bar as tall as its own total.
  *
  * Not normalised: a day of 2,600 calories and a day of 900 are different

@@ -15,16 +15,14 @@ class WidgetStoreTest {
 
     @Test
     fun `a config round-trips`() {
-        val config = WidgetConfig(steps, pinned = WidgetSize.Square, opensTab = true)
+        val config = WidgetConfig(steps)
         assertEquals(config, WidgetStore.decode(WidgetStore.encode(config)))
     }
 
+    /** A row is the design's id now, with nothing after it. */
     @Test
-    fun `auto is stored as no size, not as a size`() {
-        val config = WidgetConfig(steps)
-        val decoded = WidgetStore.decode(WidgetStore.encode(config))
-        assertNull(decoded?.pinned)
-        assertEquals(config, decoded)
+    fun `a config is stored as its design and nothing else`() {
+        assertEquals(steps.id, WidgetStore.encode(WidgetConfig(steps)))
     }
 
     @Test
@@ -39,37 +37,27 @@ class WidgetStoreTest {
         assertNull(WidgetStore.decode("band:Stop\u001F\u001F0"))
     }
 
+    /**
+     * A widget placed by an older build keeps drawing.
+     *
+     * Those rows carry a pinned face and a tap target after the design.
+     * Both are gone, so both are let go: an upgrade costs a widget its pin,
+     * never its existence.
+     */
     @Test
-    fun `a truncated row keeps what it can and defaults the rest`() {
-        // Written by a build before opensTab existed: the design is still
-        // good, so the widget keeps drawing rather than asking to be set up.
-        val decoded = WidgetStore.decode("tile:Steps")
-        assertEquals(steps, decoded?.design)
-        assertNull(decoded?.pinned)
-        assertEquals(false, decoded?.opensTab)
-    }
-
-    @Test
-    fun `a size this build no longer has falls back to auto`() {
-        val decoded = WidgetStore.decode("tile:Steps\u001FHuge\u001F0")
-        assertEquals(steps, decoded?.design)
-        assertNull(decoded?.pinned)
+    fun `a row from the build with a pinned face is read for its design`() {
+        assertEquals(steps, WidgetStore.decode("tile:Steps\u001FSquare\u001F1")?.design)
+        assertEquals(steps, WidgetStore.decode("tile:Steps\u001F\u001F0")?.design)
+        assertEquals(steps, WidgetStore.decode("tile:Steps")?.design)
     }
 
     // --------------------------------------------------------- which face
 
     @Test
-    fun `auto draws the face of the cell it is in`() {
+    fun `a widget draws the face of the cell it is in`() {
         val config = WidgetConfig(steps)
         assertEquals(WidgetSize.Strip, config.face(WidgetSize.Strip))
         assertEquals(WidgetSize.Tall, config.face(WidgetSize.Tall))
-    }
-
-    @Test
-    fun `a pinned face ignores the cell`() {
-        val config = WidgetConfig(steps, pinned = WidgetSize.Square)
-        assertEquals(WidgetSize.Square, config.face(WidgetSize.Tall))
-        assertEquals(WidgetSize.Square, config.face(WidgetSize.Strip))
     }
 
     @Test
@@ -80,10 +68,11 @@ class WidgetStoreTest {
         assertEquals(WidgetSize.Wide, config.face(WidgetSize.Tall))
     }
 
+    /** Every widget is auto now: the cell it is in is the only input. */
     @Test
-    fun `a pinned face the kind refuses falls back the same way`() {
-        val config = WidgetConfig(activity, pinned = WidgetSize.Tall)
-        assertEquals(WidgetSize.Wide, config.face(WidgetSize.Wide))
+    fun `resizing a widget changes the face it draws`() {
+        val config = WidgetConfig(steps)
+        assertEquals(WidgetSize.entries.toList(), WidgetSize.entries.map { config.face(it) })
     }
 
     @Test

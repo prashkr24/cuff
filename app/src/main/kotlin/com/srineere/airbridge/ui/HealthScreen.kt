@@ -398,7 +398,76 @@ internal fun ColumnScope.TileBody(
         TileKind.Skin ->
             VitalTile(tile.size, tile.kind, data.skinTrend, "°C", colour, 1, signed = true)
         TileKind.Oxygen -> VitalTile(tile.size, tile.kind, data.oxygenTrend, "%", colour, 0)
+        TileKind.Balance -> BalanceTile(tile.size, data, colour, axes)
     }
+}
+
+/**
+ * Today's burn and today's food, climbing against each other.
+ *
+ * The same pair the Burned-against-eaten screen draws, at tile size. Every
+ * other tile here is a figure with a chart under it; this one is the chart,
+ * because the gap between two lines is the reading and a single number
+ * cannot hold it -- that number is already the Energy tile.
+ */
+@Composable
+private fun ColumnScope.BalanceTile(size: TileSize, data: HealthData, colour: Color, axes: Axes) {
+    val extras = MaterialTheme.extras
+    val snapshot = data.snapshot
+    val zone = java.time.ZoneId.systemDefault()
+    val today = java.time.LocalDate.now(zone).toEpochDay()
+    val hourNow = java.time.LocalTime.now(zone).hour
+
+    // Food arrives as entries at a time rather than an hourly total, so the
+    // eaten line is built from the entries, as the screen builds it.
+    val eatenByHour = DoubleArray(24)
+    snapshot.food.filter { it.day == today }.forEach { entry ->
+        eatenByHour[entry.at.atZone(zone).hour] += entry.kcal ?: 0.0
+    }
+    val burnedByHour = snapshot.burnedHourly.takeIf { it.size == 24 } ?: List(24) { 0.0 }
+    val burned = runningSoFar(burnedByHour, hourNow)
+    val eaten = runningSoFar(eatenByHour.toList(), hourNow)
+
+    TileHead(TileKind.Balance, colour, size, window = "today")
+    if (burned.lastOrNull().let { it == null || it <= 0.0 } &&
+        eaten.lastOrNull().let { it == null || it <= 0.0 }
+    ) {
+        TileEmpty("Nothing burned or eaten has been recorded today yet.", size)
+        return
+    }
+    val gap = (eaten.lastOrNull() ?: 0.0) - (burned.lastOrNull() ?: 0.0)
+    TileValue(
+        (if (gap < 0) "−" else "+") + count(abs(gap).roundToInt().toLong()),
+        "kcal",
+        size,
+    )
+    TileSub(if (gap < 0) "behind, so far today" else "ahead, so far today")
+    RunningTotals(
+        first = burned,
+        second = eaten,
+        firstColour = extras.activity,
+        secondColour = extras.energy,
+        modifier = Modifier.weight(1f).padding(top = 6.dp),
+        height = if (size == TileSize.XL) 92.dp else 46.dp,
+        axes = if (size == TileSize.W) null else axes,
+        xTicks = if (size == TileSize.W) emptyList() else hourTicksOf(hourNow),
+    )
+}
+
+/** A running total up to the hour it is now, and no further. */
+private fun runningSoFar(hours: List<Double>, until: Int): List<Double> {
+    var sum = 0.0
+    return (0..until.coerceIn(0, 23)).map { hour ->
+        sum += hours.getOrElse(hour) { 0.0 }
+        sum
+    }
+}
+
+/** Every sixth hour the day has actually reached. */
+private fun hourTicksOf(hourNow: Int): List<Pair<Float, String>> {
+    val span = hourNow.coerceAtLeast(1).toFloat()
+    return listOf(6, 12, 18).filter { it <= hourNow }
+        .map { (it / span) to "%02d".format(it) }
 }
 
 /**
@@ -974,20 +1043,18 @@ private fun ColumnScope.EnergyTile(
         TileSub("no food logged")
         return
     }
-    val week = data.balanceByDay.takeLast(7).map { it.value }
-    val bars = @Composable { height: Dp, modifier: Modifier, fill: Boolean, withAxes: Axes? ->
-        DivergingBars(
-            values = week,
-            below = colour,
-            above = MaterialTheme.colorScheme.onSurfaceVariant,
-            axis = MaterialTheme.colorScheme.outline,
-            modifier = modifier,
-            height = height,
-            fill = fill,
-            axes = withAxes,
-            target = goals.energyKcal.takeIf { it != 0 }?.toDouble(),
-        )
-    }
+    // Today, split into what went in and what went out -- not the week it
+    // sits in. The figure above is a single day's balance, and a seven-day
+    // chart under it was answering a different question from the number it
+    // belonged to. The widgets drew the split first; this is that drawing.
+    val extras = MaterialTheme.extras
+    val eaten = data.snapshot.eatenToday ?: 0.0
+    val burned = data.snapshot.burnedToday ?: 0.0
+    val split = listOf(eaten to extras.hrv, burned to extras.energy)
+    val inAndOut = "%s in · %s out".format(
+        count(eaten.roundToInt().toLong()),
+        count(burned.roundToInt().toLong()),
+    )
     // Two columns cannot hold "−1,418" at this size, and a clipped number
     // is a wrong number: at S and M the figure is abbreviated instead.
     val full = (if (balance < 0) "−" else "+") + count(abs(balance).roundToInt().toLong())
@@ -997,11 +1064,13 @@ private fun ColumnScope.EnergyTile(
         full
     }
     val word = if (balance < 0) "Deficit" else "Surplus"
+    @Suppress("UNUSED_EXPRESSION") axes
+    @Suppress("UNUSED_EXPRESSION") goals
     when (size) {
         TileSize.S, TileSize.M, TileSize.W -> {
             TileValue(short, null, size)
             TileChip(word, colour)
-            bars(26.dp, Modifier.padding(top = 5.dp), false, null)
+            SplitBar(split, Modifier.padding(top = 7.dp), height = 10.dp)
         }
         TileSize.L -> Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1011,7 +1080,10 @@ private fun ColumnScope.EnergyTile(
                 TileValue(full, "kcal", size)
                 TileChip(word, colour)
             }
-            bars(52.dp, Modifier.padding(start = 6.dp), false, axes)
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                SplitBar(split, height = 12.dp)
+                Box(Modifier.padding(top = 6.dp)) { TileSub(inAndOut) }
+            }
         }
         TileSize.XL -> {
             Row(verticalAlignment = Alignment.Bottom) {
@@ -1020,8 +1092,14 @@ private fun ColumnScope.EnergyTile(
                     TileChip(word, colour)
                 }
             }
-            Box(Modifier.weight(1f).padding(top = 6.dp)) {
-                bars(84.dp, Modifier.fillMaxSize(), true, axes)
+            // Centred in what is left rather than pinned under the figure:
+            // a 16dp bar at the top of a 216dp card is a card with a hole
+            // in it.
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column {
+                    SplitBar(split, height = 16.dp)
+                    Box(Modifier.padding(top = 8.dp)) { TileSub(inAndOut) }
+                }
             }
         }
     }
@@ -1180,7 +1258,23 @@ private fun ColumnScope.NutritionTile(
             ).joinToString(" · ")
         },
     )
-    if (size != TileSize.S) {
+    // Today's plate, in its three macros -- the same split the widget
+    // draws. A week of intake bars under a figure that says "410 kcal
+    // today" was a chart about a different day from the number above it.
+    val extras = MaterialTheme.extras
+    val carbs = data.snapshot.carbsToday ?: 0.0
+    val fat = data.snapshot.fatToday ?: 0.0
+    val macros = listOf(
+        (protein ?: 0.0) to extras.activity,
+        carbs to extras.hrv,
+        fat to extras.heart,
+    )
+    if (size == TileSize.S) return
+    // Grams, not calories: the three are being compared with each other,
+    // and a gram of fat against a gram of carbohydrate is the comparison
+    // the plate is actually made of.
+    if (macros.none { it.first > 0.0 }) {
+        // Nothing to divide. The week is still true, so it stands in.
         GoalBars(
             values = data.snapshot.eatenDaily.takeLast(7).map { it.value },
             target = null,
@@ -1189,8 +1283,30 @@ private fun ColumnScope.NutritionTile(
             modifier = Modifier.padding(top = 5.dp),
             height = if (size == TileSize.XL) 60.dp else 28.dp,
         )
+        return
     }
+    if (size == TileSize.XL) {
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column {
+                SplitBar(macros, height = 16.dp)
+                Box(Modifier.padding(top = 8.dp)) { TileSub(macroKey(protein, carbs, fat)) }
+            }
+        }
+        return
+    }
+    SplitBar(
+        macros,
+        Modifier.padding(top = 7.dp),
+        height = if (size == TileSize.L) 12.dp else 10.dp,
+    )
 }
+
+/** The three macros written out, for the sizes with a line to spare. */
+private fun macroKey(protein: Double?, carbs: Double, fat: Double): String = listOfNotNull(
+    protein?.let { "P ${it.roundToInt()}" },
+    carbs.takeIf { it > 0.0 }?.let { "C ${it.roundToInt()}" },
+    fat.takeIf { it > 0.0 }?.let { "F ${it.roundToInt()}" },
+).joinToString(" · ")
 
 @Composable
 private fun ColumnScope.WeightTile(size: TileSize, data: HealthData, colour: Color) {

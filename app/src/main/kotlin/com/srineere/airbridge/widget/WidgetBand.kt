@@ -11,6 +11,14 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.width
 import androidx.glance.unit.ColorProvider
 import com.srineere.airbridge.health.TileColour
+import androidx.glance.layout.Box
+import androidx.glance.layout.Column
+import androidx.glance.layout.height
+import androidx.glance.background
+import androidx.glance.ColorFilter
+import androidx.glance.ImageProvider
+import androidx.glance.layout.ContentScale
+import androidx.glance.text.FontWeight
 
 /**
  * The half of this app no health app can draw.
@@ -34,9 +42,7 @@ internal fun BandWidget(
     when (face) {
         BandFace.Everything -> Everything(size, band, colours, onClick, now)
         BandFace.Battery -> Battery(size, band, colours, onClick, now)
-        BandFace.LastBuzz -> LastBuzz(size, band, colours, onClick, now)
         BandFace.Relay -> Relay(size, band, colours, onClick, now)
-        BandFace.Quiet -> Quiet(size, band, colours, onClick, now)
         BandFace.Buzzes -> Buzzes(size, band, colours, onClick)
     }
 }
@@ -58,18 +64,16 @@ private fun stateWord(state: BandState, band: BandFacts): String = when (state) 
     BandState.Off -> "Not relaying"
 }
 
-@Composable
-private fun StateLine(band: BandFacts, colours: WidgetColours, now: Long, size: Int = 12) {
-    val state = band.state(now)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Dot(stateColour(state, colours), size = 7.dp)
-        Spacer(GlanceModifier.width(6.dp))
-        Sub(stateWord(state, band), colours.onBackground, size = size)
-    }
-}
 
 // --------------------------------------------------------------- the faces
 
+/**
+ * The state, the charge and the last buzz, in that order.
+ *
+ * Three children, not eleven: a Glance container keeps ten and drops the
+ * rest in silence, so the card above the rule and the footer under it are
+ * each one Column rather than a run of siblings.
+ */
 @Composable
 private fun Everything(
     size: WidgetSize,
@@ -79,43 +83,98 @@ private fun Everything(
     now: Long,
 ) {
     val tall = size == WidgetSize.Tall
-    val padding = 12.dp
+    val padding = 14.dp
+    val state = band.state(now)
+    val stale = band.batteryStale(now)
     WidgetCard(colours, onClick, padding) {
-        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Kicker("Band", colours.accent)
-            Spacer(GlanceModifier.defaultWeight())
-            Sub(readAge(band.batteryAt, now), colours.faint, size = 9)
-        }
-        Gap(if (tall) 10.dp else 6.dp)
-        StateLine(band, colours, now, size = if (tall) 13 else 12)
-        Gap(if (tall) 12.dp else 8.dp)
-        BatteryFigure(band, colours, now, size = if (tall) 44 else 32)
-        Gap(8.dp)
-        Meter(
-            progress = (band.battery ?: 0) / 100f,
-            width = innerWidth(padding),
-            colour = if (band.batteryStale(now)) colours.faint else colours.accent,
-            track = colours.track,
-            height = if (tall) 6.dp else 5.dp,
-        )
-        Grow()
-        val who = band.lastBuzzWho
-        if (band.lastBuzzAt == 0L) {
-            Sub("No buzz yet today", colours.faint, size = 10)
-        } else {
-            Sub(who ?: if (band.lastBuzzWasCall) "A call" else "A message", colours.onBackground, size = 13)
-            Gap(2.dp)
+        Column {
+            // The state leads, in its own colour, with the quiet window
+            // after it: what the band is doing, and what will change it.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Dot(stateColour(state, colours), size = 8.dp)
+                Spacer(GlanceModifier.width(7.dp))
+                Kicker(
+                    stateWord(state, band),
+                    stateColour(state, colours),
+                    size = if (tall) 13 else 12,
+                    caps = false,
+                )
+                if (band.quietEnabled) {
+                    Sub(
+                        " · quiet from " + clock(band.quietStartMinute),
+                        colours.faint,
+                        size = if (tall) 12 else 11,
+                    )
+                }
+            }
+            Gap(if (tall) 16.dp else 12.dp)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Figure(
+                    band.battery?.let { "$it%" } ?: "–",
+                    if (tall) 44 else 34,
+                    if (stale) colours.faint else colours.onBackground,
+                    weight = FontWeight.Bold,
+                )
+                Spacer(GlanceModifier.width(9.dp))
+                // The band's name, and nothing about a connection: the app
+                // knows when it last read the Air, not whether it is
+                // reachable now, and the line under this says which.
+                Sub("Air", colours.muted, size = 12)
+            }
+            Gap(9.dp)
+            Meter(
+                progress = (band.battery ?: 0) / 100f,
+                width = innerWidth(padding),
+                colour = if (stale) colours.faint else colours.accent,
+                track = colours.track,
+                height = if (tall) 6.dp else 5.dp,
+            )
+            Gap(7.dp)
             Sub(
-                listOfNotNull(
-                    if (band.lastBuzzWasCall) "Call" else "Message",
-                    ago(band.lastBuzzAt, now),
-                    "${band.buzzesToday} today",
-                ).joinToString(" · "),
+                if (band.batteryAt == 0L) "Not read yet" else "Checked " + ago(band.batteryAt, now),
                 colours.faint,
-                size = 10,
+                size = 11,
             )
         }
+        Grow()
+        Column {
+            Rule(colours)
+            Gap(9.dp)
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Kicker("Last buzz", colours.faint, size = 9)
+                Spacer(GlanceModifier.defaultWeight())
+                if (band.lastBuzzAt == 0L) {
+                    Sub("nothing today", colours.faint, size = 11)
+                } else {
+                    band.lastBuzzWho?.let {
+                        Sub(it, colours.onBackground, size = 12)
+                        Spacer(GlanceModifier.width(7.dp))
+                    }
+                    Sub(
+                        (if (band.lastBuzzWasCall) "Call" else "Message") +
+                            " · " + ago(band.lastBuzzAt, now),
+                        colours.muted,
+                        size = 11,
+                    )
+                }
+            }
+        }
     }
+}
+
+/** A hairline across the card, which is the only divider in this app. */
+@Composable
+private fun Rule(colours: WidgetColours) {
+    Box(
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(
+                imageProvider = ImageProvider(com.srineere.airbridge.R.drawable.widget_bar),
+                contentScale = ContentScale.FillBounds,
+                colorFilter = ColorFilter.tint(colours.outline),
+            ),
+    ) {}
 }
 
 @Composable
@@ -178,42 +237,6 @@ private fun BatteryFigure(band: BandFacts, colours: WidgetColours, now: Long, si
     )
 }
 
-@Composable
-private fun LastBuzz(
-    size: WidgetSize,
-    band: BandFacts,
-    colours: WidgetColours,
-    onClick: Action?,
-    now: Long,
-) {
-    if (band.lastBuzzAt == 0L) {
-        Empty(colours, "Last buzz", "Nothing has reached the band yet", onClick)
-        return
-    }
-    val who = band.lastBuzzWho ?: if (band.lastBuzzWasCall) "A call" else "A message"
-    WidgetCard(colours, onClick) {
-        when (size) {
-            WidgetSize.Strip, WidgetSize.Row -> {
-                Figure(who, 18, colours.onBackground)
-                Gap(3.dp)
-                Sub(ago(band.lastBuzzAt, now), colours.faint, size = 10)
-            }
-            else -> {
-                Kicker("Last buzz", colours.tile(TileColour.Hrv))
-                Grow()
-                Figure(who, 22, colours.onBackground)
-                Gap(4.dp)
-                Sub(
-                    if (band.lastBuzzWasCall) "Call · rang until answered" else "Message",
-                    colours.muted,
-                    size = 11,
-                )
-                Grow()
-                Sub(ago(band.lastBuzzAt, now), colours.faint, size = 11)
-            }
-        }
-    }
-}
 
 @Composable
 private fun Relay(
@@ -254,43 +277,6 @@ private fun Relay(
     }
 }
 
-@Composable
-private fun Quiet(
-    size: WidgetSize,
-    band: BandFacts,
-    colours: WidgetColours,
-    onClick: Action?,
-    now: Long,
-) {
-    if (!band.quietEnabled) {
-        Empty(colours, "Quiet hours", "Quiet hours are off", onClick)
-        return
-    }
-    val quiet = band.quietNow(now)
-    WidgetCard(colours, onClick) {
-        if (size == WidgetSize.Row) {
-            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Kicker(if (quiet) "Quiet until" else "Next quiet", colours.faint)
-                Spacer(GlanceModifier.defaultWeight())
-                Figure(
-                    clock(if (quiet) band.quietEndMinute else band.quietStartMinute),
-                    17,
-                    colours.onBackground,
-                )
-                Spacer(GlanceModifier.width(7.dp))
-                Sub(
-                    "→ " + clock(if (quiet) band.quietStartMinute else band.quietEndMinute),
-                    colours.muted,
-                    size = 11,
-                )
-            }
-        } else {
-            Figure(clock(if (quiet) band.quietEndMinute else band.quietStartMinute), 24, colours.onBackground)
-            Gap(4.dp)
-            Sub(if (quiet) "Quiet until" else "Quiet from", colours.faint, size = 10)
-        }
-    }
-}
 
 @Composable
 private fun Buzzes(

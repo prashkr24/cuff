@@ -18,7 +18,15 @@ import java.time.Instant
 
 class WidgetRingsTest {
 
-    private val goals = Goals(steps = 8_000, sleepMinutes = 420)
+    private val goals = Goals(steps = 8_000, sleepMinutes = 420, activeMinutes = 150)
+
+    /** A session that began today, so it lands inside this week. */
+    private fun session(minutes: Long) = com.srineere.airbridge.health.Session(
+        start = Instant.now().minus(Duration.ofMinutes(minutes)),
+        end = Instant.now(),
+        title = null,
+        exerciseType = 0,
+    )
 
     private fun night(minutes: Long) = Night(
         day = 0L,
@@ -36,6 +44,7 @@ class WidgetRingsTest {
         asleep: Long? = 420,
         burnedToday: Double? = 2_000.0,
         burnedDaily: List<Double> = listOf(1_800.0, 2_200.0, 2_000.0, 1_900.0, 5_000.0),
+        active: Long? = 75,
     ) = HealthData(
         stage = HealthStage.Granted,
         snapshot = HealthSnapshot(
@@ -43,26 +52,50 @@ class WidgetRingsTest {
             burnedToday = burnedToday,
             burnedDaily = burnedDaily.mapIndexed { index, value -> Reading(index.toLong(), value) },
             nights = asleep?.let { listOf(night(it)) } ?: emptyList(),
+            sessions = active?.let { listOf(session(it)) } ?: emptyList(),
         ),
         nights = asleep?.let { listOf(night(it)) } ?: emptyList(),
     )
 
     // -------------------------------------------------------- which rings
 
+    /**
+     * Steps, active minutes and sleep -- not burn.
+     *
+     * Burn was measured against its own fortnight average, a denominator
+     * this app invented; an arc that closes needs a goal the person set.
+     * Burn still has its figure on the Summary face and its dial on Three
+     * dials, where nothing has to be a fraction of anything.
+     */
     @Test
     fun `three rings when all three have something behind them`() {
         val rings = ringsOf(data(), goals)
-        assertEquals(listOf("Steps", "Sleep", "Burn"), rings.map { it.label })
+        assertEquals(listOf("Steps", "Active", "Sleep"), rings.map { it.label })
         assertEquals(
-            listOf(TileColour.Steps, TileColour.Sleep, TileColour.Energy),
+            listOf(TileColour.Steps, TileColour.Activity, TileColour.Sleep),
             rings.map { it.colour },
+        )
+    }
+
+    /** Each arc says which window it is about, because they differ. */
+    @Test
+    fun `every ring names its own window`() {
+        assertEquals(
+            listOf("today", "this week", "last night"),
+            ringsOf(data(), goals).map { it.note },
         )
     }
 
     @Test
     fun `a night nobody recorded is no ring, not an empty one`() {
         val rings = ringsOf(data(asleep = null), goals)
-        assertEquals(listOf("Steps", "Burn"), rings.map { it.label })
+        assertEquals(listOf("Steps", "Active"), rings.map { it.label })
+    }
+
+    @Test
+    fun `no session logged is no active ring`() {
+        val rings = ringsOf(data(active = null), goals)
+        assertEquals(listOf("Steps", "Sleep"), rings.map { it.label })
     }
 
     @Test
@@ -74,7 +107,13 @@ class WidgetRingsTest {
     @Test
     fun `nothing at all gives no rings`() {
         val bare = ringsOf(
-            data(steps = null, asleep = null, burnedToday = null, burnedDaily = emptyList()),
+            data(
+                steps = null,
+                asleep = null,
+                burnedToday = null,
+                burnedDaily = emptyList(),
+                active = null,
+            ),
             goals.copy(steps = 0, sleepMinutes = 0),
         )
         assertTrue(bare.isEmpty())
@@ -116,7 +155,6 @@ class WidgetRingsTest {
     @Test
     fun `fewer than three days behind it is no usual day at all`() {
         assertNull(usualBurn(data(burnedDaily = listOf(2_000.0, 2_100.0))))
-        assertTrue(ringsOf(data(burnedDaily = listOf(2_000.0, 2_100.0)), goals).none { it.label == "Burn" })
     }
 
     @Test

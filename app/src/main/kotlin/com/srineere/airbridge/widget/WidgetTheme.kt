@@ -35,6 +35,8 @@ internal class WidgetColours(
     val faint: ColorProvider,
     val track: ColorProvider,
     val accent: ColorProvider,
+    /** The hairline `TileFrame` draws round every tile. */
+    val outline: ColorProvider,
     private val lightExtras: AirExtraColors,
     private val darkExtras: AirExtraColors,
     private val lightAccent: Color,
@@ -44,6 +46,9 @@ internal class WidgetColours(
     private val lightMuted: Color,
     private val darkMuted: Color,
     private val lightCard: Color,
+    private val darkCard: Color,
+    private val lightRail: Color,
+    private val darkRail: Color,
     private val lightPage: Color,
     private val lightEdge: Color,
     private val lightTrackOf: (Color) -> Color,
@@ -51,20 +56,43 @@ internal class WidgetColours(
     private val mode: ThemeMode,
 ) {
     /** A health colour, at full strength, in whichever mode is drawn. */
-    fun tile(colour: TileColour): ColorProvider =
-        provide(mode, extraOf(lightExtras, colour, lightAccent), extraOf(darkExtras, colour, darkAccent))
+    fun tile(colour: TileColour): ColorProvider = provide(
+        mode,
+        extraOf(lightExtras, colour, lightAccent, lightMuted),
+        extraOf(darkExtras, colour, darkAccent, darkMuted),
+    )
 
     /**
      * A health colour at the strength the tab's chips use behind their text.
      *
-     * The tile draws its change chip as a filled pill at fourteen per cent,
+     * The tile draws its change chip as a filled pill at eighteen per cent,
      * not as coloured words. The widget drew words, which is why the two
      * never looked like the same component.
+     *
+     * Mixed toward the card, not made transparent -- the rule the rest of
+     * this file already follows, and the one this colour was breaking. An
+     * eighteen per cent pill on a tab composites over the card behind it;
+     * on a home screen it composites over the wallpaper, so the same chip
+     * came out dark on the tab and nearly white on a bright photograph.
      */
     fun tileWash(colour: TileColour): ColorProvider = provide(
         mode,
-        extraOf(lightExtras, colour, lightAccent).copy(alpha = CHIP_ALPHA),
-        extraOf(darkExtras, colour, darkAccent).copy(alpha = CHIP_ALPHA),
+        mixToward(extraOf(lightExtras, colour, lightAccent, lightMuted), lightCard, 1f - CHIP_ALPHA),
+        mixToward(extraOf(darkExtras, colour, darkAccent, darkMuted), darkCard, 1f - CHIP_ALPHA),
+    )
+
+    /**
+     * The paler pill the tab fills `TileChip` with.
+     *
+     * A step under [tileWash]: the tab draws the change chip in the head at
+     * eighteen per cent and the word under the figure at fourteen, and the
+     * two being different is the point -- the head's chip is the louder of
+     * them.
+     */
+    fun tileChip(colour: TileColour): ColorProvider = provide(
+        mode,
+        mixToward(extraOf(lightExtras, colour, lightAccent, lightMuted), lightCard, 1f - TILE_CHIP_ALPHA),
+        mixToward(extraOf(darkExtras, colour, darkAccent, darkMuted), darkCard, 1f - TILE_CHIP_ALPHA),
     )
 
     /**
@@ -75,8 +103,8 @@ internal class WidgetColours(
      */
     fun tileDim(colour: TileColour): ColorProvider = provide(
         mode,
-        lightTrackOf(extraOf(lightExtras, colour, lightAccent)),
-        darkTrackOf(extraOf(darkExtras, colour, darkAccent)),
+        lightTrackOf(extraOf(lightExtras, colour, lightAccent, lightMuted)),
+        darkTrackOf(extraOf(darkExtras, colour, darkAccent, darkMuted)),
     )
 
     /** The sleep stages, which keep their own palette whatever is chosen. */
@@ -120,6 +148,7 @@ internal class WidgetColours(
             if (dark) darkExtras else lightExtras,
             colour,
             if (dark) darkAccent else lightAccent,
+            if (dark) darkMuted else lightMuted,
         ),
     )
 
@@ -148,7 +177,7 @@ internal class WidgetColours(
      * is not dim, it is gone.
      */
     fun paperTile(colour: TileColour): ColorProvider =
-        ColorProvider(extraOf(lightExtras, colour, lightAccent))
+        ColorProvider(extraOf(lightExtras, colour, lightAccent, lightMuted))
 
     /**
      * The same light half as plain colours, for the catalogue's thumbnails.
@@ -165,7 +194,7 @@ internal class WidgetColours(
             ink = lightInk,
             muted = lightMuted,
             edge = lightEdge,
-            tile = { extraOf(lightExtras, it, lightAccent) },
+            tile = { extraOf(lightExtras, it, lightAccent, lightMuted) },
         )
 
     /**
@@ -191,8 +220,8 @@ internal class WidgetColours(
 
     fun tileOn(colour: TileColour, darkInkWanted: Boolean?): ColorProvider = when (darkInkWanted) {
         null -> tile(colour)
-        true -> ColorProvider(extraOf(lightExtras, colour, lightAccent))
-        false -> ColorProvider(extraOf(darkExtras, colour, darkAccent))
+        true -> ColorProvider(extraOf(lightExtras, colour, lightAccent, lightMuted))
+        false -> ColorProvider(extraOf(darkExtras, colour, darkAccent, darkMuted))
     }
 
     /** The stepped-back colour, as an ARGB int for the Canvas. */
@@ -201,6 +230,7 @@ internal class WidgetColours(
             if (dark) darkExtras else lightExtras,
             colour,
             if (dark) darkAccent else lightAccent,
+            if (dark) darkMuted else lightMuted,
         )
         return argbOf(if (dark) darkTrackOf(full) else lightTrackOf(full))
     }
@@ -218,6 +248,39 @@ internal class WidgetColours(
         )
     }
 
+    /**
+     * The usual band behind a rail's dot: the tab's thirty per cent.
+     *
+     * Mixed toward the card, not made transparent, for the reason the rest
+     * of this file gives -- a translucent band on a home screen takes its
+     * colour from the wallpaper behind it.
+     */
+    fun tileBandArgb(colour: TileColour, dark: Boolean): Int {
+        val extras = if (dark) darkExtras else lightExtras
+        val full = extraOf(
+            extras,
+            colour,
+            if (dark) darkAccent else lightAccent,
+            if (dark) darkMuted else lightMuted,
+        )
+        return argbOf(mixToward(full, if (dark) darkCard else lightCard, 1f - RAIL_BAND_ALPHA))
+    }
+
+    /**
+     * What a rail's empty length is drawn in.
+     *
+     * `BandRows` on the tab uses `surfaceContainerHigh` -- a shade above
+     * the card and nothing more. The chart track is a mix of the ink and
+     * is much louder; used here it made five quiet readings read as five
+     * blue bars with something small on top of them.
+     */
+    fun railTrackArgb(dark: Boolean): Int =
+        argbOf(if (dark) darkRail else lightRail)
+
+    /** Axis labels, as an ARGB int for the Canvas that letters them. */
+    fun faintArgb(dark: Boolean): Int =
+        argbOf(if (dark) darkExtras.disabled else lightExtras.disabled)
+
     /** The unfilled part of an arc. */
     fun trackArgb(dark: Boolean): Int =
         argbOf(if (dark) darkTrackOf(darkAccent) else lightTrackOf(lightAccent))
@@ -233,8 +296,19 @@ internal class PaperInks(
     val tile: (TileColour) -> Color,
 )
 
-/** What the tab fills a chip with, from `TileChip`. */
-private const val CHIP_ALPHA = 0.14f
+/**
+ * What the tab fills a chip with, from `ChangeChip`.
+ *
+ * Fourteen per cent was `TileChip`'s, which is a component no tile head
+ * actually uses -- every trailing slot on the tab holds a `ChangeChip`.
+ */
+private const val CHIP_ALPHA = 0.18f
+
+/** And what it fills the quieter `TileChip` with. */
+private const val TILE_CHIP_ALPHA = 0.14f
+
+/** What `BandRows` puts behind a rail's dot. */
+private const val RAIL_BAND_ALPHA = 0.3f
 
 private fun argbOf(colour: Color): Int = android.graphics.Color.argb(
     (colour.alpha * 255 + 0.5f).toInt(),
@@ -243,14 +317,27 @@ private fun argbOf(colour: Color): Int = android.graphics.Color.argb(
     (colour.blue * 255 + 0.5f).toInt(),
 )
 
-private fun extraOf(extras: AirExtraColors, colour: TileColour, accent: Color): Color = when (colour) {
+/**
+ * A tile colour, exactly as the tab's `tileColour` resolves it.
+ *
+ * Slate takes [muted] -- the scheme's `onSurfaceVariant` -- and not the
+ * extras' `disabled`, because that is what the tab gives it. The two are a
+ * step apart, which on a Vitals tile beside a Vitals widget is one grey
+ * reading as two.
+ */
+private fun extraOf(
+    extras: AirExtraColors,
+    colour: TileColour,
+    accent: Color,
+    muted: Color,
+): Color = when (colour) {
     TileColour.Heart -> extras.heart
     TileColour.Sleep -> extras.sleepRem
     TileColour.Steps -> extras.steps
     TileColour.Hrv -> extras.hrv
     TileColour.Activity -> extras.activity
     TileColour.Energy -> extras.energy
-    TileColour.Slate -> extras.disabled
+    TileColour.Slate -> muted
     TileColour.Accent -> accent
 }
 
@@ -303,6 +390,7 @@ internal fun widgetColours(context: Context): WidgetColours {
             mixToward(darkScheme.onSurface, darkCard, 0.86f),
         ),
         accent = provide(mode, lightScheme.primary, darkScheme.primary),
+        outline = provide(mode, lightScheme.outline, darkScheme.outline),
         lightExtras = lightExtras,
         darkExtras = darkExtras,
         lightAccent = lightScheme.primary,
@@ -312,6 +400,9 @@ internal fun widgetColours(context: Context): WidgetColours {
         lightMuted = lightScheme.onSurfaceVariant,
         darkMuted = darkScheme.onSurfaceVariant,
         lightCard = lightCard,
+        darkCard = darkCard,
+        lightRail = lightScheme.surfaceContainerHigh,
+        darkRail = darkScheme.surfaceContainerHigh,
         // A shade under the card, for the panes a Paper widget nests inside
         // itself. On a ground that does not lift its cards there is nothing
         // to step down to, so it steps up instead.

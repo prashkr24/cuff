@@ -120,4 +120,47 @@ class WidgetDialsTest {
         assertNull(WidgetCatalogue.byId("dials:Arcs"))
         assertNull(WidgetCatalogue.byId("rings:Score"))
     }
+
+    // ------------------------------------------- burned against eaten
+
+    /**
+     * The screen's axis, which ends where the lines end.
+     *
+     * Fixed marks at six, twelve and eighteen put the last label four
+     * hours short of the end of the chart on an evening, and left a
+     * morning with one mark on it.
+     */
+    @Test
+    fun `the axis ends at the hour it is now, not at a round one`() {
+        val day = DayBalance(List(20) { it.toFloat() }, emptyList(), entries = 0, hourNow = 19)
+        assertEquals(listOf("00", "04", "08", "12", "16", "19"), day.hourTicks.map { it.second })
+        assertEquals(1f, day.hourTicks.last().first, 0.001f)
+    }
+
+    @Test
+    fun `before one in the morning the axis is a single mark`() {
+        assertEquals(listOf("00"), DayBalance(listOf(0f), emptyList(), 0, 0).hourTicks.map { it.second })
+    }
+
+    /** Eaten less burned, so the usual day reads as a negative. */
+    @Test
+    fun `the gap is what the screen puts at the top of the card`() {
+        val day = DayBalance(listOf(0f, 1_769f), listOf(0f, 770f), entries = 3, hourNow = 1)
+        assertEquals(-999f, day.gap, 0.001f)
+        assertEquals(1_769, day.lastBurned)
+        assertEquals(770, day.lastEaten)
+        assertTrue(day.anything)
+    }
+
+    @Test
+    fun `a day with nothing read on either line is not drawn`() {
+        assertTrue(!DayBalance(listOf(0f, 0f), listOf(0f, 0f), 0, 1).anything)
+    }
+
+    @Test
+    fun `the burn face takes both sizes it is offered`() {
+        val burn = WidgetDesign.OfDials(DialFace.Burn)
+        assertTrue(burn.fits(WidgetSize.Wide))
+        assertTrue(burn.fits(WidgetSize.Tall))
+    }
 }

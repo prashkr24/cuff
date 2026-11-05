@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -59,6 +61,14 @@ internal fun WidgetPreview(
     cardless: Boolean = false,
     /** The light half, for the family that is always pale. */
     paper: PaperInks? = null,
+    /**
+     * False for the Tiles family, which borrows the tab's mixed-case head.
+     *
+     * The catalogue is a promise about what will land on the home screen,
+     * so a thumbnail that shouts a name the widget writes in mixed case is
+     * a thumbnail of a different widget.
+     */
+    caps: Boolean = true,
 ) {
     val tint = paper?.tile?.invoke(colour) ?: tileColourOf(colour)
     // No border where the card would be, dashed or otherwise. The design
@@ -77,7 +87,7 @@ internal fun WidgetPreview(
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    face.kicker.uppercase(),
+                    if (caps) face.kicker.uppercase() else face.kicker,
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
@@ -194,6 +204,134 @@ private fun MiniChart(chart: Chart?, colour: TileColour, paper: PaperInks? = nul
                             .clip(RoundedCornerShape(1.5.dp))
                             .background(if (index == newest) tint else dim),
                     )
+                }
+            }
+        }
+
+        // A week of nights, each as tall as the night was. Not normalised,
+        // for the reason the widget gives: a six hour night and a nine hour
+        // one are different nights.
+        is Chart.StageWeek -> Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.fillMaxWidth().height(22.dp),
+        ) {
+            val longest = chart.nights
+                .maxOfOrNull { night -> night.sumOf { it.first.toDouble() } }
+                ?.toFloat()?.takeIf { it > 0f } ?: 1f
+            chart.nights.forEach { night ->
+                val total = night.sumOf { it.first.toDouble() }.toFloat()
+                Column(
+                    verticalArrangement = Arrangement.Bottom,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                ) {
+                    Spacer(Modifier.weight((1f - total / longest).coerceAtLeast(0.001f)))
+                    night.reversed().forEach { (share, stage) ->
+                        Box(
+                            Modifier
+                                .weight(((share / longest)).coerceAtLeast(0.01f))
+                                .fillMaxWidth()
+                                .background(stageColourOf(stage)),
+                        )
+                    }
+                }
+            }
+        }
+
+        // Where each reading sits across its own range, over the band it
+        // usually lands in. The thumbnail draws three of the five rails:
+        // at this height any more is a grey smear.
+        is Chart.Rails -> BandRows(
+            rails = chart.rails.take(3).map { (trend, each) -> trend?.rail(tileColourOf(each)) },
+            track = trackColour,
+            modifier = Modifier.fillMaxWidth(),
+            rowHeight = 3.dp,
+            gap = 3.dp,
+        )
+
+        // A day of beats. The thumbnail keeps the shape and drops the
+        // scale, which is what every other chart here does too.
+        is Chart.Beats -> {
+            val bands = bandsOf(chart.samples, count = 40)
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
+                modifier = Modifier.fillMaxWidth().height(22.dp),
+            ) {
+                val lowest = bands.minOfOrNull { band -> band.lowest }?.toFloat() ?: 0f
+                val highest = bands.maxOfOrNull { band -> band.highest }?.toFloat() ?: 1f
+                val span = (highest - lowest).coerceAtLeast(1f)
+                bands.forEach { band ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .padding(
+                                top = 22.dp * (1f - (band.highest - lowest) / span),
+                                bottom = 22.dp * ((band.lowest - lowest) / span),
+                            )
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(tint),
+                    )
+                }
+            }
+        }
+
+        // Two climbs against each other. The thumbnail keeps the pair and
+        // drops the shading, which at this height would be one more line.
+        // Two lines with the gap shaded between them, because that is what
+        // lands on the home screen. Drawn as bars, this thumbnail sold a
+        // chart the widget does not have: a climb is one unbroken line and
+        // a column chart is twenty-four separate readings.
+        is Chart.Climb -> {
+            val reach = maxOf(
+                chart.first.maxOrNull() ?: 0f,
+                chart.second.maxOrNull() ?: 0f,
+            ).coerceAtLeast(1f)
+            val top = reach * CLIMB_HEADROOM
+            val burnInk = tileColourOf(chart.firstColour)
+            val foodInk = tileColourOf(chart.secondColour)
+            Canvas(Modifier.fillMaxWidth().height(24.dp)) {
+                val count = maxOf(chart.first.size, chart.second.size)
+                if (count < 2) return@Canvas
+                val span = (count - 1).toFloat()
+                val dot = 2f.dp.toPx()
+                fun at(index: Int) = (size.width - dot) * (index / span)
+                fun up(value: Float) = size.height - size.height * (value / top)
+
+                if (chart.first.size == chart.second.size) {
+                    val area = Path().apply {
+                        moveTo(at(0), up(chart.first[0]))
+                        chart.first.indices.forEach { lineTo(at(it), up(chart.first[it])) }
+                        for (i in chart.second.indices.reversed()) {
+                            lineTo(at(i), up(chart.second[i]))
+                        }
+                        close()
+                    }
+                    drawPath(
+                        area,
+                        (if (chart.second.last() < chart.first.last()) burnInk else foodInk)
+                            .copy(alpha = 0.14f),
+                    )
+                }
+                listOf(chart.first to burnInk, chart.second to foodInk).forEach { (values, ink) ->
+                    if (values.size < 2) return@forEach
+                    val path = Path()
+                    values.forEachIndexed { index, value ->
+                        val px = at(index)
+                        val py = up(value)
+                        when {
+                            index == 0 -> path.moveTo(px, py)
+                            // The eaten line steps, here as everywhere.
+                            values === chart.second -> {
+                                path.lineTo(px, up(values[index - 1]))
+                                path.lineTo(px, py)
+                            }
+                            else -> path.lineTo(px, py)
+                        }
+                    }
+                    drawPath(path, ink, style = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round))
+                    drawCircle(ink, radius = dot, center = Offset(at(values.lastIndex), up(values.last())))
                 }
             }
         }
@@ -453,3 +591,6 @@ private fun stageColourOf(stage: SleepStage): Color {
         SleepStage.Awake -> extras.sleepAwake
     }
 }
+
+/** The tab's headroom above a climb, so the thumbnail is scaled as it is. */
+private const val CLIMB_HEADROOM = 1.08f

@@ -108,6 +108,14 @@ enum class TileKind(
         "Blood oxygen", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L),
         "healthoxygen", TileColour.Sleep, optional = true,
     ),
+    // Two running totals climbing against each other through the day --
+    // the one reading here that is a shape rather than a figure, which is
+    // why it refuses the two narrow sizes: a day's two curves in two
+    // columns is a smudge, and the number on its own is Energy's tile.
+    Balance(
+        "Burned against eaten", setOf(TileSize.W, TileSize.L, TileSize.XL),
+        "healthbalance", TileColour.Activity, optional = true,
+    ),
     ;
 
     /**
@@ -124,6 +132,7 @@ enum class TileKind(
             Oxygen -> "SpO₂"
             Breathing -> "Breathing"
             Nutrition -> "Food"
+            Balance -> "Balance"
             else -> title.substringBefore(' ')
         }
 
