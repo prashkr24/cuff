@@ -18,3 +18,4 @@ rootProject.name = "air-bridge"
 
 include(":app")
 include(":air")
+include(":baselineprofile")

@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("androidx.baselineprofile")
 }
 
 // Release signing comes from key.properties (local, never committed) or
@@ -95,6 +96,9 @@ android {
 
 dependencies {
     implementation(project(":air"))
+    // Writes the recorded profile into the APK. The library that
+    // installs it at runtime is already here through Compose.
+    baselineProfile(project(":baselineprofile"))
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.2")
