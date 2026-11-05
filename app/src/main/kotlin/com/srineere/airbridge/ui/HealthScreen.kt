@@ -414,19 +414,30 @@ internal fun ColumnScope.TileBody(
 private fun ColumnScope.BalanceTile(size: TileSize, data: HealthData, colour: Color, axes: Axes) {
     val extras = MaterialTheme.extras
     val snapshot = data.snapshot
-    val zone = java.time.ZoneId.systemDefault()
-    val today = java.time.LocalDate.now(zone).toEpochDay()
-    val hourNow = java.time.LocalTime.now(zone).hour
-
-    // Food arrives as entries at a time rather than an hourly total, so the
-    // eaten line is built from the entries, as the screen builds it.
-    val eatenByHour = DoubleArray(24)
-    snapshot.food.filter { it.day == today }.forEach { entry ->
-        eatenByHour[entry.at.atZone(zone).hour] += entry.kcal ?: 0.0
+    // Worked out when the reading changes, not every time this redraws. It
+    // is an array, a filter over every meal of the day and two running
+    // totals; on the common path -- a theme change, the header ticking over
+    // a minute, a scroll that re-enters composition -- none of it has a new
+    // answer to give.
+    val day = remember(snapshot.food, snapshot.burnedHourly) {
+        val zone = java.time.ZoneId.systemDefault()
+        val today = java.time.LocalDate.now(zone).toEpochDay()
+        val hourNow = java.time.LocalTime.now(zone).hour
+        // Food arrives as entries at a time rather than an hourly total, so
+        // the eaten line is built from the entries, as the screen builds it.
+        val eatenByHour = DoubleArray(24)
+        snapshot.food.filter { it.day == today }.forEach { entry ->
+            eatenByHour[entry.at.atZone(zone).hour] += entry.kcal ?: 0.0
+        }
+        val burnedByHour = snapshot.burnedHourly.takeIf { it.size == 24 } ?: List(24) { 0.0 }
+        BalanceDay(
+            burned = runningSoFar(burnedByHour, hourNow),
+            eaten = runningSoFar(eatenByHour.toList(), hourNow),
+            hourNow = hourNow,
+        )
     }
-    val burnedByHour = snapshot.burnedHourly.takeIf { it.size == 24 } ?: List(24) { 0.0 }
-    val burned = runningSoFar(burnedByHour, hourNow)
-    val eaten = runningSoFar(eatenByHour.toList(), hourNow)
+    val burned = day.burned
+    val eaten = day.eaten
 
     TileHead(TileKind.Balance, colour, size, window = "today")
     if (burned.lastOrNull().let { it == null || it <= 0.0 } &&
@@ -450,8 +461,17 @@ private fun ColumnScope.BalanceTile(size: TileSize, data: HealthData, colour: Co
         modifier = Modifier.weight(1f).padding(top = 6.dp),
         height = if (size == TileSize.XL) 92.dp else 46.dp,
         axes = if (size == TileSize.W) null else axes,
-        xTicks = if (size == TileSize.W) emptyList() else hourTicksOf(hourNow),
+        xTicks = if (size == TileSize.W) emptyList() else day.ticks,
     )
+}
+
+/** Today's two running totals, worked out once per read rather than per frame. */
+private class BalanceDay(
+    val burned: List<Double>,
+    val eaten: List<Double>,
+    hourNow: Int,
+) {
+    val ticks: List<Pair<Float, String>> = hourTicksOf(hourNow)
 }
 
 /** A running total up to the hour it is now, and no further. */
@@ -823,10 +843,15 @@ private fun ColumnScope.SleepTile(
         TileEmpty("Google Health writes nights once your band syncs.", size)
         return
     }
-    val week = data.nights.takeLast(7)
+    val week = remember(data.nights) { data.nights.takeLast(7) }
+    // The stages and the weekday ticks are the same seven nights however
+    // many times this lambda is invoked, and it is invoked once per size
+    // branch per composition.
+    val stages = remember(week) { week.map { it.fourStages() } }
+    val sleepTicks = remember(week) { weekdayTicks(week.map { it.day }) }
     val bars = @Composable { height: Dp, modifier: Modifier, fill: Boolean, withAxes: Axes? ->
         StageBars(
-            nights = week.map { it.fourStages() },
+            nights = stages,
             deep = extras.sleepDeep,
             light = extras.sleepLight,
             rem = extras.sleepRem,
@@ -835,7 +860,7 @@ private fun ColumnScope.SleepTile(
             height = height,
             fill = fill,
             axes = withAxes,
-            xTicks = if (withAxes == null) emptyList() else weekdayTicks(week.map { it.day }),
+            xTicks = if (withAxes == null) emptyList() else sleepTicks,
             goalMinutes = goals.sleepMinutes.toDouble(),
             goalColour = colour,
             goalLabel = "${goals.sleepMinutes / 60}h",
@@ -911,9 +936,11 @@ private fun ColumnScope.StepsTile(
     goals: Goals,
     axes: Axes,
 ) {
-    val week = data.snapshot.steps.takeLast(7)
-    val average = week.map { it.value }.average().takeIf { week.isNotEmpty() }
-    val met = week.count { it.value >= goals.steps }
+    val week = remember(data.snapshot.steps) { data.snapshot.steps.takeLast(7) }
+    val values = remember(week) { week.map { it.value } }
+    val stepTicks = remember(week) { weekdayTicks(week.map { it.day }) }
+    val average = remember(values) { values.average().takeIf { values.isNotEmpty() } }
+    val met = remember(week, goals.steps) { week.count { it.value >= goals.steps } }
     val percent = (data.stepProgress(goals.steps) * 100).roundToInt()
     val summary = buildString {
         average?.let { append("avg ${count(it.roundToInt().toLong())}") }
@@ -928,7 +955,7 @@ private fun ColumnScope.StepsTile(
     }
     val bars = @Composable { height: Dp, modifier: Modifier, withAxes: Axes? ->
         GoalBars(
-            values = week.map { it.value },
+            values = values,
             target = goals.steps.toDouble(),
             colour = colour,
             dim = colour.copy(alpha = 0.35f),
@@ -936,7 +963,7 @@ private fun ColumnScope.StepsTile(
             height = height,
             fill = height == 0.dp,
             axes = withAxes,
-            xTicks = if (withAxes == null) emptyList() else weekdayTicks(week.map { it.day }),
+            xTicks = if (withAxes == null) emptyList() else stepTicks,
             goalLabel = shortNumber(goals.steps.toDouble()),
         )
     }
@@ -1117,9 +1144,13 @@ private fun ColumnScope.ActivityTile(size: TileSize, data: HealthData, colour: C
         TileSub("no workouts")
         return
     }
+    // One bar per workout, which is not the same list as the total above.
+    val perSession = remember(sessions) {
+        sessions.map { Duration.between(it.start, it.end).toMinutes().toDouble() }
+    }
     val bars = @Composable { height: Dp, modifier: Modifier, fill: Boolean ->
         GoalBars(
-            values = sessions.map { Duration.between(it.start, it.end).toMinutes().toDouble() },
+            values = perSession,
             target = null,
             colour = colour,
             dim = colour.copy(alpha = 0.45f),
@@ -1168,9 +1199,10 @@ private fun ColumnScope.VitalsTile(size: TileSize, data: HealthData, colour: Col
         data.skinTrend to extras.energy,
         data.oxygenTrend to MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    val railsOf = remember(palette) { palette.map { (trend, tint) -> trend?.rail(tint) } }
     val rails = @Composable { modifier: Modifier, rowHeight: Dp ->
         BandRows(
-            rails = palette.map { (trend, tint) -> trend?.rail(tint) },
+            rails = railsOf,
             track = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = modifier,
             rowHeight = rowHeight,
@@ -1202,7 +1234,7 @@ private fun ColumnScope.HrvTile(size: TileSize, data: HealthData, colour: Color)
     // A fortnight, not the month: thirty dots in two columns is a smudge,
     // and the tile's job is to say roughly where you are and offer the screen
     // that can actually hold thirty.
-    val recent = trend.readings.takeLast(14)
+    val recent = remember(trend) { trend.readings.takeLast(14) }
     when (size) {
         TileSize.S, TileSize.M, TileSize.W -> {
             TileValue(trend.latest.roundToInt().toString(), "ms", size)

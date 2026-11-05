@@ -407,21 +407,21 @@ private fun RingRow(ring: Ring, size: WidgetSize, colours: WidgetColours, first:
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Dot(tint, size = 7.dp)
                     Spacer(GlanceModifier.width(6.dp))
-                    Kicker(ring.label, tint, size = 9)
+                    Kicker(ring.label, tint, size = WidgetText.Caption)
                 }
                 Gap(1.dp)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Figure(
                         ring.figure,
-                        if (size == WidgetSize.Tall) 20 else 17,
+                        if (size == WidgetSize.Tall) WidgetText.FigureM else WidgetText.FigureS,
                         colours.onBackground,
                         weight = androidx.glance.text.FontWeight.Bold,
                     )
                     Spacer(GlanceModifier.width(5.dp))
-                    Sub(ring.of, colours.faint, size = 10)
+                    Sub(ring.of, colours.faint, size = WidgetText.Label)
                 }
             }
-            Sub(ring.note, colours.faint, size = 9, lines = 2)
+            Sub(ring.note, colours.faint, size = WidgetText.Caption, lines = 2)
         }
     }
 }
@@ -492,9 +492,9 @@ private fun ListFace(
             ) {
                 Dot(colours.tile(colour), size = 7.dp)
                 Spacer(GlanceModifier.width(8.dp))
-                Sub(name, colours.muted, size = 11)
+                Sub(name, colours.muted, size = WidgetText.Label)
                 Spacer(GlanceModifier.defaultWeight())
-                Figure(value, 14, colours.onBackground)
+                Figure(value, WidgetText.FigureXS, colours.onBackground)
             }
         }
     }
@@ -541,13 +541,13 @@ private fun SummaryLine(
         Gap(if (first) 8.dp else if (size == WidgetSize.Tall) 14.dp else 9.dp)
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = GlanceModifier.defaultWeight()) {
-                Kicker(row.label, tint, size = 9)
+                Kicker(row.label, tint, size = WidgetText.Caption)
                 Gap(1.dp)
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Figure(row.figure, if (size == WidgetSize.Tall) 20 else 18, colours.onBackground, weight = FontWeight.Bold)
+                    Figure(row.figure, if (size == WidgetSize.Tall) WidgetText.FigureM else WidgetText.FigureS, colours.onBackground, weight = FontWeight.Bold)
                     row.of?.let {
                         Spacer(GlanceModifier.width(5.dp))
-                        Sub(it, colours.faint, size = 10)
+                        Sub(it, colours.faint, size = WidgetText.Label)
                     }
                     row.chip?.let {
                         Spacer(GlanceModifier.width(7.dp))
@@ -641,12 +641,12 @@ private fun TrendLine(row: TrendRow, colours: WidgetColours, railWidth: Dp, firs
             Spacer(GlanceModifier.width(10.dp))
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Kicker(row.label, tint, size = 9)
+                    Kicker(row.label, tint, size = WidgetText.Caption)
                     Spacer(GlanceModifier.defaultWeight())
-                    Sub(row.value, colours.muted, size = 11)
+                    Sub(row.value, colours.muted, size = WidgetText.Label)
                 }
                 Gap(2.dp)
-                Sub(row.phrase, colours.onBackground, size = 13)
+                Sub(row.phrase, colours.onBackground, size = WidgetText.Body)
                 Gap(5.dp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = GlanceModifier.width(railWidth)) {
@@ -658,7 +658,7 @@ private fun TrendLine(row: TrendRow, colours: WidgetColours, railWidth: Dp, firs
                         )
                     }
                     Spacer(GlanceModifier.width(8.dp))
-                    Sub(row.usual, colours.faint, size = 9)
+                    Sub(row.usual, colours.faint, size = WidgetText.Caption)
                 }
             }
         }
@@ -669,12 +669,12 @@ private fun TrendLine(row: TrendRow, colours: WidgetColours, railWidth: Dp, firs
 @Composable
 private fun FaceHead(title: String, readAt: Long, colours: WidgetColours) {
     Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Kicker(title, colours.muted, size = 10)
+        Kicker(title, colours.muted, size = WidgetText.Label)
         Spacer(GlanceModifier.defaultWeight())
         if (readAt > 0) {
             val at = java.time.Instant.ofEpochMilli(readAt)
                 .atZone(java.time.ZoneId.systemDefault()).toLocalTime()
-            Sub("%02d:%02d".format(at.hour, at.minute), colours.faint, size = 9)
+            Sub("%02d:%02d".format(at.hour, at.minute), colours.faint, size = WidgetText.Caption)
         }
     }
 }

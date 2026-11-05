@@ -316,7 +316,7 @@ private fun DrawFace(
                     // direction is the part that survives at this width.
                     if (showTrends && face.chip != null) {
                         Spacer(GlanceModifier.defaultWeight())
-                        Sub(arrowOf(face.chip), tint, size = 11, weight = FontWeight.Bold)
+                        Sub(arrowOf(face.chip), tint, size = WidgetText.Label, weight = FontWeight.Bold)
                     }
                 }
                 Gap(3.dp)
@@ -532,11 +532,11 @@ private fun RingFace(
         Box(contentAlignment = Alignment.Center) {
             RingImage(listOf(progress to colour), colours, side, stroke = RING_STROKE)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                face.ringLabel?.let { Figure(it, 15, colours.onBackground, weight = FontWeight.Bold) }
+                face.ringLabel?.let { Figure(it, WidgetText.FigureXS, colours.onBackground, weight = FontWeight.Bold) }
                 // The count under the share, as the tile's L has it. At XL
                 // the tile drops it -- the figure beside the ring says it.
                 if (size == WidgetSize.Wide) {
-                    face.ringSub?.let { Sub(it, tint, size = 10, weight = FontWeight.Medium) }
+                    face.ringSub?.let { Sub(it, tint, size = WidgetText.Label, weight = FontWeight.Medium) }
                 }
             }
         }
@@ -694,9 +694,9 @@ private fun DrawChart(
         is Chart.Rail -> Row(modifier = GlanceModifier.fillMaxWidth()) {
             chart.parts.forEach { (name, value, each) ->
                 Column(modifier = GlanceModifier.defaultWeight()) {
-                    Sub(name, colours.muted, size = 9)
+                    Sub(name, colours.muted, size = WidgetText.Caption)
                     Gap(3.dp)
-                    Sub(value, colours.tile(each), size = 12)
+                    Sub(value, colours.tile(each), size = WidgetText.Body)
                 }
             }
         }
@@ -704,9 +704,9 @@ private fun DrawChart(
         is Chart.Rows -> Column(modifier = GlanceModifier.fillMaxWidth()) {
             chart.rows.forEach { (name, value, each) ->
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    Sub(name, colours.muted, size = 10)
+                    Sub(name, colours.muted, size = WidgetText.Label)
                     Spacer(GlanceModifier.defaultWeight())
-                    Sub(value, colours.tile(each), size = 13)
+                    Sub(value, colours.tile(each), size = WidgetText.Body)
                 }
                 Gap(5.dp)
             }

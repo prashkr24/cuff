@@ -154,8 +154,8 @@ internal fun HealthBalanceDayScreen(onBack: () -> Unit) {
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             Row {
-                Key("Burned", burnedColour, burned.lastOrNull(), Modifier.weight(1f))
-                Key("Eaten", eatenColour, eaten.lastOrNull(), Modifier.weight(1f))
+                Stat("Burned", burned.lastOrNull()?.let { kcal(it) }, Modifier.weight(1f), burnedColour)
+                Stat("Eaten", eaten.lastOrNull()?.let { kcal(it) }, Modifier.weight(1f), eatenColour)
                 Stat(
                     "Entries",
                     "${snapshot.food.count { it.day == today }}",
@@ -179,24 +179,6 @@ internal fun HealthBalanceDayScreen(onBack: () -> Unit) {
     }
 }
 
-@Composable
-private fun Key(label: String, colour: Color, value: Double?, modifier: Modifier) =
-    Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(colour))
-            Text(
-                "  $label",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            value?.let { count(it.roundToInt().toLong()) + " kcal" } ?: "—",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-    }
 
 /**
  * Whole hours across the part of the day that has happened.
@@ -274,3 +256,6 @@ private fun runningTotal(hours: List<Double>, until: Int): List<Double> {
         sum
     }
 }
+
+/** The figure a kcal stat shows, which both lines of this screen share. */
+private fun kcal(value: Double): String = count(value.roundToInt().toLong()) + " kcal"

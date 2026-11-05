@@ -96,14 +96,14 @@ private fun Everything(
                 Kicker(
                     stateWord(state, band),
                     stateColour(state, colours),
-                    size = if (tall) 13 else 12,
+                    size = if (tall) WidgetText.Body else WidgetText.Label,
                     caps = false,
                 )
                 if (band.quietEnabled) {
                     Sub(
                         " · quiet from " + clock(band.quietStartMinute),
                         colours.faint,
-                        size = if (tall) 12 else 11,
+                        size = if (tall) WidgetText.Body else WidgetText.Label,
                     )
                 }
             }
@@ -111,7 +111,7 @@ private fun Everything(
             Row(verticalAlignment = Alignment.Bottom) {
                 Figure(
                     band.battery?.let { "$it%" } ?: "–",
-                    if (tall) 44 else 34,
+                    if (tall) WidgetText.FigureMax else WidgetText.FigureXL,
                     if (stale) colours.faint else colours.onBackground,
                     weight = FontWeight.Bold,
                 )
@@ -119,7 +119,7 @@ private fun Everything(
                 // The band's name, and nothing about a connection: the app
                 // knows when it last read the Air, not whether it is
                 // reachable now, and the line under this says which.
-                Sub("Air", colours.muted, size = 12)
+                Sub("Air", colours.muted, size = WidgetText.Body)
             }
             Gap(9.dp)
             Meter(
@@ -133,7 +133,7 @@ private fun Everything(
             Sub(
                 if (band.batteryAt == 0L) "Not read yet" else "Checked " + ago(band.batteryAt, now),
                 colours.faint,
-                size = 11,
+                size = WidgetText.Label,
             )
         }
         Grow()
@@ -141,20 +141,20 @@ private fun Everything(
             Rule(colours)
             Gap(9.dp)
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Kicker("Last buzz", colours.faint, size = 9)
+                Kicker("Last buzz", colours.faint, size = WidgetText.Caption)
                 Spacer(GlanceModifier.defaultWeight())
                 if (band.lastBuzzAt == 0L) {
-                    Sub("nothing today", colours.faint, size = 11)
+                    Sub("nothing today", colours.faint, size = WidgetText.Label)
                 } else {
                     band.lastBuzzWho?.let {
-                        Sub(it, colours.onBackground, size = 12)
+                        Sub(it, colours.onBackground, size = WidgetText.Body)
                         Spacer(GlanceModifier.width(7.dp))
                     }
                     Sub(
                         (if (band.lastBuzzWasCall) "Call" else "Message") +
                             " · " + ago(band.lastBuzzAt, now),
                         colours.muted,
-                        size = 11,
+                        size = WidgetText.Label,
                     )
                 }
             }
@@ -194,9 +194,9 @@ private fun Battery(
         when (size) {
             WidgetSize.Strip, WidgetSize.Row -> {
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    BatteryFigure(band, colours, now, size = 22)
+                    BatteryFigure(band, colours, now, size = WidgetText.FigureM)
                     Spacer(GlanceModifier.defaultWeight())
-                    Sub(readAge(band.batteryAt, now), colours.faint, size = 10)
+                    Sub(readAge(band.batteryAt, now), colours.faint, size = WidgetText.Label)
                 }
                 Gap(7.dp)
                 Meter(
@@ -210,7 +210,7 @@ private fun Battery(
             else -> {
                 Kicker("Battery", colours.accent)
                 Grow()
-                BatteryFigure(band, colours, now, size = 38)
+                BatteryFigure(band, colours, now, size = WidgetText.FigureHero)
                 Gap(9.dp)
                 Meter(
                     progress = band.battery / 100f,
@@ -219,7 +219,7 @@ private fun Battery(
                     track = colours.track,
                 )
                 Gap(7.dp)
-                Sub("Air · " + readAge(band.batteryAt, now), colours.faint, size = 10)
+                Sub("Air · " + readAge(band.batteryAt, now), colours.faint, size = WidgetText.Label)
             }
         }
     }
@@ -256,21 +256,21 @@ private fun Relay(
                 Gap(9.dp)
                 Figure(stateWord(state, band), 17, colours.onBackground)
                 Grow()
-                Sub(quietNote(band), colours.faint, size = 10)
+                Sub(quietNote(band), colours.faint, size = WidgetText.Label)
             }
             else -> {
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Dot(stateColour(state, colours), size = 8.dp)
                     Spacer(GlanceModifier.width(7.dp))
-                    Figure(stateWord(state, band), if (size == WidgetSize.Row) 17 else 14, colours.onBackground)
+                    Figure(stateWord(state, band), if (size == WidgetSize.Row) WidgetText.FigureS else WidgetText.FigureXS, colours.onBackground)
                     if (size == WidgetSize.Row) {
                         Spacer(GlanceModifier.defaultWeight())
-                        Sub(quietNote(band), colours.muted, size = 11)
+                        Sub(quietNote(band), colours.muted, size = WidgetText.Label)
                     }
                 }
                 if (size == WidgetSize.Strip) {
                     Gap(3.dp)
-                    Sub(quietNote(band), colours.faint, size = 9)
+                    Sub(quietNote(band), colours.faint, size = WidgetText.Caption)
                 }
             }
         }
@@ -289,13 +289,13 @@ private fun Buzzes(
         if (size == WidgetSize.Square) {
             Kicker("Today", colours.tile(TileColour.Hrv))
             Grow()
-            Figure("${band.buzzesToday}", 40, colours.onBackground)
+            Figure("${band.buzzesToday}", WidgetText.FigureHero, colours.onBackground)
             Gap(5.dp)
-            Sub(if (band.buzzesToday == 1) "buzz today" else "buzzes today", colours.muted, size = 11)
+            Sub(if (band.buzzesToday == 1) "buzz today" else "buzzes today", colours.muted, size = WidgetText.Label)
         } else {
-            Figure("${band.buzzesToday}", 24, colours.onBackground)
+            Figure("${band.buzzesToday}", WidgetText.FigureL, colours.onBackground)
             Gap(4.dp)
-            Sub(if (band.buzzesToday == 1) "buzz today" else "buzzes today", colours.faint, size = 10)
+            Sub(if (band.buzzesToday == 1) "buzz today" else "buzzes today", colours.faint, size = WidgetText.Label)
         }
     }
 }

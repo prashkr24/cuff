@@ -1,5 +1,14 @@
 package com.srineere.airbridge.ui
 
+/**
+ * **The two muted inks.** `colorScheme.onSurfaceVariant` is secondary
+ * content somebody is meant to read: a stat's label, a row's subtext, the
+ * name of a thing. `extras.disabled` is furniture and footnotes they are
+ * not: an axis number, an explanatory paragraph, a reading that is missing.
+ * They were used interchangeably, including for the same role on different
+ * screens, which is why this is written down rather than left to taste.
+ */
+
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -16,6 +25,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -113,6 +125,62 @@ fun ScreenTitle(
         }
         if (action != null) action()
     }
+}
+
+/**
+ * A label and a figure: the stat that sits under a chart.
+ *
+ * One of these, used everywhere, and that is the whole point. There were
+ * four -- this one, two called `Metric` and one called `Key` -- drawing the
+ * same object at three label weights, two label colours, two
+ * capitalisations and three figure sizes. A row of figures at two sizes
+ * reads as a mistake rather than as emphasis, and so does a screen of them.
+ *
+ * [tint] draws the dot that ties this figure to its line on the chart
+ * above. The dot carries the colour and the figure does not: a coloured
+ * numeral competes with the chart it is describing, and a row of them in
+ * four colours is a row nobody can scan.
+ *
+ * A null [value] is a reading nothing has written, and says so with a dash
+ * in the muted ink rather than with a blank that looks like a bug.
+ */
+@Composable
+fun Stat(
+    label: String,
+    value: String?,
+    modifier: Modifier = Modifier,
+    tint: Color? = null,
+) = Column(modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (tint != null) {
+            Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(tint))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            // Secondary content, which is read. See the note on the two
+            // muted inks at the top of this file.
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    // One size for every stat, everywhere. Sizing each by its own length
+    // made a single row show three figures at two sizes, which reads as a
+    // mistake rather than as emphasis -- a long value gets more width from
+    // its caller instead.
+    Text(
+        value ?: "\u2014",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = if (value == null) MaterialTheme.extras.disabled else Color.Unspecified,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 3.dp),
+    )
 }
 
 @Composable

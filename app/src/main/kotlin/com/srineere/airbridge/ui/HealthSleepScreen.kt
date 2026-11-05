@@ -574,28 +574,3 @@ internal fun DetailCard(
         content = content,
     )
 }
-
-@Composable
-internal fun Stat(label: String, value: String, modifier: Modifier = Modifier) = Column(modifier) {
-    Text(
-        label.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
-    // One size for every stat, everywhere. Sizing each by its own length
-    // made a single row show three figures at two sizes, which reads as a
-    // mistake rather than as emphasis -- a long value gets more width from
-    // its caller instead.
-    Text(
-        value,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        maxLines = 1,
-        softWrap = false,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(top = 3.dp),
-    )
-}

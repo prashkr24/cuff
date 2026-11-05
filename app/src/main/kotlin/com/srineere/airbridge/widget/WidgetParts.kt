@@ -345,7 +345,7 @@ internal fun Chip(
             text,
             style = TextStyle(
                 color = ink,
-                fontSize = (if (tight) 11 else 13).sp,
+                fontSize = (if (tight) WidgetText.Label else WidgetText.Body).sp,
                 fontWeight = FontWeight.Bold,
             ),
             maxLines = 1,
@@ -380,7 +380,7 @@ internal fun Empty(colours: WidgetColours, title: String, reason: String, onClic
     WidgetCard(colours, onClick) {
         Kicker(title, colours.faint)
         Grow()
-        Figure("–", 26, colours.faint)
+        Figure("–", WidgetText.FigureL, colours.faint)
         Gap(6.dp)
         Sub(reason, colours.muted, lines = 3)
     }

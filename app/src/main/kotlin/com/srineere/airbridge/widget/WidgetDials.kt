@@ -210,9 +210,9 @@ private fun ScoreFace(
                 Dial(dial, colours, side, centreSize = 13, showLabel = false)
                 Spacer(GlanceModifier.width(10.dp))
                 Column {
-                    Kicker("Sleep", colours.tile(TileColour.Sleep), size = 9)
+                    Kicker("Sleep", colours.tile(TileColour.Sleep), size = WidgetText.Caption)
                     Gap(2.dp)
-                    Figure(dial.centre, 19, colours.onBackground)
+                    Figure(dial.centre, WidgetText.FigureM, colours.onBackground)
                 }
             }
         } else {
@@ -313,12 +313,12 @@ private fun BurnFace(
     }
     val gap = day.gap
     WidgetCard(colours, onClick, padding) {
-        Kicker("Burned against eaten", foodInk, size = 10)
+        Kicker("Burned against eaten", foodInk, size = WidgetText.Label)
         Gap(if (tall) 7.dp else 5.dp)
         Row(verticalAlignment = Alignment.Bottom) {
             Figure(
                 signed(gap.roundToInt()),
-                if (tall) 34 else 27,
+                if (tall) WidgetText.FigureXL else WidgetText.FigureL,
                 colours.onBackground,
                 weight = FontWeight.Bold,
             )
@@ -328,7 +328,7 @@ private fun BurnFace(
             Sub(
                 "kcal " + (if (gap < 0) "behind" else "ahead") + ", so far today",
                 colours.faint,
-                size = 11,
+                size = WidgetText.Label,
             )
         }
         Gap(8.dp)
@@ -369,7 +369,7 @@ private fun Key(
             Dot(ink, size = 7.dp)
             Spacer(GlanceModifier.width(5.dp))
         }
-        Sub(label, colours.faint, size = 10)
+        Sub(label, colours.faint, size = WidgetText.Label)
         Spacer(GlanceModifier.width(5.dp))
         Figure("%,d".format(value), 14, colours.onBackground, weight = FontWeight.Medium)
     }
@@ -407,8 +407,8 @@ private fun OverviewFace(
                     Box(contentAlignment = Alignment.Center) {
                         RingImage(listOf(dial.fraction to dial.colour), colours, across.coerceAtMost(76f).dp)
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Figure(dial.centre, 20, colours.onBackground, weight = FontWeight.Bold)
-                            Kicker(dial.label, colours.tile(dial.colour), size = 8)
+                            Figure(dial.centre, WidgetText.FigureM, colours.onBackground, weight = FontWeight.Bold)
+                            Kicker(dial.label, colours.tile(dial.colour), size = WidgetText.Caption)
                         }
                     }
                 }
@@ -416,7 +416,7 @@ private fun OverviewFace(
         }
         if (scores.isNotEmpty()) {
             Gap(14.dp)
-            Kicker("Seven nights", colours.tile(TileColour.Sleep), size = 9, caps = false)
+            Kicker("Seven nights", colours.tile(TileColour.Sleep), size = WidgetText.Caption, caps = false)
             Gap(6.dp)
             Bars(
                 values = scores,
@@ -428,7 +428,7 @@ private fun OverviewFace(
             )
         }
         Grow()
-        Sub(overviewSentence(snapshot), colours.muted, size = 12, lines = 3)
+        Sub(overviewSentence(snapshot), colours.muted, size = WidgetText.Body, lines = 3)
     }
 }
 
@@ -480,7 +480,7 @@ private fun WeekFace(
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Kicker("Seven nights", colours.tile(colour))
             Spacer(GlanceModifier.defaultWeight())
-            Sub("average ${scores.average().roundToInt()}", colours.muted, size = 10)
+            Sub("average ${scores.average().roundToInt()}", colours.muted, size = WidgetText.Label)
         }
         Gap(8.dp)
         // Out of a hundred, not out of the best night: a week of good sleep
@@ -498,7 +498,7 @@ private fun WeekFace(
             Sub(
                 "Each night scored against every night behind it, never against the six beside it.",
                 colours.faint,
-                size = 10,
+                size = WidgetText.Label,
                 lines = 3,
             )
         }
@@ -511,6 +511,11 @@ private fun Dial(
     dial: DialReading,
     colours: WidgetColours,
     side: Dp,
+    /**
+     * Not a [WidgetType] step, deliberately: this figure is sized to
+     * the arc it sits inside rather than to the app's type scale, and
+     * snapping it to a step overflows the ring at the smaller cells.
+     */
     centreSize: Int,
     showLabel: Boolean = true,
 ) {
@@ -523,7 +528,7 @@ private fun Dial(
             Figure(dial.centre, centreSize, colours.onBackground)
             if (showLabel) {
                 Gap(2.dp)
-                Kicker(dial.label, colours.tile(dial.colour), size = 8)
+                Kicker(dial.label, colours.tile(dial.colour), size = WidgetText.Caption)
             }
         }
     }

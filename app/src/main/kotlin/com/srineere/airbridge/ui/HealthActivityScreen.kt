@@ -299,20 +299,17 @@ private fun SessionRow(
         modifier = Modifier.padding(top = 10.dp),
     ) {
         Row(Modifier.weight(1f)) {
-            Metric(
-                "km",
-                detail?.distanceKm?.let { formatOneDecimal(it) },
-                MaterialTheme.colorScheme.onSurface,
-                Modifier.weight(1f),
-            )
-            Metric(
+            // No dot on distance: it is not a line on the chart beside
+            // this row, and a dot that points at nothing is decoration.
+            Stat("km", detail?.distanceKm?.let { formatOneDecimal(it) }, Modifier.weight(1f))
+            Stat(
                 "kcal",
                 detail?.kcal?.let { count(it.roundToInt().toLong()) },
-                extras.energy,
                 Modifier.weight(1f),
+                tint = extras.energy,
             )
-            Metric("avg", detail?.averageBpm?.toString(), extras.heart, Modifier.weight(1f))
-            Metric("peak", detail?.peakBpm?.toString(), extras.zonePeak, Modifier.weight(1f))
+            Stat("avg", detail?.averageBpm?.toString(), Modifier.weight(1f), tint = extras.heart)
+            Stat("peak", detail?.peakBpm?.toString(), Modifier.weight(1f), tint = extras.zonePeak)
         }
         if (detail != null && detail.trace.size >= 2) {
             SparkLine(
@@ -341,22 +338,6 @@ private fun Zone.range(): ClosedFloatingPointRange<Double> =
     lowBpm(ASSUMED_MAX_HEART_RATE).toDouble()..highBpm(ASSUMED_MAX_HEART_RATE).toDouble()
 
 /** One of a session's figures, or a dash where the session carried none. */
-@Composable
-private fun Metric(label: String, value: String?, colour: Color, modifier: Modifier) =
-    Column(modifier) {
-        Text(
-            label.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.extras.disabled,
-        )
-        Text(
-            value ?: "—",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = if (value == null) MaterialTheme.extras.disabled else colour,
-            maxLines = 1,
-        )
-    }
 
 internal val Session.length: Duration get() = Duration.between(start, end)
 
