@@ -395,7 +395,7 @@ adb logcat -s AirBridge
 ## Design
 
 The canvas is an Artifact: <https://claude.ai/artifact/EcNAsWKo5w3ciHwkswEDFc>
-(private). Thirty-five boards plus design notes explaining *why* each screen is
+(private). A board for every screen, plus design notes explaining *why* each screen is
 the shape it is — the notes matter more than the pixels.
 
 The working habit this project runs on: **design first, then build.** For
@@ -473,9 +473,23 @@ survive as widget designs.
 
 ## Widgets
 
-Eighteen of them are built and on the home screen: all thirteen Health kinds
-and five band faces, in `widget/`. Rings, dials, paper, type-alone, the three
-with buttons, and stacks are designed and not built.
+Thirty-three designs in six families, in `widget/`, every one of them on the
+design canvas and every one of them built. The catalogue under Device ›
+Widgets lists them with a drawing of each.
+
+| Family | Designs | Needs |
+| --- | --- | --- |
+| Your tiles | 13, the Health tab's own kinds | nothing |
+| The band | 6: the band, charge, last buzz, relaying, quiet, buzzes | nothing |
+| Rings | 3: three arcs, summary, trends | a bitmap for the arcs |
+| Dials | 3: sleep score, three dials, seven nights | a bitmap for the arcs |
+| Paper | 4: figure, sentence, rail, day | the light half of the palette |
+| Type alone | 4: steps, sleep, battery, relaying | the wallpaper's own hint |
+
+Still designed and not built: the three band widgets with **buttons** (Stop,
+Buzz, Find), **stacks**, and the one Dials face that wants a *line* --
+today's burn climbing against yesterday -- which needs a second bitmap
+renderer. `WidgetAddHow` on the canvas has what Android allows for stacks.
 
 **The shape of it.** Five `AppWidgetProvider`s, one per cell size
 (`WidgetSize`), all backed by one `AirWidget : GlanceAppWidget`. Each has
@@ -485,7 +499,7 @@ returns `RESULT_OK`. `WidgetStore` keeps one row per `appWidgetId` in
 `air_health`, beside the tile layout, because a widget's colour is its
 tile's colour and two stores could disagree about that.
 
-**Three things that cost real time, and will again if they are undone:**
+**Four things that cost real time, and will again if they are undone:**
 
 - **A widget provider has to be `exported="true"`.** Declared `false`, all
   five appeared in `dumpsys appwidget` and never once in the launcher's
@@ -500,6 +514,64 @@ tile's colour and two stores could disagree about that.
   nothing, and the widget sits there still showing the "tap to choose" face
   it composed before the choice was stored. `liveIds()` asks the launcher,
   which always knows.
+- **`SizeMode.Exact`, not `Responsive`.** Responsive reports the size you
+  *declared*, not the cell you were given. A launcher's 4x4 came back half
+  again taller than the 300dp the face was measured for: the RemoteViews
+  stretches, the composition does not, and the content ends up crushed into
+  the top third with a field of empty card beneath it.
+
+**Arcs are bitmaps, because Glance has no determinate ring.**
+`CircularProgressIndicator` takes a colour and a modifier and nothing else,
+so it can only spin, and a curve cannot be made out of a Row of Boxes.
+`RingBitmap` draws one Canvas per composition, capped at 192px -- not a
+guess: a RemoteViews crosses a Binder transaction with a hard size limit and
+ARGB costs four bytes a pixel, so a 4x4 at three times density would be
+about 3MB, which is a widget that silently fails to appear. A bitmap also
+cannot carry both halves of the palette the way a `ColorProvider` does, so
+`WidgetColours.isDark` resolves that question once, through Glance's own
+`isNightMode` where the app follows the system.
+
+**Only a reading with a real ceiling gets a ring or a dial.** Sleep has a
+score out of a hundred this app computes; steps have a goal; burn has a
+fortnight to sit against. Resting heart rate, HRV and skin temperature have
+none, and a dial for them would be a denominator nobody picked. Note that
+`Goals.activeMinutes` is *weekly* -- the WHO's lower bound -- so it cannot
+join two daily rings, and dividing it by seven would invent a target nobody
+chose. Today is excluded from its own burn average: at nine in the morning
+it is a fifth of a day and would drag down the thing it is measured against.
+
+**Paper does not follow the phone's light-or-dark, by design.** A pale card
+is its premise. It uses the *app's* light half, so a Cream ground stays
+Cream, and every colour goes through `paperTile`: the mint that carries
+steps on a dark tile is 1.81:1 on white, which is not dim, it is gone. Its
+one sentence has a rule in one place with tests pinning the vocabulary --
+no cause, no advice, no comparison with anybody else.
+
+**Type alone has no card, so it asks the wallpaper.**
+`WallpaperColors.HINT_SUPPORTS_DARK_TEXT` is the same signal the launcher
+uses to colour its own icon labels, so the type matches the labels beside it
+rather than fighting them. Null where the system will not say, and it then
+falls back to the app's own light-or-dark. A wallpaper wanting dark text is
+a pale one, so the ink comes from the light half even on a phone in dark
+mode: what matters there is the photograph, not the theme.
+
+**There is no letter spacing in Glance.** `TextStyle` carries size, weight,
+colour, alignment, decoration and family, and `FontWeight` is exactly
+Normal, Medium and Bold. Paper's look rests on figures tracked at -0.03 em
+on the design sheets and cannot have it without a bitmap per numeral, which
+would also freeze the figure against the system text size.
+
+**One `Face`, drawn twice.** `faceFor`, `bandFace`, `ringsFace` and the rest
+produce a `Face`, and both the widget and the catalogue's thumbnail draw
+from it. A catalogue whose pictures are written separately goes quietly out
+of date, and the first to notice is someone who placed a widget expecting
+what the picture showed. The thumbnails are Compose, because Glance composes
+into RemoteViews which cannot be drawn inside this app's own UI at all.
+
+**The previews are the tile editor's made-up week**, not the owner's: a
+catalogue is about what a widget *is*, and it costs no Health Connect read
+to open. `sampleGoals` deliberately sits a little beyond the sample day --
+level with it, every bar was full and three rings drew as a bullseye.
 
 **`loadHealthData`** is a plain function in `HealthState.kt` rather than a
 method, so the widgets and the tab share one read. Two readers would be two
@@ -508,98 +580,17 @@ widget's is the kind of bug nobody reports because nobody believes it. The
 widgets ask for 14 days, not the tab's 30: the longest window any face draws
 is a fortnight.
 
-The dependencies were already in `app/build.gradle.kts` (`glance-appwidget`
-1.1.1, `glance-material3`, `work-runtime-ktx`).
+**Adding one belongs to the launcher.** `requestPinAppWidget` was tried and
+removed: Android deliberately skips the configuration activity for a pinned
+widget, so it arrives knowing nothing about what it is meant to show. The
+app's own screen is a catalogue, not a second way to place things.
 
-**What Glance can and cannot draw.** Read from the 1.1.1 jars, not from
-memory, because three of these contradict what anyone would assume:
+**A stale APK will waste an afternoon.** Gradle reported `:app:packageDebug`
+UP-TO-DATE while the APK on disk was from a different build -- unit tests
+green on the new values, phone showing the old ones, no error anywhere.
+`rm app/build/outputs/apk/debug/app-debug.apk` before building forces it.
+The suspected cause is a second Gradle running in the same project.
 
-- `CircularProgressIndicator(GlanceModifier, ColorProvider)` takes **no
-  progress parameter**. It is the indeterminate spinner and nothing else, so
-  there is no determinate ring at any size. A single ring costs a Bitmap just
-  as much as three concentric ones. `LinearProgressIndicator` has a `Float`
-  overload and is the only determinate component.
-- `TextStyle` carries colour, size, weight, style, alignment, decoration and
-  family. There is **no letter spacing**, and `FontWeight` is exactly Normal,
-  Medium and Bold. Every tile head in the app is bold, uppercased and tracked
-  at 1 sp, so a widget kicker sits tighter than the tab's and cannot be made
-  to match without baking it into a bitmap.
-- Weight is an **equal share only** -- no fractional weights and no
-  percentage heights, so every bar height is computed in Kotlin in dp from
-  `LocalSize`.
-- `GlanceModifier.cornerRadius` is API 31+ and `minSdk` is 28, so every
-  rounded surface needs a shape drawable on 28-30.
-
-A chart made of rectangles in a Row composes natively; anything curved -- a
-ring, a smooth sparkline -- is an Android Canvas rendered to a Bitmap and
-shown as an `Image`. Both are legitimate; the designs say which they need.
-
-**The band widget is the one only this app can do**, and it forced the
-decision the rest inherit: the battery is always the last reading *with its
-age*, never a live number. Asking the Air costs its one secure session and
-holding that session blocks the Google Health sync, so a widget that
-refreshed every half hour would quietly cost a day of readings.
-
-**Widgets must read `LightExtras` on a light ground.** The dark health
-colours are not merely dim there, they are unusable: `steps #5BD6A8` is
-1.81:1 on white. The light values already exist and pass -- steps 4.51:1,
-activity 4.82:1, heart 4.99:1. Do not mint a third set; a proposal to do so
-measured *worse* than what is already shipping.
-
-Two things a widget cannot carry, decided rather than overlooked: the live
-measuring tile (no animation, no per-second push, and the band cannot be held
-open from a home screen) and the hypnogram (sixty offset boxes would compose
-and would be a grey smear under 150 dp).
-
-**Three pick sheets** sit on the canvas after those four families, and they are the ones to
-read first: `WidgetPickTiles` (all thirteen Health kinds at Square and Wide),
-`WidgetPickBand` (twelve band and relay widgets, including the three with
-buttons) and `WidgetPickStyles` (seventeen faces across four borrowed
-grammars -- rings, dials, paper and type alone). Each face carries an id so a
-decision can name one.
-
-**A widget's colour is the tile's colour**, read from the `air_health` tile
-store, not a setting of its own. The widget config therefore has no colour
-row; changing a tile under Edit tiles changes its widget too. Sleep stages
-and energy in-against-out keep their own palettes, as on the tab.
-
-### The catalogue, and stacks: what Android actually allows
-
-Both ideas are buildable. Checked against `android-36/android.jar` and the
-Glance 1.1.1 jars, not assumed:
-
-- **A few standard sizes, with the choice made in-app.** Declare one provider
-  per cell size with `android:configure` pointing at an activity. Android
-  launches it on drop and the widget is not placed until it returns OK, so
-  the catalogue *is* the add flow. `WIDGET_FEATURE_RECONFIGURABLE` lets a
-  long-press re-open it, `WIDGET_FEATURE_CONFIGURATION_OPTIONAL` allows a
-  sensible default without one, and `WIDGET_FEATURE_HIDE_FROM_PICKER` can
-  keep any per-family providers out of the drawer. **All three are API 31+**,
-  and `minSdk` is 28: on 28-30 there is no re-open from the launcher, so the
-  app needs its own "widgets you have placed" list to edit them.
-- **Drawer previews.** `previewLayout` is API 31+, `previewImage` is the
-  fallback. `AppWidgetManager.setWidgetPreview` (API 34+) can push a live,
-  themed `RemoteViews` into the picker, so on a recent phone the drawer entry
-  can be drawn in the user's own accent.
-- **A stack has three honest shapes, and Glance only supplies one of them.**
-  There is `LazyColumn` and `LazyVerticalGrid` in
-  `androidx.glance.appwidget.lazy` and **no LazyRow and no pager**, so a
-  horizontal swipe is not available in Glance's own composables. The options
-  are: (1) `LazyColumn` with each item the full widget height -- vertical
-  scroll, no snapping, pure Glance, cheapest; (2) dots plus an
-  `actionRunCallback` that bumps a stored index -- tap to advance, works on
-  28, but the tap target fights tap-to-open; (3) a real swipeable
-  `StackView` or `AdapterViewFlipper` -- both are annotated
-  `@RemoteViews.RemoteView`, so both are legal inside a widget -- fed by a
-  `RemoteViewsService` whose factory composes each page with
-  `GlanceRemoteViews.compose()` (`@ExperimentalGlanceRemoteViewsApi`). Option
-  three is the one that matches what a launcher stack feels like, and it is
-  the only one that leaves Glance's normal path. **It is also the one to
-  build**: it is the only option that leaves the tap free to open a screen,
-  which every other widget on the canvas does.
-- A stack refreshes as one widget, so **the dearest member sets the update
-  cost for all of them** -- which is another reason the band card in a stack
-  shows a stored battery and never asks the Air.
 
 ## Theming, and why the neutrals are no longer constants
 
