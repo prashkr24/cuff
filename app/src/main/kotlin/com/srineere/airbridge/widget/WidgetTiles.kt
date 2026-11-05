@@ -26,12 +26,14 @@ import kotlin.math.roundToInt
  * What a tile says, before anything has decided how big to draw it.
  *
  * Built once per widget, outside composition, so that every face of a kind
- * is drawing the same arithmetic -- the only thing a size changes is how
+ * is drawing the same arithmetic -- and read by the catalogue under Device,
+ * so a preview there is the widget's own reading rather than a second
+ * drawing of it that can drift -- the only thing a size changes is how
  * much of this is shown. That is the promise the pick sheets make: the
  * label never moves, and a swipe or a resize changes the reading, not the
  * layout.
  */
-private class Face(
+internal class Face(
     val kicker: String,
     val figure: String,
     val sub: String,
@@ -42,7 +44,7 @@ private class Face(
     val chip: String? = null,
 )
 
-private sealed interface Chart {
+internal sealed interface Chart {
     /**
      * Equal-width columns: the only chart Glance draws without a bitmap.
      *
@@ -264,7 +266,7 @@ private fun DrawChart(
 
 // ------------------------------------------------------------- the reading
 
-private fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
+internal fun faceFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
     val health = snapshot.health
     val data = health.snapshot
     return when (kind) {
