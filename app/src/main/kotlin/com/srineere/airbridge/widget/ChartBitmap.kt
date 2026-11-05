@@ -65,10 +65,6 @@ internal object ChartBitmap {
     const val MAX_WIDTH = 640
     const val MAX_HEIGHT = 320
 
-    /** Counted so a stack can say how much it is sending in one update. */
-    @Volatile
-    var bytesDrawn: Int = 0
-
     /** The tab's DEFAULT_GUTTER and FOOTER, in dp. */
     private const val GUTTER = 28f
     private const val FOOTER = 15f
@@ -219,7 +215,6 @@ internal object ChartBitmap {
         val width = widthPx.coerceIn(8, MAX_WIDTH)
         val height = heightPx.coerceIn(4, MAX_HEIGHT)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            .also { bytesDrawn += width * height * 4 }
         if (values.isEmpty()) return bitmap
 
         val canvas = Canvas(bitmap)
@@ -264,7 +259,6 @@ internal object ChartBitmap {
         val width = widthPx.coerceIn(8, MAX_WIDTH)
         val height = heightPx.coerceIn(2, MAX_HEIGHT)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            .also { bytesDrawn += width * height * 4 }
         val total = parts.sumOf { it.first.toDouble() }.toFloat()
         if (parts.isEmpty() || total <= 0f) return bitmap
 
@@ -308,7 +302,6 @@ internal object ChartBitmap {
         val width = widthPx.coerceIn(8, MAX_WIDTH)
         val height = heightPx.coerceIn(4, MAX_HEIGHT)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            .also { bytesDrawn += width * height * 4 }
         if (bars.isEmpty()) return bitmap
 
         val canvas = Canvas(bitmap)
@@ -405,7 +398,6 @@ internal object ChartBitmap {
         val width = widthPx.coerceIn(8, MAX_WIDTH)
         val height = heightPx.coerceIn(4, MAX_HEIGHT)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            .also { bytesDrawn += width * height * 4 }
         if (spans.isEmpty()) return bitmap
 
         val canvas = Canvas(bitmap)
@@ -452,7 +444,6 @@ internal object ChartBitmap {
         val width = widthPx.coerceIn(8, MAX_WIDTH)
         val height = heightPx.coerceIn(2, MAX_HEIGHT)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            .also { bytesDrawn += width * height * 4 }
         if (rails.isEmpty()) return bitmap
 
         val canvas = Canvas(bitmap)
@@ -511,7 +502,6 @@ internal object ChartBitmap {
         val width = widthPx.coerceIn(8, MAX_WIDTH)
         val height = heightPx.coerceIn(4, MAX_HEIGHT)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            .also { bytesDrawn += width * height * 4 }
         val count = maxOf(first.size, second.size)
         if (count < 2) return bitmap
 

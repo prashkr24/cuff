@@ -118,11 +118,19 @@ This is the single biggest win available. A `LazyColumn` over the packed
 rows composes three or four rows instead of thirteen tiles, and the
 difference shows up directly in first-frame time on the tab you open most.
 
-**Caveat worth testing rather than assuming:** `verticalScroll` keeps a
-scroll position across tab switches more simply than `LazyColumn` does, and
-the tile grid is a fixed, short list. Measure the tab's first frame before
-and after; if it is already under a frame budget, spend the effort on 2.2
-instead.
+**Measured, 2026-11-05, and the answer is no.** Six full-height swipes of
+the Health tab on the debug build, after 2.2 landed: 185 frames rendered, 7
+janky (3.78%), **zero missed vsyncs**, percentiles 7 / 12 / 13 / 16 ms at
+50th / 90th / 95th / 99th. Cold start 553, 564, 571 ms over three runs.
+
+The display goes to 120 Hz, so a 12 ms 90th percentile does miss that
+budget — but with no missed vsyncs, on a *debug* build, with no R8 and
+Compose in debug mode. Release will be meaningfully better than this.
+
+Thirteen tiles is a short, fixed list. `LazyColumn` would buy a first frame
+that is already inside budget and would cost the simple scroll-position
+behaviour `verticalScroll` gives across tab switches. **Not doing it**, on
+the criterion this section set before the numbers existed.
 
 ### 2.2 Every tile recomputes its series on every recomposition (high)
 
@@ -147,24 +155,50 @@ the work entirely from the common path.
 per bitmap** at the cap, and the caps are reached: a 320dp card at 3× is
 960px before clamping.
 
-A stack with eight cards composes eight of these in one `onDataSetChanged`
-and hands them to the launcher. That is ~6 MB of bitmap crossing a binder
-for one widget update, against a host budget derived from screen size. I
-have not seen it fail, and I have not measured it — but it is the most
-likely cause of a stack that silently shows fewer cards than it holds, and
-it is worth bounding before it bites.
+**Measured, 2026-11-05**, with a counter in `ChartBitmap`: a five-card
+stack at 320 x 266 dp allocates **3,105 KB**; a two-card stack at
+320 x 172 dp allocates **705 KB**. About 620 KB per card, which puts an
+eight-card stack near 5 MB — close to the estimate above.
 
-**Fix.** `RGB_565` for the bar and stripe charts (no alpha needed, half the
-bytes), and cap the long edge nearer 480. Keep `ARGB_8888` for the scatter
-and ring bitmaps, which do use alpha.
+Worse than the transfer is the residency: `StackFactory.cards` holds every
+composed `RemoteViews`, and each holds its bitmap, so that 3 MB stays
+resident for as long as the factory lives rather than being handed over and
+released.
+
+**Decided, 2026-11-05: left alone, deliberately.** The two levers both cost
+something visible. `RGB_565` halves the bytes but has no alpha, and these
+bitmaps are drawn transparent over the card, so the gaps between bars come
+out black unless the chart is filled with the card's own colour first --
+exact in theory, a visible rectangle any time that shade is off. Lowering
+the cap from 640 x 320 costs no correctness and some sharpness: 512 x 256
+saves 36%, 480 x 240 saves 44%, against an upscale onto a card 888 px wide
+at 3x.
+
+Three megabytes for a five-card stack is a known, bounded, accepted cost,
+and sharpness on the charts is worth more than the memory. Revisit only if
+a stack is ever seen dropping cards -- that is the symptom this would
+cause, and the number to re-measure is in the paragraph above.
 
 ### 2.4 No Baseline Profile (medium, cheap)
 
-Nothing in `app/build.gradle.kts` generates or consumes one. For a Compose
-app this is the largest single startup win available — typically 20–30% off
-cold start and a visibly smoother first scroll — for about an hour of setup
-with `androidx.baselineprofile`. Given "blazing fast" is the goal, this is
-the best ratio of result to effort in this document.
+**Done, 2026-11-05.** `:baselineprofile` is a `com.android.test` module whose
+`StartupProfile` walks a cold start; `:app:generateReleaseBaselineProfile`
+writes 18,570 lines into `app/src/release/generated/baselineProfiles/`, which
+R8 then consumes. The expected result for a Compose app is 20–30% off cold
+start and a smoother first scroll. Not measured here: the numbers in 2.1 are
+from a debug build, and comparing them to a release install would measure R8
+rather than the profile.
+
+The first generation run failed, and the reason is worth leaving written
+down. `BaselineProfileRule` 1.3.3 wraps itself in a `GrantPermissionRule` for
+`WRITE_EXTERNAL_STORAGE` unconditionally; Android 15 will not grant that
+permission at all, so the rule threw before the test body ran and the error
+pointed at permissions rather than at the library. Benchmark and the
+`androidx.baselineprofile` plugin are both on 1.4.1 for that reason. Do not
+take either back down.
+
+Regenerate after any change to what startup touches -- the profile is a list
+of methods, and a stale one simply warms the wrong ones.
 
 ### 2.5 `nowTicking()` is correctly scoped — no action (none)
 
@@ -186,13 +220,12 @@ lists are genuinely never mutated, and the cost today is near zero.
 
 ## What I would do, in order
 
-1. **Baseline Profile** — biggest result, least risk, touches no app code.
-2. **`remember` the tile series** (2.2) — one line per tile, pure win.
-3. **One `Stat`** (1.1) and the grey rule (1.2) — this is what you actually
-   asked for and it is visible on every detail screen.
-4. **`WidgetType`** (1.3) — mechanical, and stops the widgets drifting from
-   the app again.
-5. **Narrower bitmaps** (2.3) — bounds a risk that is currently unbounded.
-6. **Measure, then decide on `LazyColumn`** (2.1).
+1. ~~**Baseline Profile**~~ — done, 2.4.
+2. ~~**`remember` the tile series**~~ (2.2) — done.
+3. ~~**One `Stat`** (1.1) and the grey rule (1.2)~~ — done, in `Components.kt`.
+4. ~~**`WidgetType`**~~ (1.3) — done, as `WidgetText`; the name was taken.
+5. ~~**Narrower bitmaps**~~ (2.3) — measured and declined, deliberately.
+6. ~~**Measure, then decide on `LazyColumn`**~~ (2.1) — measured and declined.
 
-Items 1.4, 1.5 and 1.6 are tidying. Do them as you pass, not as a project.
+Items 1.4, 1.5 and 1.6 are tidying and are still open. Do them as you pass,
+not as a project.

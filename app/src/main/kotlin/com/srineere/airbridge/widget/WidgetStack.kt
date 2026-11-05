@@ -261,7 +261,6 @@ internal class StackFactory(
         val now = System.currentTimeMillis()
         val remote = GlanceRemoteViews()
         val began = System.currentTimeMillis()
-        ChartBitmap.bytesDrawn = 0
         cards = stack.mapNotNull { design ->
             // One card that will not compose is one card: a family that
             // throws must not leave the whole stack empty.
@@ -289,8 +288,7 @@ internal class StackFactory(
         Log.i(
             STACK_TAG,
             "stack $appWidgetId composed ${cards.size} cards at $size " +
-                "in ${System.currentTimeMillis() - began}ms, " +
-                "${ChartBitmap.bytesDrawn / 1024}KB of bitmaps",
+                "in ${System.currentTimeMillis() - began}ms",
         )
     }
 
