@@ -125,7 +125,7 @@ private fun dialsFace(face: DialFace, snapshot: WidgetSnapshot): Face? = when (f
             kicker = "Seven nights",
             figure = "",
             sub = "",
-            chart = Chart.Bars(it, ceiling = 100f),
+            chart = Chart.Bars(it, ceiling = 100f, highlightLast = false),
         )
     }
 }

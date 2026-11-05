@@ -163,7 +163,7 @@ private fun MiniChart(chart: Chart?, colour: TileColour) {
             // The newest reading, not the biggest one. The widget picks out
             // the last bar; a preview that picked out the tallest would be
             // highlighting a different day from the thing it is a picture of.
-            val newest = chart.values.indexOfLast { it > 0f }
+            val newest = if (chart.highlightLast) chart.values.indexOfLast { it > 0f } else -1
             chart.values.forEachIndexed { index, value ->
                 if (chart.blankZeros && value <= 0f) {
                     Box(Modifier.weight(1f))

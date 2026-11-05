@@ -57,6 +57,14 @@ internal sealed interface Chart {
         val blankZeros: Boolean = false,
         /** What a full-height bar means, when the series has a ceiling of its own. */
         val ceiling: Float? = null,
+        /**
+         * Whether the newest bar is picked out.
+         *
+         * False for a series where every bar is a finished thing: seven
+         * scored nights are seven equals, and brightening the last one says
+         * "this is today" about a night that ended hours ago.
+         */
+        val highlightLast: Boolean = true,
     ) : Chart
 
     /** A night, in proportion. Keeps the sleep palette whatever colour the tile is. */
@@ -255,6 +263,7 @@ private fun DrawChart(
             height,
             blankZeros = chart.blankZeros,
             top = chart.ceiling,
+            highlightLast = chart.highlightLast,
         )
         is Chart.Stages -> Stripe(
             chart.parts.map { (share, stage) -> share to colours.sleepStage(stage) },
