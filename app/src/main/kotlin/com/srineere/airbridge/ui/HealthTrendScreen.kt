@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -100,7 +101,14 @@ internal fun HealthTrendScreen(
         TrendMetric.Weight -> data.snapshot.weight
     }
     val axes = rememberAxes()
-    val window = rememberChartWindow(30)
+    // Weight is written by hand, or by a scale somebody steps on when they
+    // remember. Thirty days of it is two readings and the card then says it
+    // cannot draw a trend -- which is true of the window, not of the person.
+    // Ninety is the first one that usually has a line in it.
+    val window = rememberChartWindow(if (metric == TrendMetric.Weight) 90 else 30)
+    // Opened wide rather than widened by a tap: the tab loads a month, and a
+    // default window nobody touched would otherwise ask for days no one read.
+    LaunchedEffect(Unit) { state.widen(context, window.daysNeeded) }
     var picked by remember { mutableStateOf<Int?>(null) }
     val readings = window.slice(all) { it.day }
     val trend = remember(readings) { trendOf(readings) }
@@ -241,8 +249,7 @@ internal fun HealthTrendScreen(
         }
 
         Text(
-            "${readings.size} of these ${window.length} days have a reading. A day " +
-                "without one stays a gap rather than being drawn through.",
+            "${readings.size} of these ${window.length} days have a reading.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.extras.disabled,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),

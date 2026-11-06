@@ -120,7 +120,8 @@ internal fun AboutScreen(onBack: () -> Unit) {
         )
         Note(
             "Quiet hours, a pause, and a Stop button in the relay's own notification. Quiet " +
-                "hours beat everything, including a person with a rule of their own."
+                "hours beat everything, including a person with a rule of their own — unless " +
+                "you let calls through, which is the one thing they will carry."
         )
 
         SectionHeader("The Health tab")
@@ -128,19 +129,32 @@ internal fun AboutScreen(onBack: () -> Unit) {
             "A grid of tiles you arrange — five sizes, reordered, resized, recoloured or " +
                 "taken off — each carrying a trend measured in its own units. Behind every " +
                 "tile is a screen: heart rate, resting heart rate, sleep, steps, energy in " +
-                "against out, workouts, HRV, the vitals, and nutrition."
+                "against out, workouts, HRV, the vitals, nutrition, your sleep bank, " +
+                "readiness and fitness age."
         )
         Note(
-            "Sleep is scored against your own nights rather than a recommended figure, so 70 " +
-                "means \"like your usual\" and not \"adequate\" — and the score is never shown " +
-                "without the four parts it stands on. Nothing else here is scored, because a " +
-                "number invented on top of a measurement is a claim this app will not make."
+            "Three scores, and all three are comparisons rather than verdicts. Sleep is " +
+                "measured against your own nights, so 70 means \"like your usual\" and not " +
+                "\"adequate\". Readiness does the same across the morning's readings and the " +
+                "fortnight behind them, worked out once a day. Fitness age reads your VO2 max " +
+                "against the published table for your age and sex."
+        )
+        Note(
+            "None of them is ever shown without the parts it stands on, and none is a " +
+                "medical figure. A number invented on top of a measurement, with nothing " +
+                "underneath it you could check, is still a claim this app will not make."
         )
         Note(
             "A live heart rate you ask for is the one figure no reader can produce, because " +
                 "it is a measurement rather than a number already written. And the band can " +
                 "buzz you from your own activity: once when you cross the step goal, and " +
                 "hourly when an active hour falls short."
+        )
+        Note(
+            "Two moments arrive without being asked for: a morning report once you have " +
+                "woken and your night has been written, and a journal at the end of the day " +
+                "that reads back what the day did. Both are notifications you can turn off, " +
+                "and both are assembled from figures already on the tab."
         )
 
         SectionHeader("Your readings")
@@ -159,6 +173,10 @@ internal fun AboutScreen(onBack: () -> Unit) {
             "None of it leaves this phone. No account, no server, nothing uploaded. The band " +
                 "is reached over Bluetooth directly, and your contacts are read only to put a " +
                 "name on a number."
+        )
+        Note(
+            "The one way out is the one you ask for: Export writes a zip of CSVs wherever " +
+                "you point it. What happens to it after that is yours."
         )
 
         SectionHeader("What can break it")
@@ -183,6 +201,14 @@ internal fun AboutScreen(onBack: () -> Unit) {
         )
         ReportDetails(info)
         ErrorLog()
+
+        SectionHeader("The three explanations")
+        Note(
+            "Sync, Measure and Relay each explain themselves the first time, because each " +
+                "does less than it looks like it does and all three have been reported as " +
+                "broken. If you have dismissed them, this brings them back."
+        )
+        ExplainReset()
 
         SectionHeader("How it reaches the band")
         Note(
@@ -363,4 +389,23 @@ private fun Link(context: android.content.Context, label: String, url: String) {
             modifier = Modifier.padding(start = 8.dp).size(15.dp),
         )
     }
+}
+
+/** The row that un-dismisses the three, and says how many are hidden. */
+@Composable
+private fun ExplainReset() {
+    val context = LocalContext.current
+    var silenced by remember { mutableIntStateOf(Explain.silencedCount(context)) }
+    SettingsRow(
+        title = "Show them again",
+        subtitle = when (silenced) {
+            0 -> "None are hidden — each will explain itself next time"
+            1 -> "One is hidden"
+            else -> "$silenced are hidden"
+        },
+        onClick = {
+            Explain.sayAgain(context)
+            silenced = 0
+        },
+    )
 }

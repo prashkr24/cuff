@@ -171,14 +171,6 @@ internal fun HealthNutritionScreen(onBack: () -> Unit, onOpen: (String) -> Unit)
             onClick = { onOpen("healthbalance") },
         )
 
-        Text(
-            "Macros come from whatever app writes them — Google Health's own food " +
-                "log counts, as does anything else that writes to Health Connect. " +
-                "An entry logged without macros still counts its calories.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.extras.disabled,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-        )
         Box(Modifier.padding(bottom = 24.dp))
     }
 }

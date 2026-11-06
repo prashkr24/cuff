@@ -197,11 +197,13 @@ data class TileRow(val tiles: List<Tile>)
  * is also the quickest way to learn that the sizes exist.
  *
  * Lifted from a tab somebody had actually arranged and then lived with,
- * rather than guessed at. Three things moved: steps take the full height,
- * because the ring and the week together are what anyone opens that tile
- * for; burned against eaten and HRV join the foot of the tab; and resting
- * heart rate comes out, because the Vitals strip above it already carries
- * that figure and a default should not say the same thing twice.
+ * rather than guessed at, and taken again once readiness existed. Readiness
+ * takes the small slot beside the Vitals strip, where a single figure
+ * against its own band is all the room needs. Workouts move up to the full
+ * width and close the tab, because a list of two lines in a third of a row
+ * is a list of one. Burned against eaten comes off, since the Energy tile
+ * two rows above is the same arithmetic; HRV comes off for the same reason
+ * resting heart rate did, which is that the Vitals strip already carries it.
  *
  * No colours are set, so each tile teaches its own.
  */
@@ -212,9 +214,8 @@ val defaultTiles: List<Tile> = listOf(
     Tile(TileKind.Nutrition, TileSize.M),
     Tile(TileKind.Sleep, TileSize.XL),
     Tile(TileKind.Vitals, TileSize.W),
-    Tile(TileKind.Activity, TileSize.S),
-    Tile(TileKind.Balance, TileSize.L),
-    Tile(TileKind.Hrv, TileSize.L),
+    Tile(TileKind.Readiness, TileSize.S),
+    Tile(TileKind.Activity, TileSize.L),
 )
 
 /**

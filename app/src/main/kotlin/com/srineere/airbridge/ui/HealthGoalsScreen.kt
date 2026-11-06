@@ -96,8 +96,7 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
             unit = "a day",
             note = "Your last seven average " +
                 (data.stepsTrend?.let { count(it.recent.roundToInt().toLong()) } ?: "—") +
-                ". Ten thousand is a 1960s pedometer slogan, not a finding — " +
-                "set it where it is worth crossing.",
+                ".",
             onLess = { save(goals.copy(steps = (goals.steps - 500).coerceAtLeast(500))) },
             onMore = { save(goals.copy(steps = goals.steps + 500)) },
         )
@@ -122,21 +121,7 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
                 else -> "+${count(goals.energyKcal.toLong())}"
             },
             unit = if (goals.energyKcal == 0) "" else "kcal a day",
-            note = buildString {
-                append("A deficit is negative, a surplus positive. ")
-                if (goals.energyKcal != 0) {
-                    append(
-                        "At this rate a fortnight is about " +
-                            "%.1f kg".format(abs(goals.fortnightKg)) +
-                            (if (goals.energyKcal < 0) " off" else " on") +
-                            ", by the 7,700 kcal-per-kilogram rule of thumb — " +
-                            "which overstates real loss, so treat it as a check " +
-                            "on the food log rather than a forecast.",
-                    )
-                } else {
-                    append("No line is drawn on the balance chart while this is level.")
-                }
-            },
+            note = "A deficit is negative, a surplus positive.",
             onLess = { save(goals.copy(energyKcal = (goals.energyKcal - 50).coerceAtLeast(-1500))) },
             onMore = { save(goals.copy(energyKcal = (goals.energyKcal + 50).coerceAtMost(1500))) },
         )
@@ -286,10 +271,8 @@ private fun StepSourcePicker() {
                     "Only your band is writing steps, so nothing is being left " +
                         "out whichever of these you pick."
                 else ->
-                    "Your phone counts its own steps and writes them here too. " +
-                        "Counted alongside the band they make one walk into two, " +
-                        "and the goal buzzes early — so by default they are left " +
-                        "out."
+                    "Your phone counts steps too, and counted alongside the band " +
+                        "they turn one walk into two — so by default it is left out."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -246,10 +246,9 @@ private fun AddWidget(
             ) {
                 Text(
                     if (stack) {
-                        "$fitting fit this space. Tap as many as you want; " +
-                            "they go in one cell and you swipe between them."
+                        "$fitting fit here. Tap as many as you like — they share one cell."
                     } else {
-                        "$fitting fit this space. Tap one to place it."
+                        "$fitting fit here. Tap one to place it."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -285,19 +284,8 @@ private fun AddWidget(
                 },
             )
 
-            Text(
-                if (stack) {
-                    "Nothing is placed until you tap Add — backing out leaves your home screen " +
-                        "as it was. Tap a card again to take it out. Resize the stack afterwards " +
-                        "and every card redraws itself to suit the new cell."
-                } else {
-                    "Nothing is placed until you pick one — backing out leaves your home screen " +
-                        "as it was. Resize it afterwards and it redraws itself to suit the new " +
-                        "cell, and tapping it opens the screen about what it is showing."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.extras.disabled,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+            Box(
+                Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
             )
         }
 
@@ -342,8 +330,7 @@ private fun StackLayers(
 ) {
     SectionHeader("Your stack")
     Text(
-        "Paged through in this order. Every card is drawn at whatever cell the stack is in, so " +
-            "resizing the stack resizes all of them.",
+        "Swiped through in this order. Resizing the stack resizes them all.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.extras.disabled,
         modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 6.dp),

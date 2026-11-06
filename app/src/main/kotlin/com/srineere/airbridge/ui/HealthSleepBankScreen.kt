@@ -199,14 +199,6 @@ internal fun HealthSleepBankScreen(onBack: () -> Unit) {
             }
         }
 
-        Text(
-            "No bedtime is suggested here. The balance is arithmetic on nights you " +
-                "have already slept; what to do about it depends on tomorrow, which " +
-                "this app knows nothing about.",
-            style = MaterialTheme.typography.labelMedium,
-            color = extras.disabled,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-        )
         Box(Modifier.padding(bottom = 24.dp))
     }
 }

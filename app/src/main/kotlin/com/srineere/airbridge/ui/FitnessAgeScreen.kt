@@ -145,10 +145,20 @@ internal fun FitnessAgeScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             SectionHeader("Nothing has written a VO₂ max")
             DetailCard {
                 Text(
-                    "Google Health writes one after a run or a walk it can estimate from, " +
-                        "every week or two rather than daily. Until one arrives there is " +
-                        "no primary input here, and the figure is left blank rather than " +
-                        "guessed from the rows above.",
+                    "Google Health writes one after a run it can estimate from — started " +
+                        "in Google Health, with GPS — every week or two rather than daily. " +
+                        "Until one arrives there is no primary input here, and the figure " +
+                        "is left blank rather than guessed from the rows above.\n\n" +
+                        // Said here because this app made it possible to be
+                        // in exactly that state: VO2 max was asked for but
+                        // never declared in the manifest, so Health Connect
+                        // dropped the request and no install has ever had
+                        // the grant. An empty chart looks the same either
+                        // way, which is the whole reason the permissions
+                        // screen counts them.
+                        "If you have had runs like that, check VO₂ max is allowed: " +
+                        "Device › Permissions. A reading you have not allowed looks " +
+                        "exactly like one nothing has written.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

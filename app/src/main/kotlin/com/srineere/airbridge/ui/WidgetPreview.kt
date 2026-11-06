@@ -1,5 +1,6 @@
 package com.srineere.airbridge.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -71,10 +72,17 @@ internal fun WidgetPreview(
     caps: Boolean = true,
 ) {
     val tint = paper?.tile?.invoke(colour) ?: tileColourOf(colour)
-    // No border where the card would be, dashed or otherwise. The design
-    // sheets drew one to say "these are the widget's bounds", but a sheet
-    // is a diagram and this is the thing itself: on a home screen there is
-    // nothing there, and the absence is the whole point of the family.
+    // A hairline where the card ends, on every family including the one
+    // that paints no card.
+    //
+    // This used to be deliberately absent, on the argument that a home
+    // screen draws no border either and a thumbnail should be the thing
+    // itself. That argument was about one widget; a page of them is a
+    // different problem. Against a black wallpaper `surfaceContainer` is
+    // two shades off the page, so a column of previews reads as loose
+    // numbers rather than as cards, and nothing says where one stops and
+    // the next begins. The border is a fact about the catalogue, not a
+    // claim about the home screen.
     Surface(
         color = when {
             cardless -> Color.Transparent
@@ -82,6 +90,12 @@ internal fun WidgetPreview(
             else -> MaterialTheme.colorScheme.surfaceContainer
         },
         shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(
+            1.dp,
+            // Pale families are outlined against themselves: the page's own
+            // outline would vanish into a cream card.
+            if (paper != null) paper.edge else MaterialTheme.colorScheme.outlineVariant,
+        ),
         modifier = modifier.height(78.dp),
     ) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {

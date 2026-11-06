@@ -355,7 +355,8 @@ private fun grantsFor(context: Context, ask: (String) -> Unit): List<Grant> = bu
             Grant(
                 title = "Show the relay's notification",
                 body = "The relay runs inside one notification — it is how you see it is on, " +
-                    "and how you silence a ring.",
+                    "and how you silence a ring. Your morning report and the evening " +
+                    "journal arrive this way too.",
                 granted = context.has(Manifest.permission.POST_NOTIFICATIONS),
                 need = Need.Required,
             ) { ask(Manifest.permission.POST_NOTIFICATIONS) }
@@ -365,7 +366,7 @@ private fun grantsFor(context: Context, ask: (String) -> Unit): List<Grant> = bu
         Grant(
             title = "Keep running in the background",
             body = "Without this, Android stops us once the screen has been off a while — " +
-                "and the band goes quiet.",
+                "the band goes quiet, and the morning report misses its morning.",
             granted = CalendarRelayService.batteryExempt(context),
             need = Need.Recommended,
         ) { context.openBatterySettings() }

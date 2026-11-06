@@ -227,15 +227,6 @@ internal fun HealthBalanceDayScreen(onBack: () -> Unit) {
             burnedColour = burnedColour,
         )
 
-        Text(
-            "Burn is everything your body spent, not just exercise — the figure " +
-                "starts well above zero before you have moved. Food shows only " +
-                "what something logged, so a gap here is usually an unlogged meal " +
-                "rather than a day of fasting.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.extras.disabled,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-        )
         Box(Modifier.padding(bottom = 24.dp))
     }
 }

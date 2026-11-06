@@ -207,8 +207,7 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
         SettingsRow(
             indent = Indent.UnderIcon,
             title = "Also show it on this phone",
-            subtitle = "A silent notification each time it nudges. Change its sound " +
-                "or hide it in Android's own notification settings.",
+            subtitle = "A silent notification each time it nudges",
             trailing = {
                 RowSwitch(
                     checked = settings.nudgeOnPhone,

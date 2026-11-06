@@ -304,11 +304,6 @@ internal fun HealthEnergyScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             }
         }
 
-        Note(
-            "Burned is total calories — resting plus movement — written by " +
-                "Google Health. Eaten is whatever any app writes to Health Connect, " +
-                "including anything you log here.",
-        )
         Box(Modifier.padding(bottom = 24.dp))
     }
 }

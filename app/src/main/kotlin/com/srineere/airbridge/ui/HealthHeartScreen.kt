@@ -186,15 +186,6 @@ internal fun HealthHeartScreen(onBack: () -> Unit) {
             }
         }
 
-        Text(
-            "Zone edges assume a maximum of $ASSUMED_MAX_HEART_RATE beats, from the " +
-                "usual age formula. That formula is out by about ten beats either " +
-                "way, so every boundary here is approximate — it is the one " +
-                "number worth replacing with a measured figure.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.extras.disabled,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-        )
         Box(Modifier.padding(bottom = 24.dp))
     }
 }

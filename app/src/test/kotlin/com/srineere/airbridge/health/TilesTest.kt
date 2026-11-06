@@ -212,8 +212,19 @@ class TilesTest {
         assertTrue(TileKind.Weight in unused)
         assertTrue(TileKind.Heart in unused)
         assertTrue(TileKind.Skin in unused)
-        assertFalse(TileKind.Hrv in unused)
         assertFalse(TileKind.Zones in unused)
+
+        // Derived rather than listed. This used to assert that HRV was not
+        // offered, which was true of the default layout of the day and
+        // became false the moment that layout changed -- a test about the
+        // add list failing over a decision about tile arrangement. The rule
+        // is the invariant: on the tab and already shown means not offered,
+        // on the tab and absent means offered.
+        defaultTiles.forEach { assertFalse(it.kind in unused) }
+        TileKind.entries
+            .filter { kind -> kind.onTab && defaultTiles.none { it.kind == kind } }
+            .forEach { assertTrue(it in unused) }
+
         assertTrue(unusedKinds(TileKind.entries.map { t(it, TileSize.S) }).isEmpty())
     }
 }

@@ -75,12 +75,10 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         // somebody has to work out for themselves. Nothing at this end can
         // fix it, so the note says where it stops.
         Text(
-            "Blood oxygen is not on this screen. Your band measures it and Google " +
-                "Health reads it, but Google Health does not write it to Health " +
-                "Connect — oxygen saturation is read-only on its side — so there is " +
-                "nothing here to show.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.extras.disabled,
+            "No blood oxygen: Google Health reads it from your band but will not " +
+                "write it to Health Connect, so it never reaches this app.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
         )
 
