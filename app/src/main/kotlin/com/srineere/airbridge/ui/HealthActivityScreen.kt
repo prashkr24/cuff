@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.health.Session
+import com.srineere.airbridge.health.exerciseName
 import com.srineere.airbridge.health.HealthConnect
 import androidx.health.connect.client.PermissionController
 import com.srineere.airbridge.health.Zone
@@ -407,23 +408,6 @@ internal val Session.length: Duration get() = Duration.between(start, end)
  * Connect stores the type as an int, and the handful this band produces are
  * worth naming properly rather than printing "Workout" for all of them.
  */
-internal fun Session.exerciseName(): String = title?.takeIf { it.isNotBlank() } ?: when (exerciseType) {
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "Walk"
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL,
-    -> "Run"
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY,
-    -> "Cycle"
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "Hike"
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
-    -> "Swim"
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "Strength"
-    androidx.health.connect.client.records.ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "Yoga"
-    else -> "Workout"
-}
-
 private val sessionFormat = DateTimeFormatter.ofPattern("EEE · HH:mm")
 
 internal fun Session.whenLabel(): String =

@@ -54,7 +54,7 @@ object HealthExport {
             "daily.csv",
         ),
         Nights("Nights", "stages, score and its four parts", "nights.csv"),
-        Workouts("Workouts", "kind, length and heart rate", "workouts.csv"),
+        Workouts("Workouts", "kind, length, distance and heart rate", "workouts.csv"),
         Food("Food", "every entry, and what was in it", "food.csv"),
 
         /**
@@ -89,13 +89,22 @@ object HealthExport {
     }
 
     /** Writes the chosen parts into [output] as a zip, and closes nothing. */
-    fun write(
+    suspend fun write(
         context: Context,
         output: OutputStream,
         snapshot: HealthSnapshot,
         parts: Set<Part>,
         range: Range,
         zone: ZoneId = ZoneId.systemDefault(),
+        /**
+         * How far through the workouts it is, since that part reads.
+         *
+         * Everything else in this zip is already in the snapshot and
+         * writes at the speed of a string builder. Workouts cost one
+         * aggregate call each, so a year of them is a wait -- and a wait
+         * with no sign of progress is indistinguishable from a hang.
+         */
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
     ) {
         val zip = ZipOutputStream(output)
         // Not closed with `use`: the stream belongs to the caller's content
@@ -110,7 +119,7 @@ object HealthExport {
             when (part) {
                 Part.Daily -> daily(writer, snapshot)
                 Part.Nights -> nights(writer, snapshot, zone)
-                Part.Workouts -> workouts(writer, snapshot, zone)
+                Part.Workouts -> workouts(context, writer, snapshot, zone, onProgress)
                 Part.Food -> food(writer, snapshot, zone)
                 Part.Settings -> writer.write(settings(context).toString(2))
             }
@@ -200,19 +209,62 @@ object HealthExport {
         }
     }
 
-    private fun workouts(writer: OutputStreamWriter, snapshot: HealthSnapshot, zone: ZoneId) {
-        writer.write("date,start,end,kind,title,length_min\n")
-        snapshot.sessions.sortedBy { it.start }.forEach { session ->
+    /**
+     * Every workout, with the figures its own screen shows.
+     *
+     * This file wrote the exercise type as the integer Health Connect
+     * stores -- a column of 76s and 79s -- and no heart rate at all,
+     * while the row offering it promised "kind, length and heart rate".
+     * A promise unkept in the one file somebody opens precisely because
+     * they want the numbers out of this app.
+     *
+     * One aggregate call per session, which is what SessionSummary was
+     * built for. The alternative is reading per-second samples for every
+     * workout in the range: tens of thousands of records to print two
+     * columns.
+     */
+    private suspend fun workouts(
+        context: Context,
+        writer: OutputStreamWriter,
+        snapshot: HealthSnapshot,
+        zone: ZoneId,
+        onProgress: (Int, Int) -> Unit,
+    ) {
+        writer.write(
+            "date,start,end,kind,title,length_min,distance_km,kcal,steps," +
+                "avg_bpm,peak_bpm,device,type_code\n"
+        )
+        val ordered = snapshot.sessions.sortedBy { it.start }
+        onProgress(0, ordered.size)
+        ordered.forEachIndexed { index, session ->
+            // A session whose summary will not read still gets its row.
+            // The times and the kind are already in hand, and a workout
+            // missing from the file would be worse than one with empty
+            // columns.
+            val found = runCatching {
+                SessionReader().summary(context, session.start, session.end)
+            }.getOrNull()
             val row = listOf(
                 session.start.atZone(zone).toLocalDate().toString(),
                 session.start.atZone(zone).toLocalTime().toString(),
                 session.end.atZone(zone).toLocalTime().toString(),
-                session.exerciseType.toString(),
+                quote(session.exerciseName()),
                 quote(session.title.orEmpty()),
                 java.time.Duration.between(session.start, session.end).toMinutes().toString(),
+                found?.distanceKm?.let { "%.2f".format(it) }.orEmpty(),
+                found?.kcal?.roundToInt()?.toString().orEmpty(),
+                found?.steps?.toString().orEmpty(),
+                found?.averageBpm?.toString().orEmpty(),
+                found?.peakBpm?.toString().orEmpty(),
+                quote(session.device?.label.orEmpty()),
+                // Kept beside the name rather than replaced by it: the
+                // name is for reading and the code is for grouping, and
+                // a spreadsheet wants both.
+                session.exerciseType.toString(),
             )
             writer.write(row.joinToString(","))
             writer.write("\n")
+            onProgress(index + 1, ordered.size)
         }
     }
 

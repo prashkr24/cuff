@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.health.Session
+import com.srineere.airbridge.health.exerciseName
 import com.srineere.airbridge.health.SessionDetail
 import com.srineere.airbridge.health.SessionReader
 import com.srineere.airbridge.health.Split

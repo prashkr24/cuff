@@ -72,6 +72,11 @@ internal fun HealthExportScreen(onBack: () -> Unit) {
     var counting by remember { mutableStateOf(true) }
     var saying by remember { mutableStateOf<String?>(null) }
     var writing by remember { mutableStateOf(false) }
+    // How far through the workouts, which is the only part that reads.
+    // Null while nothing is being counted, so the button says "Writing"
+    // for the fast parts and counts only where there is something to
+    // count.
+    var progress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     // Re-read whenever the range changes. It is the same read the tab does,
     // over a different number of days, so nothing here is a second way of
@@ -96,11 +101,14 @@ internal fun HealthExportScreen(onBack: () -> Unit) {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     context.contentResolver.openOutputStream(uri)?.use { out ->
-                        HealthExport.write(context, out, reading, chosen.toSet(), range)
+                        HealthExport.write(context, out, reading, chosen.toSet(), range) { done, total ->
+                            progress = if (total > 1) done to total else null
+                        }
                     } ?: error("Nothing would open that file")
                 }
             }
             writing = false
+            progress = null
             saying = result.fold(
                 onSuccess = { "Saved ${chosen.size} file${if (chosen.size == 1) "" else "s"}." },
                 onFailure = { "Could not write it: ${it.message ?: "unknown error"}" },
@@ -170,7 +178,16 @@ internal fun HealthExportScreen(onBack: () -> Unit) {
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
             )
-            Text(if (writing) "  Writing" else "  Export")
+            Text(
+                when {
+                    !writing -> "  Export"
+                    // Named rather than a bare fraction: this count is
+                    // workouts and nothing else, and "41 of 96" beside a
+                    // word like Writing reads as the whole export.
+                    progress != null -> "  Workout ${progress?.first} of ${progress?.second}"
+                    else -> "  Writing"
+                }
+            )
         }
         Text(
             "Saves a zip through Android's own file picker. Nothing is uploaded; " +

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.health.connect.client.records.ExerciseSessionRecord as Ex
 import com.srineere.airbridge.health.Session
+import com.srineere.airbridge.health.exerciseName
 
 /**
  * What a workout looks like, from the type Health Connect filed it under.

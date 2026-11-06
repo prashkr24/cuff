@@ -42,6 +42,7 @@ import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.health.FoodEntry
 import com.srineere.airbridge.health.HealthReader
 import com.srineere.airbridge.health.Session
+import com.srineere.airbridge.health.exerciseName
 import com.srineere.airbridge.health.SessionReader
 import com.srineere.airbridge.health.SessionSummary
 import java.time.Instant
