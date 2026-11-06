@@ -86,13 +86,51 @@ fun trendOf(readings: List<Reading>, recentCount: Int = 7): Trend? {
         latest = values.last(),
         lowest = sorted.first(),
         highest = sorted.last(),
-        usual = Band(quantile(sorted, 0.25), quantile(sorted, 0.75)),
+        usual = usualBand(sorted),
         recent = recent,
         versusAverage = recent - average,
         change = change,
         smallestWorthwhileChange = standardDeviation(values, average) * 0.5,
     )
 }
+
+/**
+ * What counts as a usual reading: the quartiles, pushed out by half an
+ * interquartile range at each end.
+ *
+ * It was the quartiles alone, which is the wrong band for the question
+ * every screen asks of it. Quartiles put exactly half of anybody's readings
+ * outside by construction -- not sometimes, not when something is wrong,
+ * but half of all days forever -- so "outside your usual" read as an alarm
+ * every other morning and meant nothing. A resting rate of 63 against an
+ * ordinary person's own quartiles of 55 to 60 is outside, and that is
+ * arithmetic rather than a finding.
+ *
+ * The obvious widening is the tenth and ninetieth percentiles, and it is
+ * wrong for a reason worth recording: on the dozen readings a new user has,
+ * the ninetieth percentile sits right next to the highest one, so a single
+ * freak night drags the band open. The test that caught it is still here.
+ *
+ * Quartiles cannot be moved by one outlier at any sample size, so the band
+ * is built from them and then pushed out -- Tukey's fence at half the usual
+ * distance. On anything bell-shaped that is about 1.35 deviations either
+ * side, so roughly five readings in six fall inside: rare enough that
+ * "outside your usual" is worth saying, robust enough that one bad night
+ * cannot buy itself a wider band to hide in.
+ *
+ * Not to be confused with [Trend.smallestWorthwhileChange], which is half a
+ * standard deviation and answers a different question: whether your average
+ * has moved, rather than whether one reading is unusual. The Vitals screen
+ * described that one while drawing this one.
+ */
+internal fun usualBand(sorted: List<Double>): Band {
+    val low = quantile(sorted, 0.25)
+    val high = quantile(sorted, 0.75)
+    val fence = (high - low) * USUAL_FENCE
+    return Band(low - fence, high + fence)
+}
+
+private const val USUAL_FENCE = 0.5
 
 /** Linear interpolation between order statistics, the usual convention. */
 internal fun quantile(sorted: List<Double>, fraction: Double): Double {

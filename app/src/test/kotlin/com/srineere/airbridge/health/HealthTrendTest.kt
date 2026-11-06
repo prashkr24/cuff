@@ -35,12 +35,25 @@ class HealthTrendTest {
     }
 
     @Test
-    fun `usual band is the middle half`() {
+    fun `usual band is the quartiles, pushed out by half an interquartile range`() {
+        // Quartiles of 2 and 4, an interquartile range of 2, so half of one
+        // either side.
         val trend = trendOf(readings(1.0, 2.0, 3.0, 4.0, 5.0))!!
-        assertEquals(2.0, trend.usual.low, 0.001)
-        assertEquals(4.0, trend.usual.high, 0.001)
+        assertEquals(1.0, trend.usual.low, 0.001)
+        assertEquals(5.0, trend.usual.high, 0.001)
         assertTrue(3.0 in trend.usual)
-        assertFalse(5.0 in trend.usual)
+        assertFalse(7.0 in trend.usual)
+    }
+
+    @Test
+    fun `most of a person's own days sit inside their own band`() {
+        // The whole reason this is tenths and not quartiles: quartiles put
+        // half of anybody's readings outside by construction, so "outside
+        // your usual" fired every other morning and said nothing.
+        val month = readings(*(0 until 40).map { 56.0 + (it % 7) - 3 }.toDoubleArray())
+        val trend = trendOf(month)!!
+        val inside = month.count { it.value in trend.usual }
+        assertTrue("$inside of ${month.size}", inside * 10 >= month.size * 7)
     }
 
     @Test
@@ -54,14 +67,18 @@ class HealthTrendTest {
 
     @Test
     fun `one freak night does not swallow the band`() {
-        // The point of quartiles over mean-and-SD: a single outlier moves the
-        // average but must not widen what counts as usual.
+        // The point of quartiles over mean-and-SD, and the reason the band
+        // is not simply the tenth and ninetieth percentiles: on nine
+        // readings the ninetieth sits next to the highest, and this 120
+        // would drag the band to seventy.
         val steady = readings(56.0, 57.0, 58.0, 57.0, 56.0, 58.0, 57.0, 56.0)
         val withSpike = steady + Reading(day = 8, value = 120.0)
         val a = trendOf(steady)!!
         val b = trendOf(withSpike)!!
-        assertEquals(a.usual.low, b.usual.low, 1.0)
-        assertEquals(a.usual.high, b.usual.high, 1.0)
+        assertEquals(a.usual.low, b.usual.low, 1.5)
+        // What is left of the shift is the sample growing by one, which
+        // moves where the quartiles fall, not the size of the outlier.
+        assertEquals(a.usual.high, b.usual.high, 1.5)
         assertTrue("the spike should still show as the highest", b.highest > 100.0)
     }
 

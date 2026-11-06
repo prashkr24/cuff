@@ -103,9 +103,13 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         )
 
         Text(
-            "These are your own ranges, built from your own nights — the band is " +
-                "half a standard deviation of your own baseline, the smallest change " +
-                "worth reacting to. They are not reference ranges and not a diagnosis.",
+            // This used to describe the smallest worthwhile change, which is a
+            // different figure on the same Trend and not the one drawn here.
+            "These are your own ranges, built from your own nights: the band holds " +
+                "about five readings in six of your own, so a reading outside " +
+                "it is one of your own unusual days. They are not reference ranges " +
+                "and not a diagnosis — a figure can sit outside yours and be " +
+                "perfectly ordinary for a person.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.extras.disabled,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
