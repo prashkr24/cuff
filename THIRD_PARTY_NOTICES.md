@@ -1,8 +1,7 @@
 # Third-party notices
 
 No binary from the Google Health or Fitbit Android applications is included in
-this repository, package archive, or built example APK, and none is loaded at
-runtime.
+this repository, in a release APK, or loaded at runtime.
 
 ## Golden Gate
 
@@ -28,27 +27,16 @@ adaptations: a per-stack TLS key resolver and logging cleanups.
 
 - Source: https://github.com/Mbed-TLS/mbedtls, release 2.28.10
   (`2fc8413bfcb51354c8e679141b17b3f1a5942561`)
-- License: dual Apache-2.0 OR GPL-2.0-or-later; used here under Apache-2.0.
-  See [`third_party/mbedtls/LICENSE`](third_party/mbedtls/LICENSE)
+- License: dual Apache-2.0 OR GPL-2.0-or-later; used here under Apache-2.0,
+  whose full text is in [`LICENSE-APACHE-2.0`](LICENSE-APACHE-2.0).
 
 ## lwIP (statically linked into `libgg.so`)
 
 - Source: https://savannah.nongnu.org/projects/lwip/ (Golden Gate submodule pin)
 - Copyright (c) 2001, 2002 Swedish Institute of Computer Science
-- License: BSD 3-Clause, see [`third_party/lwip/COPYING`](third_party/lwip/COPYING).
-  Apps that ship this plugin must reproduce this notice.
+- License: BSD 3-Clause. The upstream text is `COPYING` in the lwIP source
+  tree; it is not vendored here, because the sources are not either — only
+  the compiled result inside `libgg.so` is.
 
-Apps can show all three licenses on Flutter's license page by calling
-`FitbitAir.registerLicenses()` once at startup; the example app does.
-
-## VADER sentiment lexicon (example app)
-
-- Source: https://github.com/cjhutto/vaderSentiment
-- Copyright 2016 C.J. Hutto
-- License: MIT
-
-`example/android/app/src/main/assets/vader/vader_lexicon.txt` keeps the word and
-mean-valence columns of the upstream `vader_lexicon.txt`; the license text ships
-beside it as `LICENSE.txt`. `RelayVader.kt` is a Kotlin port of the upstream
-scoring rules. Hutto, C.J. & Gilbert, E.E. (2014). VADER: A Parsimonious
-Rule-based Model for Sentiment Analysis of Social Media Text. ICWSM-14.
+Both of the above are compiled into the `.so` files this app ships, so a
+release APK redistributes them and must carry these notices with it.

@@ -284,6 +284,12 @@ private fun SplitSection(
                 1f to if (window.isNow) "Today" else dayLabel(days.last()),
             ),
             selected = picked,
+            label = ChartLabel(
+                metric = "Calories logged",
+                unit = "calories a day",
+                window = window.spokenRange(),
+                figure = { count(it.roundToInt().toLong()) },
+            ),
         )
         val onDay = picked?.let { days.getOrNull(it) }
         ChartReadout(
@@ -394,6 +400,11 @@ private fun ProteinSection(
             // such bar, and lighting its last one would invent one.
             highlightLast = window.isNow,
             selected = pickedProtein,
+            label = ChartLabel(
+                metric = "Protein",
+                unit = "grams a day",
+                window = window.spokenRange(),
+            ),
         )
         val at = pickedProtein?.let { days.getOrNull(it) }
         ChartReadout(

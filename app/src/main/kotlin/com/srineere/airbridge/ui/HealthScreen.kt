@@ -254,7 +254,7 @@ private fun HealthHeader(writtenAt: Instant?, loading: Boolean, onRefresh: () ->
             // No age when nothing read carries a write time: only aggregates
             // were granted, and "never" would be a lie -- the steps are
             // right there on the tile.
-            today() + (writtenAt?.let { " · " + ago(it.toEpochMilli(), now) } ?: ""),
+            today(now) + (writtenAt?.let { " · " + ago(it.toEpochMilli(), now) } ?: ""),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.extras.disabled,
         )
@@ -277,13 +277,24 @@ private fun HealthHeader(writtenAt: Instant?, loading: Boolean, onRefresh: () ->
     }
 }
 
-/** "Tue 4 Nov" here, and whatever that is wherever the phone is set. */
+/**
+ * "Tue 4 Nov" here, and whatever that is wherever the phone is set.
+ *
+ * [now] is the header's own minute hand, from [nowTicking], and it is the
+ * whole reason this takes an argument. The date used to be remembered on
+ * the pattern alone and then kept for as long as the tab was composed, so a
+ * tab left open overnight read "Mon 10 Nov · 3 min ago" on a Tuesday
+ * morning -- a frozen date beside an age that had gone on ticking all night
+ * next to it. The formatting still only runs when the day actually turns
+ * over; what the minute buys is the chance to notice that it has.
+ */
 @Composable
-private fun today(): String {
+private fun today(now: Long): String {
     val locale = Locale.getDefault()
     val pattern = remember(locale) { DateFormat.getBestDateTimePattern(locale, "EEEdMMM") }
-    return remember(pattern) {
-        LocalDate.now().format(DateTimeFormatter.ofPattern(pattern, locale))
+    val day = remember(now) { LocalDate.now() }
+    return remember(pattern, day) {
+        day.format(DateTimeFormatter.ofPattern(pattern, locale))
     }
 }
 
@@ -296,17 +307,49 @@ private fun today(): String {
  * height or the grid goes ragged, and a tile whose height follows its content
  * changes size when a number arrives. The two that carry a chart with a scale
  * get a little more, because a gutter and a footer are not free.
+ *
+ * Fixed in dp, though, is not fixed on the screen: the text inside a tile
+ * grows with the system font size and the tile did not. At Largest the
+ * heading and the figure ate the whole 112 dp of an S, the chart under them
+ * is a `weight(1f)` and was squeezed to nothing, and the tile quietly became
+ * a number with no shape behind it. Nothing crashed -- every line is
+ * `maxLines = 1` -- which is why it took a font setting to find.
  */
-internal fun tileHeight(kind: TileKind, size: TileSize): Dp = when (size) {
-    // S, M and W all stand one row high, and they have to: a wide tile
-    // exists to sit beside a small one, and two heights in a row is a
-    // ragged grid.
-    TileSize.S, TileSize.M, TileSize.W -> 112.dp
-    // A chart with a scale needs the room its gutter and footer take, so a
-    // tile that carries one is a little taller than one that does not.
-    TileSize.L -> if (kind == TileKind.Vitals || kind == TileKind.Activity) 120.dp else 132.dp
-    TileSize.XL -> 216.dp
+@Composable
+internal fun tileHeight(kind: TileKind, size: TileSize): Dp {
+    val base = when (size) {
+        // S, M and W all stand one row high, and they have to: a wide tile
+        // exists to sit beside a small one, and two heights in a row is a
+        // ragged grid.
+        TileSize.S, TileSize.M, TileSize.W -> 112.dp
+        // A chart with a scale needs the room its gutter and footer take, so
+        // a tile that carries one is a little taller than one that does not.
+        TileSize.L -> if (kind == TileKind.Vitals || kind == TileKind.Activity) 120.dp else 132.dp
+        TileSize.XL -> 216.dp
+    }
+    return base * tileGrowth()
 }
+
+/**
+ * How much taller a tile stands when the text in it is bigger.
+ *
+ * Straight proportion, clamped at both ends, and the clamp is the whole
+ * decision here.
+ *
+ * Nothing below 1: a tile set to small text has no more chart to draw than
+ * one at normal size, and shrinking the grid on a setting that was asking
+ * for smaller *letters* would be answering a question nobody put.
+ *
+ * Nothing above 1.5 either. Android 14's non-linear font scaling reports up
+ * to 2, and at 2 the XL hero would stand 432 dp -- half a phone for one
+ * tile, and a tab you scroll a screen at a time to see three readings. 1.5
+ * covers the largest setting in Display > Font size, which is where the
+ * squeezed chart was actually seen, and leaves the grid a grid above it: a
+ * tile a little tight is a better answer than a tab that is a list.
+ */
+@Composable
+private fun tileGrowth(): Float =
+    androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceIn(1f, 1.5f)
 
 /**
  * One tile, at whatever size it was given.

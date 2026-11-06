@@ -25,6 +25,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,12 +52,12 @@ import java.util.Locale
  * from resizing it.
  */
 @Stable
-internal class ChartWindow(initialLength: Int) {
+internal class ChartWindow(initialLength: Int, initialOffset: Int = 0) {
     var length by mutableIntStateOf(initialLength)
         private set
 
     /** Days between the end of this window and today. Zero is the present. */
-    var offset by mutableIntStateOf(0)
+    var offset by mutableIntStateOf(initialOffset)
         private set
 
     /** How far back the reader has to go to cover this window. */
@@ -92,9 +95,24 @@ internal class ChartWindow(initialLength: Int) {
         rows.filter { dayOf(it) in from..until }.sortedBy(dayOf)
 }
 
+/**
+ * Both numbers, and only those two: everything else a window answers is
+ * worked out from them and from today.
+ *
+ * A window is the one piece of state on these screens that is expensive to
+ * lose -- it is three taps to get back to "the week before last", and the
+ * process can die while the phone is in a pocket. [initialOffset] exists for
+ * this and nothing else; nothing else may set an offset without going
+ * through [back], [forward] or [select].
+ */
+internal val ChartWindowSaver: Saver<ChartWindow, Any> = listSaver(
+    save = { listOf(it.length, it.offset) },
+    restore = { ChartWindow(it[0], it[1]) },
+)
+
 @Composable
 internal fun rememberChartWindow(length: Int): ChartWindow =
-    remember { ChartWindow(length) }
+    rememberSaveable(saver = ChartWindowSaver) { ChartWindow(length) }
 
 /**
  * The window's controls: how long, how far back, and which days that is.
@@ -208,6 +226,19 @@ internal fun ChartWindow.rangeLabel(): String {
     val end = LocalDate.ofEpochDay(until)
     return "${formatter.format(start)} – ${formatter.format(end)}"
 }
+
+/**
+ * The same range, phrased to sit inside a spoken sentence.
+ *
+ * Two differences from the label above, both because this one is read out
+ * rather than read: the capital goes, since it follows a comma rather than
+ * starting a line, and the dash becomes the word it stands for — a screen
+ * reader says nothing at all for "–", so "6 to 12 Oct" is one range and
+ * "6 12 Oct" is two numbers.
+ */
+@Composable
+internal fun ChartWindow.spokenRange(): String =
+    rangeLabel().replace("–", "to").replaceFirstChar { it.lowercase(Locale.getDefault()) }
 
 /**
  * Lets a finger pick a point out of a chart.

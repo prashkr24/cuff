@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,7 +81,10 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val axes = rememberAxes()
     val nights = data.nights
     val window = rememberChartWindow(14)
-    var picked by remember { mutableStateOf<Int?>(null) }
+    // Saveable with the window it indexes into. Everything below the chart
+    // follows this one number, so losing it to a process death silently
+    // moves the whole screen back onto last night.
+    var picked by rememberSaveable { mutableStateOf<Int?>(null) }
     val shown = window.slice(nights) { it.day }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -206,6 +210,15 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     goalColour = extras.sleepRem,
                     goalLabel = "${goals.sleepMinutes / 60}h",
                     selected = picked,
+                    // The stages are the drawing; how long each night came
+                    // to is the reading. The breakdown is a second question
+                    // and it gets its own chart further down the screen.
+                    label = ChartLabel(
+                        metric = "Time asleep",
+                        unit = "a night",
+                        window = window.spokenRange(),
+                        figure = { spokenMinutes(it) },
+                    ),
                 )
                 StageKey()
                 val at = picked?.let { shown.getOrNull(it) }
@@ -461,6 +474,17 @@ private fun NightDetail(night: Night, extras: AirExtraColors) {
                     .scrubbableAcross(0.dp) { at = it },
                 selected = at,
                 markerColour = extras.sleepRem,
+                // A hypnogram has no range to read out, so the sentence is
+                // the four totals the lanes add up to -- said in the order
+                // the lanes run, deepest last, so it matches the picture
+                // for anyone who can see both.
+                description = night.stages().let { stages ->
+                    "Sleep stages. " + dayLabel(night.day, "Last night") +
+                        ". Awake " + spokenMinutes(stages.awake) +
+                        ", REM " + spokenMinutes(stages.rem) +
+                        ", light " + spokenMinutes(stages.light) +
+                        ", deep " + spokenMinutes(stages.deep) + "."
+                },
             )
         }
         // Which stage, and when. A hypnogram's whole point is where in the

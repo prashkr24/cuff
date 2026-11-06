@@ -100,6 +100,23 @@ data class Session(
 )
 
 /**
+ * The three additive figures one stretch of time holds.
+ *
+ * Steps, distance and burn, each counted from **its own** writers rather
+ * than from one set borrowed across all three: the sets genuinely differ,
+ * and a workout whose distance came from everybody while its steps came
+ * from the band alone is a row whose stride length is invented.
+ *
+ * Null for a figure is "could not be read" -- no permission, no Health
+ * Connect, or every writer excluded -- and is not zero.
+ */
+data class SpanTotals(
+    val steps: Long? = null,
+    val distanceKm: Double? = null,
+    val kcal: Double? = null,
+)
+
+/**
  * One thing eaten, as whatever app wrote it recorded it.
  *
  * Every field but the time is optional, because every field but the time is
@@ -186,6 +203,46 @@ data class HealthSnapshot(
     val writtenAt: Instant? = null,
     val missingPermissions: Set<String> = emptySet(),
 )
+
+/**
+ * Where one local day starts and stops, as instants.
+ *
+ * Asked of the zone rather than worked out as twenty-four hours, because a
+ * day with a clock change in it is twenty-three hours long or twenty-five,
+ * and neither end lands where the arithmetic would put it. The daily reads
+ * get this free from `Period`, which knows what a day is; an hourly read
+ * slices by `Duration`, which does not, so it has to ask here.
+ */
+fun localDay(day: LocalDate, zone: ZoneId): Pair<Instant, Instant> =
+    day.atStartOfDay(zone).toInstant() to day.plusDays(1).atStartOfDay(zone).toInstant()
+
+/**
+ * Hourly buckets folded into twenty-four slots, each named for the hour the
+ * clock on the wall showed.
+ *
+ * Twenty-four slots even on a day that is not twenty-four hours long. What
+ * these are drawn against is a clock face, and "the nine o'clock hour" is
+ * what anyone reading the chart means by a slot; a list whose length moved
+ * twice a year would have to be explained to every caller that indexes it.
+ * The cost is one decision at each end of a clock change, and both are made
+ * here rather than left to the caller:
+ *
+ *  - **Spring forward.** The local 02:00 never happened, so its slot stays
+ *    zero. Nothing is lost, because there is nothing to lose, and every
+ *    later bucket still lands on the hour it was actually walked. Indexing
+ *    by hours elapsed since midnight did not: it put the whole afternoon
+ *    one slot early and left tomorrow's midnight sitting in slot 23.
+ *  - **Autumn.** 01:00 happens twice and both runs are summed into slot 1.
+ *    Two hours in one slot is the only honest answer when the slot is named
+ *    after a clock reading that two hours share, and summing is why these
+ *    are added rather than assigned. Reading a fixed twenty-four hours from
+ *    midnight used to drop the last local hour of such a day entirely.
+ */
+fun byLocalHour(buckets: List<Pair<Instant, Double>>, zone: ZoneId): List<Double> {
+    val hours = DoubleArray(24)
+    buckets.forEach { (start, value) -> hours[start.atZone(zone).hour] += value }
+    return hours.toList()
+}
 
 /**
  * Reads Health Connect into a [HealthSnapshot].
@@ -411,20 +468,32 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         // Macros a day as well as today's, for the split over a fortnight.
         // Three more aggregates, which is the cost of showing whether the
         // protein line moved rather than only where it is now.
+        //
+        // From the same writers the day's calories are, and that is not a
+        // detail: a macro total is the same sum over the same records as
+        // the calorie total, so reading the two from different writers
+        // puts a day on the Nutrition screen whose protein, carbs and fat
+        // cannot add up to the figure printed above them. The food *log*
+        // below stays unfiltered, deliberately, and the comment there says
+        // why -- a list is not a sum and cannot be double-counted.
         val proteinDaily = if (allowed(NutritionRecord::class)) {
-            dailyTotals(client, NutritionRecord.PROTEIN_TOTAL, from, today) { it.inGrams }
+            dailyTotals(client, NutritionRecord.PROTEIN_TOTAL, from, today, foodOrigins) {
+                it.inGrams
+            }
         } else {
             emptyList()
         }
         val carbsDaily = if (allowed(NutritionRecord::class)) {
-            dailyTotals(client, NutritionRecord.TOTAL_CARBOHYDRATE_TOTAL, from, today) {
+            dailyTotals(client, NutritionRecord.TOTAL_CARBOHYDRATE_TOTAL, from, today, foodOrigins) {
                 it.inGrams
             }
         } else {
             emptyList()
         }
         val fatDaily = if (allowed(NutritionRecord::class)) {
-            dailyTotals(client, NutritionRecord.TOTAL_FAT_TOTAL, from, today) { it.inGrams }
+            dailyTotals(client, NutritionRecord.TOTAL_FAT_TOTAL, from, today, foodOrigins) {
+                it.inGrams
+            }
         } else {
             emptyList()
         }
@@ -433,6 +502,15 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         // entry and six entries adding to 1,900 are different kinds of day,
         // and only the count can tell them apart: one day in a month with a
         // "deficit" of 2,000 is almost always a day nobody logged.
+        //
+        // Unfiltered, and it is the one nutrition read that is. A meal
+        // logged in MyFitnessPal is a meal eaten and the log should show
+        // it; a list of entries cannot be doubled the way a sum can, and
+        // every row carries the package that wrote it in `source`, so a
+        // second writer is something you can see rather than something
+        // quietly added in. `mealsDaily` is a count of those same rows and
+        // follows it. Do not hand this `foodOrigins`: picking one app to
+        // settle a calorie argument would empty somebody's food history.
         val food = if (allowed(NutritionRecord::class)) {
             records(client, NutritionRecord::class, from, today).map { entry ->
                 FoodEntry(
@@ -453,18 +531,21 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         }
         val mealsDaily = food.groupingBy { it.day }.eachCount()
 
+        // Today's three, counted from the writers today's calories are
+        // counted from, for the reason the dailies above are: the rows
+        // under a total have to add up to it.
         val protein = if (allowed(NutritionRecord::class)) {
-            total(client, NutritionRecord.PROTEIN_TOTAL, today)?.inGrams
+            total(client, NutritionRecord.PROTEIN_TOTAL, today, foodOrigins)?.inGrams
         } else {
             null
         }
         val carbs = if (allowed(NutritionRecord::class)) {
-            total(client, NutritionRecord.TOTAL_CARBOHYDRATE_TOTAL, today)?.inGrams
+            total(client, NutritionRecord.TOTAL_CARBOHYDRATE_TOTAL, today, foodOrigins)?.inGrams
         } else {
             null
         }
         val fat = if (allowed(NutritionRecord::class)) {
-            total(client, NutritionRecord.TOTAL_FAT_TOTAL, today)?.inGrams
+            total(client, NutritionRecord.TOTAL_FAT_TOTAL, today, foodOrigins)?.inGrams
         } else {
             null
         }
@@ -534,6 +615,74 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
                 ),
             )[StepsRecord.COUNT_TOTAL]
         }
+    }
+
+    /**
+     * Steps, distance and burn inside one stretch of time, each counted
+     * from the writers that reading is counted from.
+     *
+     * One call rather than three because the client and the granted set are
+     * the expensive part, and fetching them once per figure is precisely
+     * the duplicated permission round trip [HealthSources.writersOf] was
+     * given a `granted` parameter to stop.
+     *
+     * The session screens are the callers, and they are why this exists.
+     * Their steps already came through here; their distance and their
+     * calories did not, so a run reported its distance and burn from every
+     * writer while the day it sat inside counted one, and the same hour
+     * read differently depending on which screen you were looking at.
+     * Heart rate is deliberately not in here: a point measurement with two
+     * sources is more readings, not a wrong number.
+     */
+    suspend fun spanTotals(context: Context, from: Instant, until: Instant): SpanTotals {
+        val client = HealthConnect.clientOrNull(context) ?: return SpanTotals()
+        val granted = HealthConnect.granted(client)
+
+        // The metric is handed in beside the reading rather than taken from
+        // `written.metric`, which is erased to AggregateMetric<*> and would
+        // give back an Any to cast. The enum already pairs the two.
+        suspend fun <T : Any> span(written: Written, metric: AggregateMetric<T>): T? {
+            if (HealthPermission.getReadPermission(written.type) !in granted) return null
+            val origins = originsFor(context, client, granted, written)
+            // Every writer excluded, which Health Connect would read as
+            // every writer included. See [filtersToNothing].
+            if (origins.filtersToNothing()) return null
+            return guard("${written.key} in a span") {
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(metric),
+                        timeRangeFilter = TimeRangeFilter.between(from, until),
+                        dataOriginFilter = origins.toDataOrigins(),
+                    ),
+                )[metric]
+            }
+        }
+
+        return SpanTotals(
+            steps = span(Written.Steps, StepsRecord.COUNT_TOTAL),
+            distanceKm = span(Written.Distance, DistanceRecord.DISTANCE_TOTAL)?.inKilometers,
+            kcal = span(Written.Burned, TotalCaloriesBurnedRecord.ENERGY_TOTAL)?.inKilocalories,
+        )
+    }
+
+    /**
+     * The packages one reading should be counted from, or null to count
+     * them all.
+     *
+     * Public for the one caller that cannot use [spanTotals]: the session
+     * screen builds its kilometre splits out of the distance *records*
+     * rather than an aggregate, and those have to come from the writers the
+     * session's own distance figure came from, or the splits describe a
+     * different run from the total above them. Resolving the set stays
+     * here, where the reasoning for it lives; only applying it is over
+     * there.
+     *
+     * Null when Health Connect is absent as well, which costs nothing: a
+     * caller without a client has no read to filter.
+     */
+    suspend fun originsOf(context: Context, written: Written): Set<String>? {
+        val client = HealthConnect.clientOrNull(context) ?: return null
+        return originsFor(context, client, HealthConnect.granted(client), written)
     }
 
     /**
@@ -700,11 +849,15 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
 
     /** One figure for one day. */
     /**
-     * One figure an hour, across one day, from midnight.
+     * One figure an hour, across one day, by the local clock.
      *
      * Always twenty-four entries. An hour Health Connect has nothing for is
      * a zero rather than a missing bucket, because the chart these feed is a
      * running total and a gap in the middle of one is meaningless.
+     *
+     * The day's two ends come from [localDay] and each bucket's slot from
+     * [byLocalHour]; neither is counted in elapsed hours, and the comments
+     * on those two say what a clock change does to each.
      */
     // metricKey is library-group restricted and lint fails the build on it.
     // It is read for a log label and nothing else -- the string that names
@@ -719,22 +872,21 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         convert: (T) -> Double,
     ): List<Double> = guard("read hourly ${metric.metricKey}") {
         if (origins.filtersToNothing()) return List(24) { 0.0 }
-        val start = day.atStartOfDay(zone).toInstant()
+        val (start, end) = localDay(day, zone)
         val buckets = client.aggregateGroupByDuration(
             AggregateGroupByDurationRequest(
                 metrics = setOf(metric),
-                timeRangeFilter = TimeRangeFilter.between(start, start.plus(Duration.ofDays(1))),
+                timeRangeFilter = TimeRangeFilter.between(start, end),
                 timeRangeSlicer = Duration.ofHours(1),
                 dataOriginFilter = origins.toDataOrigins(),
             ),
         )
-        val hours = DoubleArray(24)
-        buckets.forEach { bucket ->
-            val value = bucket.result[metric] ?: return@forEach
-            val hour = Duration.between(start, bucket.startTime).toHours().toInt()
-            if (hour in 0..23) hours[hour] = convert(value)
-        }
-        hours.toList()
+        byLocalHour(
+            buckets.mapNotNull { bucket ->
+                bucket.result[metric]?.let { bucket.startTime to convert(it) }
+            },
+            zone,
+        )
     } ?: List(24) { 0.0 }
 
     private suspend fun <T : Any> total(

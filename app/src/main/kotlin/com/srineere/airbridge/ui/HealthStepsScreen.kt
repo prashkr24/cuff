@@ -93,6 +93,11 @@ internal fun HealthStepsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     colour = steps,
                     track = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.size(86.dp),
+                    // The ring and the percentage inside it become one node
+                    // saying the figure the percentage is of — "83% of goal"
+                    // on its own is a proportion of something unnamed.
+                    description = stepsSpoken("today")
+                        .standing(data.stepsToday.toDouble(), goal.takeIf { it > 0 }?.toDouble()),
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
@@ -164,6 +169,7 @@ internal fun HealthStepsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     ),
                     goalLabel = shortNumber(goal.toDouble()),
                     selected = picked,
+                    label = stepsSpoken(window.spokenRange()),
                 )
                 val at = picked?.let { shown.getOrNull(it) }
                 ChartReadout(
@@ -282,6 +288,7 @@ private fun ByWeek(series: List<Reading>, colour: Color, axes: Axes) {
             axes = axes,
             xTicks = listOf(0f to "4 wk ago", 1f to "last 7 d"),
             selected = picked,
+            label = stepsSpoken("weekly average, four weeks"),
         )
         picked?.let { at ->
             weeks.getOrNull(at)?.let { value ->
@@ -303,6 +310,23 @@ private fun ByWeek(series: List<Reading>, colour: Color, axes: Axes) {
         )
     }
 }
+
+/**
+ * Steps, said rather than drawn.
+ *
+ * One builder for the four charts on this screen. Written out four times
+ * they would be four chances to drift, and the whole value of a spoken
+ * chart is that it reads the same on every screen that has one.
+ *
+ * Grouped through [count] rather than left as bare digits: a reader handed
+ * "8412" is guessing whether that is a number or a reference.
+ */
+private fun stepsSpoken(window: String) = ChartLabel(
+    metric = "Steps",
+    unit = "steps",
+    window = window,
+    figure = { count(it.roundToInt().toLong()) },
+)
 
 /**
  * When, not just how many.
@@ -342,6 +366,9 @@ private fun WhenYouWalk(hourly: List<Double>, colour: Color, axes: Axes) {
             xTicks = listOf(0f to "00", 0.25f to "06", 0.5f to "12", 0.75f to "18", 1f to "24"),
             highlightLast = false,
             selected = picked,
+            // "Latest" here is the hour that has just gone, not a total, and
+            // the window says so: twenty-four bars are twenty-four hours.
+            label = stepsSpoken("by hour, today"),
         )
         picked?.let { at ->
             hourly.getOrNull(at)?.let { value ->

@@ -138,6 +138,11 @@ internal fun HealthHrvScreen(onBack: () -> Unit) {
                     xTicks = dayTicks(trend.readings, window.isNow),
                     yLabel = { "${it.roundToInt()}" },
                     selected = picked,
+                    label = ChartLabel(
+                        metric = "Heart rate variability",
+                        unit = "milliseconds",
+                        window = window.spokenRange(),
+                    ),
                 )
                 val at = picked?.let { readings.getOrNull(it) }
                 ChartReadout(

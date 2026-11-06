@@ -55,12 +55,20 @@ internal enum class TrendMetric(
     /** The step the histogram buckets by, in the metric's own units. */
     val bucket: Double,
     val decimals: Int,
+    /**
+     * The same unit with nothing abbreviated, for a screen reader.
+     *
+     * "bpm" is four characters on a card and a reader saying "b p m"; "°C"
+     * is a degree sign most readers skip entirely. Written out once here
+     * rather than guessed at by each chart that needs to say one.
+     */
+    val spokenUnit: String,
 ) {
-    Resting("Resting heart rate", "bpm", "healthtrend", 1.0, 0),
-    Hrv("HRV", "ms", "healthhrv", 2.0, 0),
-    Breathing("Breathing rate", "br/min", "healthbreathing", 0.5, 1),
-    Skin("Skin temperature", "°C", "healthskin", 0.1, 1),
-    Weight("Weight", "kg", "healthweight", 0.5, 1),
+    Resting("Resting heart rate", "bpm", "healthtrend", 1.0, 0, "beats per minute"),
+    Hrv("HRV", "ms", "healthhrv", 2.0, 0, "milliseconds"),
+    Breathing("Breathing rate", "br/min", "healthbreathing", 0.5, 1, "breaths per minute"),
+    Skin("Skin temperature", "°C", "healthskin", 0.1, 1, "degrees Celsius"),
+    Weight("Weight", "kg", "healthweight", 0.5, 1, "kilograms"),
     ;
 
     companion object {
@@ -195,6 +203,12 @@ internal fun HealthTrendScreen(
                     xTicks = dayTicks(trend.readings, window.isNow),
                     yLabel = { metric.format(it) },
                     selected = picked,
+                    label = ChartLabel(
+                        metric = metric.title,
+                        unit = metric.spokenUnit,
+                        window = window.spokenRange(),
+                        figure = { metric.format(it) },
+                    ),
                 )
                 val at = picked?.let { readings.getOrNull(it) }
                 ChartReadout(

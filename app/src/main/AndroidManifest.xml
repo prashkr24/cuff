@@ -7,6 +7,16 @@
     <!-- Sideloaded relay: the user is asked for this in Device, and Android
          shows its own confirmation. Without it Doze stops background work. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- The step check runs on a wall-clock alarm, because the handler it
+         used to run on counts in uptime and stops while the phone is
+         suspended. From API 31 an exact alarm needs a right, and the
+         battery exemption above already carries it: this is the second
+         path, granted at install on 31 and 32 and off by default from 33
+         until somebody turns "Alarms & reminders" on. Nothing requires it.
+         Without either, CalendarRelayService.armStepAlarm answers false and
+         the check goes back to the handler. Deliberately not
+         USE_EXACT_ALARM, which is for apps that are alarm clocks. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Optional, and asked for only when the People list is opened: names for
          people who have not called yet. Numbers are hashed, never stored. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -56,6 +66,12 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Where the step check's alarm lands. Not exported and with no
+             intent filter: the only thing that reaches it is this app's own
+             PendingIntent, which AlarmManager delivers under this app's
+             identity. -->
+        <receiver android:name=".StepCheckReceiver"
+            android:exported="false" />
         <service android:name=".CalendarNotificationListener"
             android:exported="true"
             android:label="@string/app_name"

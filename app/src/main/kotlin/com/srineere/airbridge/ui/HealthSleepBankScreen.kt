@@ -170,6 +170,18 @@ internal fun HealthSleepBankScreen(onBack: () -> Unit) {
                 ),
                 label = { span(it) },
                 selected = picked,
+                // The balance carried forward, which is the line and the
+                // figure at the top of the screen. The bars are the working
+                // behind it, and reading out a fortnight of them one by one
+                // is not a summary.
+                spokenAs = ChartLabel(
+                    metric = "Sleep balance",
+                    unit = "against your goal",
+                    window = window.spokenRange(),
+                    figure = {
+                        (if (it < 0) "down " else "up ") + spokenMinutes(abs(it))
+                    },
+                ),
             )
             val at = picked?.takeIf { it in days.indices }
             ChartReadout(

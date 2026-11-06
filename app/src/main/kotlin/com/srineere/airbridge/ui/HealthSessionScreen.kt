@@ -230,6 +230,11 @@ internal fun HealthSessionScreen(startMillis: Long, onBack: () -> Unit) {
                     },
                     markPeak = true,
                     peakColour = extras.zonePeak,
+                    label = ChartLabel(
+                        metric = "Heart rate",
+                        unit = "beats per minute",
+                        window = "this session",
+                    ),
                 )
                 BeatReadout(found.samples, atBeat)
             }

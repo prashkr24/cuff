@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.health.Band
@@ -46,6 +48,7 @@ private fun ChartCanvas(
     modifier: Modifier,
     height: Dp,
     fill: Boolean,
+    spoken: String?,
     draw: DrawScope.() -> Unit,
 ) = Canvas(
     modifier
@@ -53,9 +56,91 @@ private fun ChartCanvas(
         .then(if (fill) Modifier.fillMaxHeight() else Modifier.height(height))
         // One hook, eleven charts. Put here rather than on each of them so
         // a chart added later arrives the same way without being told to.
-        .chartEntrance(),
+        .chartEntrance()
+        .spokenSemantics(spoken),
     draw,
 )
+
+/**
+ * The chart, as the one thing a screen reader can be told about it.
+ *
+ * `clearAndSetSemantics` rather than `semantics`: there is nothing under a
+ * chart but a Canvas, and a thousand drawn circles are a thousand nothings
+ * to walk through. The node carries the sentence and no tree at all.
+ *
+ * A chart whose caller has written no sentence stays as it was -- unreachable
+ * rather than reachable and silent, which is the better of the two failures
+ * and the one a tile wants anyway, since the tile's own text says the number.
+ */
+private fun Modifier.spokenSemantics(spoken: String?): Modifier =
+    if (spoken == null) this
+    else this.clearAndSetSemantics { contentDescription = spoken }
+
+/**
+ * What a chart says when it is read out rather than looked at.
+ *
+ * The same sentence everywhere, because this wording lands on a dozen
+ * screens and a tab with two ways of saying the same thing has one too
+ * many: what the chart is, over what stretch, the range it covers, and the
+ * reading that matters most. "Resting heart rate, last 30 days. 52 to 61
+ * beats per minute. Latest 54."
+ *
+ * [unit] is written out as words -- "beats per minute", not "bpm" -- because
+ * this string is spoken. A reader left to spell an abbreviation has told
+ * you less than one that says the words.
+ *
+ * The figures come from the same lists the chart draws, so the sentence
+ * cannot drift from the picture the way a fixed description would.
+ */
+internal data class ChartLabel(
+    val metric: String,
+    val unit: String,
+    /** The stretch of time, phrased to sit inside a sentence rather than above one. */
+    val window: String? = null,
+    /** How one figure is said. Whole numbers unless the caller knows better. */
+    val figure: (Double) -> String = { it.roundToInt().toString() },
+)
+
+/** A chart that covers a range: the range, then where it has got to. */
+internal fun ChartLabel.reading(
+    lowest: Double?,
+    highest: Double?,
+    latest: Double? = null,
+    goal: Double? = null,
+): String = buildString {
+    opening(this@reading)
+    if (lowest == null || highest == null) {
+        // A chart with nothing in it still has to say what it would have
+        // shown, or a reader arrives at an unexplained blank.
+        append("Nothing recorded.")
+    } else {
+        if (lowest == highest) append(figure(lowest))
+        else append(figure(lowest)).append(" to ").append(figure(highest))
+        append(" ").append(unit).append(".")
+        if (latest != null) append(" Latest ").append(figure(latest)).append(".")
+    }
+    goalClause(this@reading, goal)
+}
+
+/** A chart that is one figure against a target rather than a range. */
+internal fun ChartLabel.standing(value: Double?, goal: Double? = null): String = buildString {
+    opening(this@standing)
+    if (value == null) append("Nothing recorded.")
+    else append(figure(value)).append(" ").append(unit).append(".")
+    goalClause(this@standing, goal)
+}
+
+/** "Resting heart rate, last 30 days. " — what it is, and over what. */
+private fun StringBuilder.opening(label: ChartLabel) {
+    append(label.metric)
+    if (label.window != null) append(", ").append(label.window)
+    append(". ")
+}
+
+/** The goal line, said rather than drawn. Silent where there is no goal. */
+private fun StringBuilder.goalClause(label: ChartLabel, goal: Double?) {
+    if (goal != null) append(" Goal ").append(label.figure(goal)).append(".")
+}
 
 
 /**
@@ -94,8 +179,10 @@ internal fun ScatterTrend(
     xTicks: List<Pair<Float, String>> = emptyList(),
     yLabel: (Double) -> String = { it.roundToInt().toString() },
     selected: Int? = null,
+    label: ChartLabel? = null,
 ) {
-    ChartCanvas(modifier, height, fill) {
+    val spoken = label?.let { it.reading(trend.lowest, trend.highest, trend.latest) }
+    ChartCanvas(modifier, height, fill, spoken) {
         val values = trend.readings.map { it.value }
         if (values.isEmpty()) return@ChartCanvas
 
@@ -181,7 +268,9 @@ internal fun MiniScatter(
     height: Dp = 30.dp,
     fill: Boolean = false,
 ) {
-    ChartCanvas(modifier, height, fill) {
+    // No sentence of its own: the only place a sparkline this small is drawn
+    // is inside a tile, and the tile already says the metric and the figure.
+    ChartCanvas(modifier, height, fill, null) {
         if (readings.isEmpty()) return@ChartCanvas
         val values = readings.map { it.value }
         val lowest = values.min()
@@ -232,8 +321,12 @@ internal fun GoalBars(
     highlightLast: Boolean = true,
     yLabel: (Double) -> String = { shortNumber(it) },
     selected: Int? = null,
+    label: ChartLabel? = null,
 ) {
-    ChartCanvas(modifier, height, fill) {
+    val spoken = label?.let {
+        it.reading(values.minOrNull(), values.maxOrNull(), values.lastOrNull(), target)
+    }
+    ChartCanvas(modifier, height, fill, spoken) {
         if (values.isEmpty()) return@ChartCanvas
         val top = maxOf(values.max(), target ?: 0.0).takeIf { it > 0.0 } ?: 1.0
         val plot = if (axes == null) {
@@ -316,8 +409,19 @@ internal fun StageBars(
     goalColour: Color = rem,
     goalLabel: String? = null,
     selected: Int? = null,
+    label: ChartLabel? = null,
 ) {
-    ChartCanvas(modifier, height, fill) {
+    // The stages are the drawing; what a reader wants is how long each night
+    // came to, which is the one figure the bars are tall by.
+    val spoken = label?.let {
+        it.reading(
+            lowest = nights.minOfOrNull { night -> night.total },
+            highest = nights.maxOfOrNull { night -> night.total },
+            latest = nights.lastOrNull()?.total,
+            goal = goalMinutes,
+        )
+    }
+    ChartCanvas(modifier, height, fill, spoken) {
         if (nights.isEmpty()) return@ChartCanvas
         val longest = maxOf(nights.maxOf { it.total }, goalMinutes ?: 0.0).takeIf { it > 0.0 } ?: 1.0
         val plot = if (axes == null) {
@@ -392,8 +496,12 @@ internal fun DivergingBars(
     target: Double? = null,
     goalLabel: String? = null,
     selected: Int? = null,
+    label: ChartLabel? = null,
 ) {
-    ChartCanvas(modifier, height, fill) {
+    val spoken = label?.let {
+        it.reading(values.minOrNull(), values.maxOrNull(), values.lastOrNull(), target)
+    }
+    ChartCanvas(modifier, height, fill, spoken) {
         if (values.isEmpty()) return@ChartCanvas
         val reach = maxOf(values.maxOf { abs(it) }, abs(target ?: 0.0)).takeIf { it > 0.0 } ?: 1.0
         val plot = if (axes == null) {
@@ -465,8 +573,12 @@ internal fun BankChart(
     xTicks: List<Pair<Float, String>> = emptyList(),
     label: (Double) -> String = { shortNumber(it) },
     selected: Int? = null,
+    spokenAs: ChartLabel? = null,
 ) {
-    ChartCanvas(modifier, height, false) {
+    // The line is the answer this chart exists for, so the sentence is where
+    // the balance stands rather than how deep any one night went.
+    val spoken = spokenAs?.standing(running.lastOrNull())
+    ChartCanvas(modifier, height, false, spoken) {
         if (nightly.isEmpty()) return@ChartCanvas
         val reach = maxOf(
             nightly.filterNotNull().maxOfOrNull { abs(it) } ?: 0.0,
@@ -556,6 +668,12 @@ internal fun GoalRing(
     track: Color,
     modifier: Modifier = Modifier,
     stroke: Dp = 7.dp,
+    /**
+     * A ring knows a fraction and nothing else, so the sentence is the
+     * caller's to write -- from [ChartLabel.standing], so it reads like
+     * every other chart on the tab.
+     */
+    description: String? = null,
     content: @Composable () -> Unit,
 ) {
     val met = progress >= 1f
@@ -565,7 +683,13 @@ internal fun GoalRing(
     // the goal and back -- a ring that completes and then un-completes has
     // told you something that is not true.
     val sweep = animatedFraction(progress.coerceIn(0f, 1f))
-    Box(modifier, contentAlignment = androidx.compose.ui.Alignment.Center) {
+    // On the whole ring rather than the Canvas inside it: what [content]
+    // draws in the middle is the same figure said again, and a reader that
+    // hears the sentence and then the number has been told twice.
+    Box(
+        modifier.spokenSemantics(description),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
         Canvas(Modifier.fillMaxSize()) {
             val width = stroke.toPx()
             val inset = width / 2f
@@ -664,6 +788,7 @@ internal fun DayHeartLine(
     peakColour: Color = colour,
     /** Where the finger is, as a fraction across the plot. */
     selected: Float? = null,
+    label: ChartLabel? = null,
 ) {
     // Bucketed once per set of readings rather than once per frame: a drag
     // across the chart would otherwise re-walk eighteen thousand samples
@@ -686,7 +811,14 @@ internal fun DayHeartLine(
             bandsOf(samples, minutes.coerceIn(20, 120))
         }
     }
-    ChartCanvas(modifier, height, false) {
+    // How high it went and how low, which is what a heart chart is read for.
+    // The newest beat rather than the peak as the latest figure: the peak is
+    // already the top of the range this sentence opens with.
+    val spoken = label?.let {
+        if (ordered.size < 2) it.reading(null, null)
+        else it.reading(lowest, highest, ordered.last().bpm.toDouble())
+    }
+    ChartCanvas(modifier, height, false, spoken) {
         if (samples.size < 2) return@ChartCanvas
         val span = (highest - lowest).takeIf { it > 0.0 } ?: 1.0
         val low = lowest - span * 0.12
@@ -784,9 +916,10 @@ internal fun SparkLine(
     bands: List<Pair<ClosedFloatingPointRange<Double>, Color>> = emptyList(),
     modifier: Modifier = Modifier,
     height: Dp = 30.dp,
+    description: String? = null,
 ) {
     if (values.size < 2) return
-    Canvas(modifier.height(height)) {
+    Canvas(modifier.height(height).spokenSemantics(description)) {
         val lowest = values.min()
         val highest = values.max()
         val span = (highest - lowest).takeIf { it > 0.0 } ?: 1.0
@@ -829,10 +962,16 @@ internal fun BandRows(
     modifier: Modifier = Modifier,
     rowHeight: Dp = 4.dp,
     gap: Dp = 4.dp,
+    /**
+     * Five rails in five unlike units share nothing a sentence could be
+     * built from here, so the caller — which knows what each rail is —
+     * writes it.
+     */
+    description: String? = null,
 ) {
     if (rails.isEmpty()) return
     val total = rowHeight * rails.size + gap * (rails.size - 1)
-    Canvas(modifier.fillMaxWidth().height(total)) {
+    Canvas(modifier.fillMaxWidth().height(total).spokenSemantics(description)) {
         val railHeight = rowHeight.toPx()
         val spacing = gap.toPx()
         val radius = (railHeight * 0.9f).coerceAtLeast(2.5.dp.toPx())
@@ -914,7 +1053,9 @@ internal fun SplitBar(
 ) {
     val shown = parts.filter { it.first > 0.0 }
     if (shown.isEmpty()) return
-    ChartCanvas(modifier, height, false) {
+    // Nothing spoken: every place this is drawn prints the same parts as
+    // figures beside it, and a bar that repeats them is noise to a reader.
+    ChartCanvas(modifier, height, false, null) {
         val total = shown.sumOf { it.first }.toFloat().takeIf { it > 0f } ?: return@ChartCanvas
         val between = gap.toPx()
         val available = (size.width - between * (shown.size - 1)).coerceAtLeast(1f)
@@ -957,9 +1098,17 @@ internal fun StackedBars(
     goalColour: Color = Color.Gray,
     goalLabel: String? = null,
     selected: Int? = null,
+    label: ChartLabel? = null,
 ) {
     if (bars.isEmpty()) return
-    ChartCanvas(modifier, height, false) {
+    // Each bar's total, which is what its height is. The split inside it is
+    // a second question, and one sentence cannot answer both without
+    // becoming a paragraph nobody listens to the end of.
+    val spoken = label?.let { said ->
+        val totals = bars.map { parts -> parts.sumOf { it.first } }
+        said.reading(totals.minOrNull(), totals.maxOrNull(), totals.lastOrNull(), goal)
+    }
+    ChartCanvas(modifier, height, false, spoken) {
         val totals = bars.map { parts -> parts.sumOf { it.first } }
         val top = maxOf(totals.max(), goal ?: 0.0).takeIf { it > 0.0 } ?: 1.0
         val plot = if (axes == null) {
@@ -1018,9 +1167,14 @@ internal fun RunningTotals(
     xTicks: List<Pair<Float, String>> = emptyList(),
     stepped: Boolean = true,
     selected: Int? = null,
+    /**
+     * Two series and the gap between them is three facts, and which of the
+     * three matters is the caller's to decide — so is the sentence.
+     */
+    description: String? = null,
 ) {
     if (first.size < 2) return
-    ChartCanvas(modifier, height, false) {
+    ChartCanvas(modifier, height, false, description) {
         val top = maxOf(first.max(), second.maxOrNull() ?: 0.0, 1.0)
         val plot = if (axes == null) {
             Plot(0f, 0f, size.width, size.height, 0.0, top * 1.08)
@@ -1096,9 +1250,14 @@ internal fun Hypnogram(
     height: Dp = 86.dp,
     selected: Float? = null,
     markerColour: Color = Color.Gray,
+    /**
+     * A night is a sequence, not a range, so there is no low and high to
+     * read out. The caller says how long each stage came to instead.
+     */
+    description: String? = null,
 ) {
     if (segments.isEmpty()) return
-    Canvas(modifier.fillMaxWidth().height(height)) {
+    Canvas(modifier.fillMaxWidth().height(height).spokenSemantics(description)) {
         val first = segments.first().fromMillis
         val span = (segments.last().toMillis - first).toFloat().coerceAtLeast(1f)
         val lanes = 4
@@ -1140,6 +1299,27 @@ internal data class HypnogramBar(
     val lane: Int,
     val colour: Color,
 )
+
+/**
+ * A length of time the way a sentence says it: "6 hours 28 minutes", or
+ * "34 minutes" when there is no hour in it.
+ *
+ * "6h 28m" is right on a card and wrong in a reader's mouth, which makes it
+ * "six h twenty-eight m". The hours are dropped entirely rather than said
+ * as zero, the same way the card drops them.
+ */
+internal fun spokenMinutes(value: Double): String {
+    val total = value.roundToInt().coerceAtLeast(0)
+    val hours = total / 60
+    val rest = total % 60
+    val said = StringBuilder()
+    if (hours > 0) said.append(hours).append(if (hours == 1) " hour" else " hours")
+    if (rest > 0 || hours == 0) {
+        if (said.isNotEmpty()) said.append(" ")
+        said.append(rest).append(if (rest == 1) " minute" else " minutes")
+    }
+    return said.toString()
+}
 
 /** 10,400 as "10k", 2,350 as "2.4k", 870 as "870": an axis label, not a figure. */
 internal fun shortNumber(value: Double): String {

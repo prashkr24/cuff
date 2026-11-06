@@ -176,6 +176,14 @@ internal fun HealthBalanceDayScreen(onBack: () -> Unit) {
                 axes = axes,
                 xTicks = hourAxis(hourNow),
                 selected = picked,
+                // Where the two lines end and what is between them, which is
+                // the shaded gap the chart is drawn for. Said the same way
+                // the figure above it is, so the two agree.
+                description = spokenBalance(
+                    day = dayName(back),
+                    burned = burned.lastOrNull() ?: 0.0,
+                    eaten = eaten.lastOrNull() ?: 0.0,
+                ),
             )
             // The hour, and where the two totals stood at the end of it.
             val hour = picked?.takeIf { it in burned.indices }
@@ -386,3 +394,17 @@ private fun runningTotal(hours: List<Double>, until: Int): List<Double> {
 /** The figure a kcal stat shows, which both lines of this screen share. */
 /** The figure alone; the two stats that use it carry "kcal" on their labels. */
 private fun kcal(value: Double): String = count(value.roundToInt().toLong())
+
+/**
+ * The chart said in one sentence: where the two lines end, and the gap
+ * between them.
+ *
+ * The gap is the whole point of the drawing — it is the shaded area, and
+ * the figure in large type above it — so it is said rather than left to be
+ * subtracted. "Behind" and "ahead" are the words the card already uses for
+ * which side of the balance a day is on.
+ */
+private fun spokenBalance(day: String, burned: Double, eaten: Double): String =
+    "Burned against eaten. $day. ${kcal(burned)} calories burned, ${kcal(eaten)} eaten, " +
+        (if (eaten < burned) "behind by " else "ahead by ") +
+        kcal(abs(eaten - burned)) + "."

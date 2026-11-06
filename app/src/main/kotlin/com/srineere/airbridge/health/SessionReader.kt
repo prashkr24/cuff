@@ -8,7 +8,7 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.Record
-import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateGroupByDurationRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
@@ -154,39 +154,46 @@ class SessionReader {
             }
     }
 
-    /** One aggregate call: what a row needs and nothing it does not. */
+    /**
+     * Aggregates only: what a row needs and nothing it does not.
+     *
+     * Steps, distance and burn arrive together from [HealthReader.spanTotals]
+     * rather than from the heart-rate call below, because each of the three
+     * is counted from its own writers and one filter stretched across all
+     * three is the exact mistake `HealthSources` was built to prevent. They
+     * used to be two different answers to the same question: steps came
+     * from the chosen writers, distance and calories from every one of
+     * them, so a workout's length and burn disagreed with the day they sat
+     * inside.
+     *
+     * Heart rate stays out of that and in its own call, deliberately. A
+     * point measurement with two sources is more readings, not a wrong
+     * number, and filtering it could only ever drop beats.
+     */
     suspend fun summary(context: Context, from: Instant, until: Instant): SessionSummary {
         val client = HealthConnect.clientOrNull(context) ?: return SessionSummary()
         val granted = HealthConnect.granted(client)
-        val metrics = buildSet {
-            if (allowed(granted, DistanceRecord::class)) add(DistanceRecord.DISTANCE_TOTAL)
-            if (allowed(granted, TotalCaloriesBurnedRecord::class)) {
-                add(TotalCaloriesBurnedRecord.ENERGY_TOTAL)
+        val totals = HealthReader().spanTotals(context, from, until)
+
+        val beats = if (allowed(granted, HeartRateRecord::class)) {
+            guard("summarise session") {
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MAX),
+                        timeRangeFilter = TimeRangeFilter.between(from, until),
+                    ),
+                )
             }
-            if (allowed(granted, HeartRateRecord::class)) {
-                add(HeartRateRecord.BPM_AVG)
-                add(HeartRateRecord.BPM_MAX)
-            }
+        } else {
+            null
         }
-        // Its own call, because steps are the one figure here that has to
-        // be filtered by who wrote them, and that filter lives with the
-        // reader that owns it rather than being copied to a second place.
-        val steps = HealthReader().stepsIn(context, from, until)?.takeIf { it > 0 }
-        if (metrics.isEmpty()) return SessionSummary(steps = steps)
-        val result = guard("summarise session") {
-            client.aggregate(
-                AggregateRequest(
-                    metrics = metrics,
-                    timeRangeFilter = TimeRangeFilter.between(from, until),
-                ),
-            )
-        } ?: return SessionSummary(steps = steps)
+
         return SessionSummary(
-            distanceKm = result[DistanceRecord.DISTANCE_TOTAL]?.inKilometers?.takeIf { it > 0.0 },
-            kcal = result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories,
-            steps = steps,
-            averageBpm = result[HeartRateRecord.BPM_AVG]?.toInt(),
-            peakBpm = result[HeartRateRecord.BPM_MAX]?.toInt(),
+            distanceKm = totals.distanceKm?.takeIf { it > 0.0 },
+            kcal = totals.kcal,
+            steps = totals.steps?.takeIf { it > 0 },
+            averageBpm = beats?.let { it[HeartRateRecord.BPM_AVG] }?.toInt(),
+            peakBpm = beats?.let { it[HeartRateRecord.BPM_MAX] }?.toInt(),
             trace = if (allowed(granted, HeartRateRecord::class)) trace(client, from, until)
             else emptyList(),
             distanceAllowed = allowed(granted, DistanceRecord::class),
@@ -234,8 +241,18 @@ class SessionReader {
             emptyList()
         }
 
+        // Read from the writers distance is counted from, so the splits
+        // built out of these describe the same run the total does. Two
+        // writers of distance lay the same kilometre down twice, and after
+        // that every crossing time in the list is wrong.
+        val reader = HealthReader()
         val distanceRecords = if (allowed(DistanceRecord::class)) {
-            records(client, DistanceRecord::class, from, until).sortedBy { it.startTime }
+            // Asked for inside the branch: enumerating who writes distance
+            // for somebody who has not granted it is a permission round
+            // trip that can only come back empty.
+            val origins = reader.originsOf(context, Written.Distance)
+            records(client, DistanceRecord::class, from, until, origins)
+                .sortedBy { it.startTime }
         } else {
             emptyList()
         }
@@ -243,27 +260,18 @@ class SessionReader {
             .sumOf { it.distance.inKilometers }
             .takeIf { it > 0.0 }
 
-        val kcal = if (allowed(TotalCaloriesBurnedRecord::class)) {
-            guard("session calories") {
-                client.aggregate(
-                    AggregateRequest(
-                        metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL),
-                        timeRangeFilter = TimeRangeFilter.between(from, until),
-                    ),
-                )[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories
-            }
-        } else {
-            null
-        }
+        // Steps and burn through the reader that owns the source filter, so
+        // a session counts the same steps and the same calories the day
+        // around it counts. The calories did not, before this: a workout
+        // was burning from every writer inside a day that burned from one.
+        val totals = reader.spanTotals(context, from, until)
 
         return SessionDetail(
             distanceKm = distance,
-            kcal = kcal,
+            kcal = totals.kcal,
             samples = samples,
             splits = splitsOf(distanceRecords, from),
-            // Through the reader that owns the source filter, so a session
-            // counts the same steps the day around it counts.
-            steps = HealthReader().stepsIn(context, from, until)?.takeIf { it > 0 },
+            steps = totals.steps?.takeIf { it > 0 },
         )
     }
 
@@ -317,27 +325,42 @@ class SessionReader {
     private fun allowed(granted: Set<String>, type: KClass<out Record>): Boolean =
         HealthPermission.getReadPermission(type) in granted
 
+    /**
+     * [origins] is null for "every writer", which is what most of these
+     * want, and a set of packages for "only these". An **empty** set means
+     * every writer was excluded, and it can never be handed over: Health
+     * Connect reads an empty `dataOriginFilter` as *every* origin, so it
+     * would return precisely what it was meant to leave out. That case has
+     * to stop before the read rather than inside it, which is why this has
+     * a block body now and the guard starts one line lower.
+     */
     private suspend fun <T : Record> records(
         client: HealthConnectClient,
         type: KClass<T>,
         from: Instant,
         until: Instant,
-    ): List<T> = guard("read ${type.simpleName}") {
-        val rows = mutableListOf<T>()
-        var token: String? = null
-        do {
-            val page = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = type,
-                    timeRangeFilter = TimeRangeFilter.between(from, until),
-                    pageToken = token,
-                ),
-            )
-            rows += page.records
-            token = page.pageToken
-        } while (!token.isNullOrEmpty())
-        rows
-    }.orEmpty()
+        origins: Set<String>? = null,
+    ): List<T> {
+        if (origins != null && origins.isEmpty()) return emptyList()
+        val filter = origins?.map { DataOrigin(it) }?.toSet() ?: emptySet()
+        return guard("read ${type.simpleName}") {
+            val rows = mutableListOf<T>()
+            var token: String? = null
+            do {
+                val page = client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = type,
+                        timeRangeFilter = TimeRangeFilter.between(from, until),
+                        dataOriginFilter = filter,
+                        pageToken = token,
+                    ),
+                )
+                rows += page.records
+                token = page.pageToken
+            } while (!token.isNullOrEmpty())
+            rows
+        }.orEmpty()
+    }
 
     /**
      * Health Connect throws for rate limits and for a provider that went

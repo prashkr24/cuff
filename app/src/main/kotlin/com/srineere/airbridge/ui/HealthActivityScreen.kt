@@ -196,6 +196,12 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
                 selected = pickedDay,
                 goalLabel = "${(goals.activeMinutes / 7.0).roundToInt()}m",
                 yLabel = { "${it.roundToInt()}m" },
+                label = ChartLabel(
+                    metric = "Active minutes",
+                    unit = "a day",
+                    window = window.spokenRange(),
+                    figure = { spokenMinutes(it) },
+                ),
             )
             val onDay = pickedDay?.let { days.getOrNull(it) }
             ChartReadout(

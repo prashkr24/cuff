@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
@@ -34,10 +35,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,12 +75,23 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val data by healthData(context)
     val state = LocalHealthState.current
 
-    var name by remember { mutableStateOf("") }
-    var kcal by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
-    var meal by remember { mutableStateOf(Meal.at(LocalTime.now().hour)) }
+    // Every field of the form is saveable, and they have to be together: a
+    // half-filled entry is six answers, and bringing four of them back is
+    // not kinder than bringing none. Rotation was never the problem --
+    // MainActivity handles its own config changes -- but a process killed
+    // while you were in the camera or a calculator threw the lot away, and
+    // typing a meal in twice is exactly the thing that stops a food log
+    // being kept.
+    //
+    // The meal and the step below come back the same way. An enum is
+    // Serializable, which is one of the kinds a Bundle takes, so the
+    // default saver already handles them.
+    var name by rememberSaveable { mutableStateOf("") }
+    var kcal by rememberSaveable { mutableStateOf("") }
+    var protein by rememberSaveable { mutableStateOf("") }
+    var carbs by rememberSaveable { mutableStateOf("") }
+    var fat by rememberSaveable { mutableStateOf("") }
+    var meal by rememberSaveable { mutableStateOf(Meal.at(LocalTime.now().hour)) }
     var saying by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     // Two short lists rather than one long one: the last few are for
@@ -87,7 +102,7 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     // meal pills, two lists and a five-field form -- and the screen could
     // not say which part you were meant to start with. Now it asks that
     // first, and whichever answer you give leads to the same form.
-    var step by remember { mutableStateOf(Step.Start) }
+    var step by rememberSaveable { mutableStateOf(Step.Start) }
     // The gesture does what the arrow does. Without this the title arrow
     // stepped back through the flow while the system back popped the whole
     // screen out of it -- two controls that look like one control, doing
@@ -107,7 +122,20 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     // Null is All. Shared by both lists, so a filter set on one is still
     // set when you step back and try the other -- picking "breakfast" is a
     // statement about what you are logging, not about which list you are in.
-    var pick by remember { mutableStateOf<Meal?>(null) }
+    var pick by rememberSaveable { mutableStateOf<Meal?>(null) }
+
+    // The cross on a saved-food row had no second step, and the rows stack
+    // into a column of them you scroll past with a thumb. A saved food is
+    // only ever recoverable by typing it again, so it gets the same dialog
+    // the food log's delete got -- the same two buttons, the same wording
+    // for what cannot be undone -- rather than a second idea of what a
+    // confirmation looks like.
+    //
+    // Plain `remember`: a dialog waiting for an answer is not a thing worth
+    // bringing back from the dead, and `SavedFood` is not a kind a Bundle
+    // takes anyway.
+    var forgetting by remember { mutableStateOf<SavedFood?>(null) }
+    val haptics = LocalHapticFeedback.current
 
     fun fill(food: SavedFood) {
         // A saved food knows its meal, so picking it answers the meal
@@ -188,7 +216,7 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     else -> "Nothing logged yet, so there is nothing to repeat."
                 },
                 onPick = ::fill,
-                onForget = { food -> saved = SavedFoods.remove(context, food) },
+                onForget = { food -> forgetting = food },
             )
             Box(Modifier.padding(bottom = 24.dp))
             return@Column
@@ -339,6 +367,33 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
         )
         Box(Modifier.padding(bottom = 24.dp))
+    }
+
+    forgetting?.let { food ->
+        AlertDialog(
+            onDismissRequest = { forgetting = null },
+            title = { Text("Forget ${food.name}?") },
+            text = {
+                Text(
+                    "This takes it off your saved foods, where it is the only copy " +
+                        "— nothing here can put it back, and it would have to be " +
+                        "typed again. Anything already logged stays logged.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    saved = SavedFoods.remove(context, food)
+                    forgetting = null
+                }) {
+                    Text("Forget", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { forgetting = null }) { Text("Keep it") }
+            },
+        )
     }
 }
 

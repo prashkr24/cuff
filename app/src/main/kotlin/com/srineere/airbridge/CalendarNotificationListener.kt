@@ -26,6 +26,7 @@ class CalendarNotificationListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         RelayConversations.stopCapture()
+        RelayContacts.forgetNumbers()
         instance = null
         connected = false
         CalendarRelayService.active?.requestStop("Notification access disconnected. Start the relay again when access is available.")
@@ -33,6 +34,7 @@ class CalendarNotificationListener : NotificationListenerService() {
 
     override fun onDestroy() {
         RelayConversations.stopCapture()
+        RelayContacts.forgetNumbers()
         instance = null
         connected = false
         CalendarRelayService.active?.requestStop("Notification listener stopped. Start the relay again when access is available.")
@@ -68,6 +70,11 @@ class CalendarNotificationListener : NotificationListenerService() {
 
     /** A ring stops when the app that was ringing takes its notification back. */
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        // Any notification going away, not only the ringing one. Nothing
+        // here can cheaply tell them apart, and the memo is only ever safe
+        // to drop early: the worst an unrelated dismissal costs is one more
+        // pair of contacts queries on the next re-post of a ring.
+        RelayContacts.forgetNumbers()
         CalendarRelayService.active?.onAlertRemoved(sbn.key)
     }
 

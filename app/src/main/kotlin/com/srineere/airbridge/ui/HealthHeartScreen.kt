@@ -136,6 +136,11 @@ internal fun HealthHeartScreen(onBack: () -> Unit) {
                     zones = zoneBands,
                     markPeak = true,
                     peakColour = extras.zonePeak,
+                    label = ChartLabel(
+                        metric = "Heart rate",
+                        unit = "beats per minute",
+                        window = if (hours >= 24) "today" else "last $hours hours",
+                    ),
                 )
                 // Under the chart, as its caption. Above it the clock range
                 // sat between the pills that set it and the figures that
@@ -418,6 +423,11 @@ private fun MeasureCard(axes: Axes) {
                 height = 92.dp,
                 axes = axes,
                 xTicks = listOf(0f to "start", 1f to "now"),
+                label = ChartLabel(
+                    metric = "Live heart rate",
+                    unit = "beats per minute",
+                    window = "this reading",
+                ),
             )
             if (summary != null) {
                 Row(modifier = Modifier.padding(top = 10.dp)) {

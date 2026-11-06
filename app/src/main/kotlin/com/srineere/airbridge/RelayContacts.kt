@@ -53,18 +53,29 @@ internal object RelayContacts {
 
     fun numberFor(context: Context, handle: String): String? {
         if (!handle.startsWith("content://") || !granted(context)) return null
-        return runCatching {
-            val contactId = ContactsContract.Contacts.lookupContact(
-                context.contentResolver, android.net.Uri.parse(handle),
-            )?.lastPathSegment ?: return null
-            context.contentResolver.query(
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
-                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
-                arrayOf(contactId), null,
-            )?.use { if (it.moveToFirst()) it.getString(0) else null }
-        }.getOrNull()
+        return RelayNumberMemo.of(handle) { lookupNumber(context, handle) }
     }
+
+    /**
+     * The two provider round-trips themselves, run only on a memo miss.
+     *
+     * Two, not one: a lookup URI names a contact, and the number lives on a
+     * row of its own that has to be asked for separately.
+     */
+    private fun lookupNumber(context: Context, handle: String): String? = runCatching {
+        val contactId = ContactsContract.Contacts.lookupContact(
+            context.contentResolver, android.net.Uri.parse(handle),
+        )?.lastPathSegment ?: return@runCatching null
+        context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+            "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+            arrayOf(contactId), null,
+        )?.use { if (it.moveToFirst()) it.getString(0) else null }
+    }.getOrNull()
+
+    /** Ends the memo's life. See [RelayNumberMemo] for how long that is. */
+    fun forgetNumbers() = RelayNumberMemo.forget()
 
     /**
      * Apps that name a caller rather than number them. WhatsApp and Telegram
@@ -111,4 +122,56 @@ internal object RelayContacts {
             mapOf("id" to it.key, "label" to it.value.first, "detail" to it.value.second)
         }
     }
+}
+
+/**
+ * Numbers resolved while one call is ringing, and no longer than that.
+ *
+ * `onNotificationPosted` runs on the main looper -- the same thread that
+ * draws the Compose UI -- and a dialer re-posts its ringing notification
+ * about once a second for as long as the phone rings. Every one of those
+ * re-posts used to spend two synchronous content-provider round trips
+ * arriving at the answer it already had a second earlier, for an alert the
+ * relay then dropped as "ringing" anyway.
+ *
+ * The lifetime is deliberately one call, and that is a decision rather than
+ * an oversight: a contact edited in the middle of a ring keeps the number
+ * it had when the call started, and the next call picks the change up. Do
+ * not quietly promote this into a cache that outlives the ring. A permanent
+ * one would hold a wrong number until the process died, which is a worse
+ * fault than the one it saves. [forget] is called when a ring stops and
+ * whenever a notification is taken back.
+ *
+ * Bounded as well as short-lived, because nothing guarantees [forget] is
+ * reached: a dialer that crashes, a listener torn down mid-call. The bound
+ * is the real guarantee, and it matters more here than it would elsewhere
+ * -- a plain phone number in memory is the one thing the rest of this file
+ * goes out of its way not to keep.
+ */
+internal object RelayNumberMemo {
+    /** More than one call ringing at a time is already odd; eight is slack. */
+    internal const val LIMIT = 8
+
+    private val numbers = linkedMapOf<String, String?>()
+
+    /**
+     * The memoised number for [handle], or [lookup]'s answer stored for
+     * next time.
+     *
+     * Null is remembered too. "This handle resolves to nothing" costs both
+     * queries to arrive at and is the ordinary answer for somebody who is
+     * not in contacts, so it is the one worth not asking twice.
+     */
+    @Synchronized
+    fun of(handle: String, lookup: () -> String?): String? {
+        if (numbers.containsKey(handle)) return numbers[handle]
+        val number = lookup()
+        numbers[handle] = number
+        // Oldest out first, the way RelayRecentCallers drops its oldest.
+        while (numbers.size > LIMIT) numbers.remove(numbers.keys.first())
+        return number
+    }
+
+    @Synchronized
+    fun forget() = numbers.clear()
 }

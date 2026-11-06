@@ -105,7 +105,14 @@ object WidgetStore {
     fun prune(context: Context, live: Set<Int>) {
         val stale = placed(context).map { it.first }.filterNot { it in live }
         if (stale.isEmpty()) return
-        remove(context, stale.toIntArray())
+        val ids = stale.toIntArray()
+        remove(context, ids)
+        // The page a stack was left on lives in the same file under its own
+        // prefix, which [placed] does not see, so pruning on widget rows
+        // alone left the int behind for good. Harmless since the page is
+        // clamped to what the stack actually holds, but it is still a row
+        // nobody will ever read again.
+        StackPage.remove(context, ids)
     }
 
     internal fun encode(config: WidgetConfig): String =

@@ -113,6 +113,17 @@ class StackWidgetReceiver : AppWidgetProvider() {
         WidgetStore.remove(context, appWidgetIds)
         StackPage.remove(context, appWidgetIds)
     }
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        // The first widget of any size is what turns the periodic read on,
+        // and a stack is a widget like any other. The five AirWidgetReceiver
+        // sizes do this and this one did not: in practice
+        // WidgetConfigActivity.place() schedules on both paths, so the gap
+        // only showed for a host that drops a stack without running the
+        // configuration activity.
+        WidgetRefresh.schedule(context)
+    }
 }
 
 /** The service the platform binds to for one stack's cards. */

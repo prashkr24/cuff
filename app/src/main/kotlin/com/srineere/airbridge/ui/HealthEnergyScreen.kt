@@ -187,6 +187,18 @@ internal fun HealthEnergyScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     goalLabel = goals.energyKcal.takeIf { it != 0 }
                         ?.let { shortNumber(it.toDouble()) },
                     selected = picked,
+                    // Signed, because a balance that drops its sign is the
+                    // opposite of itself. "Minus" rather than the dash the
+                    // card prints: a reader says nothing at all for "−".
+                    label = ChartLabel(
+                        metric = "Daily energy balance",
+                        unit = "calories",
+                        window = window.spokenRange(),
+                        figure = {
+                            (if (it < 0) "minus " else "plus ") +
+                                count(abs(it).roundToInt().toLong())
+                        },
+                    ),
                 )
                 val at = picked?.let { series.getOrNull(it) }
                 ChartReadout(
@@ -286,6 +298,11 @@ internal fun HealthEnergyScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     axes = axes,
                     xTicks = dayTicks(trend.readings),
                     yLabel = { formatOneDecimal(it) },
+                    label = ChartLabel(
+                        metric = "Weight",
+                        unit = "kilograms",
+                        figure = { formatOneDecimal(it) },
+                    ),
                 )
                 Text(
                     weightCheck(series, trend),

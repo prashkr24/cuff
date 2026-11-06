@@ -3,6 +3,7 @@ package com.srineere.airbridge
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import com.srineere.airbridge.widget.ROUTE_EXTRA
@@ -494,6 +495,9 @@ class CalendarRelayService : Service() {
         lastRingStoppedAt = System.currentTimeMillis()
         lastRingTimedOut = reason == "ring_timeout"
         Log.i(TAG, "ring stop reason=$reason after=${System.currentTimeMillis() - session.startedAt}ms")
+        // The ring is over, so the numbers resolved for it are too. See
+        // RelayNumberMemo: its whole point is that it lasts one call.
+        RelayContacts.forgetNumbers()
         record(nextId(), session.packageName, session.startedAt, "ring_stopped", reason,
             session.match, session.callerId)
         // Releases the held session; the in-flight ring call then completes on
@@ -677,14 +681,30 @@ class CalendarRelayService : Service() {
         if (!settings.hourlyNudge || !settings.nudgeOnPhone) {
             runCatching { getSystemService(NotificationManager::class.java).cancel(903) }
         }
-        if (!settings.buzzOnGoal && !settings.hourlyNudge) return
+        if (!settings.buzzOnGoal && !settings.hourlyNudge) { cancelStepAlarm(); return }
         // Not a flat quarter of an hour: see nextStepCheckMillis. A strict
         // period samples the same four minutes of every hour and can miss
         // the nudge's window for good.
         val clock = java.time.LocalTime.now()
-        handler.postDelayed(stepCheck, nextStepCheckMillis(
+        val wait = nextStepCheckMillis(
             settings.hourlyNudge, clock.minute, clock.second, STEP_CHECK_MILLIS,
-        ))
+        )
+        // The wait is the one nextStepCheckMillis chose and is unchanged;
+        // what has changed is the clock it runs on. handler.postDelayed
+        // counts in SystemClock.uptimeMillis, which stops while the device
+        // is suspended, so on a phone that spends the night in Doze this
+        // drifted by however long it was asleep: the daily goal was checked
+        // whenever the phone next happened to be awake, and the nudge's
+        // ten-minute window was missed rather than merely late. An alarm
+        // counts in wall time, and setExactAndAllowWhileIdle is the one
+        // kind Doze lets through.
+        if (!armStepAlarm(wait)) {
+            // No exact alarm to be had -- see armStepAlarm for when that
+            // happens. The handler is what this always did, and a check
+            // that drifts is still a great deal better than none.
+            cancelStepAlarm()
+            handler.postDelayed(stepCheck, wait)
+        }
 
         // Check now as well as in a quarter of an hour. Someone who switches
         // this on having already walked ten thousand steps should not wait
@@ -696,6 +716,110 @@ class CalendarRelayService : Service() {
             lastStepCheck = now
             checkStepGoals(reschedule = false)
         }
+    }
+
+    /**
+     * Arms the next step check on the wall clock, answering false when
+     * Android will not give us an exact alarm.
+     *
+     * From API 31 `setExactAndAllowWhileIdle` throws SecurityException
+     * unless the app holds the exact-alarm right. This app is not an alarm
+     * clock and never claims USE_EXACT_ALARM, so it can hold that right two
+     * ways: the SCHEDULE_EXACT_ALARM permission in the manifest, which is
+     * granted at install on 31 and 32 and off by default from 33 until
+     * somebody turns "Alarms & reminders" on by hand; or the
+     * battery-optimisation exemption the Device screen already asks for,
+     * which carries the exact-alarm right with it and is the path this app
+     * actually walks. Neither is required. With neither, this answers false
+     * and [scheduleStepCheck] goes back to the handler -- a drifting check
+     * rather than a SecurityException thrown out of a settings change,
+     * which would take the whole relay down with it.
+     *
+     * The call is guarded as well as asked about, because the two can
+     * disagree: the permission can be revoked while the relay is running,
+     * and OEM builds have their own ideas about alarm quotas. A refused
+     * alarm must be no worse than the handler it replaced.
+     */
+    private fun armStepAlarm(waitMillis: Long): Boolean {
+        val manager = getSystemService(AlarmManager::class.java) ?: return false
+        val allowed = canArmExactAlarm(
+            Build.VERSION.SDK_INT, exactAlarmsAllowed(manager), batteryExempt(this),
+        )
+        if (!allowed) {
+            Log.i(TAG, "no exact alarm right; step check stays on the handler")
+            return false
+        }
+        return runCatching {
+            manager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + waitMillis,
+                stepAlarmIntent(),
+            )
+            true
+        }.getOrElse {
+            Log.w(TAG, "exact step alarm refused; falling back to the handler", it)
+            false
+        }
+    }
+
+    /**
+     * What the platform says about exact alarms.
+     *
+     * `canScheduleExactAlarms` arrived in API 31 together with the right it
+     * reports on, so below that there is nothing to ask and the answer here
+     * is not the one that matters -- [canArmExactAlarm] says yes on those
+     * versions for its own reason.
+     */
+    private fun exactAlarmsAllowed(manager: AlarmManager): Boolean {
+        if (Build.VERSION.SDK_INT < 31) return false
+        return manager.canScheduleExactAlarms()
+    }
+
+    /**
+     * The one alarm this service owns.
+     *
+     * Request code 7 because it is the first one free: 0 to 3 are the
+     * ongoing notification's actions, 4 and 5 belong to the morning report
+     * and the journal reminder, and 6 is the hourly nudge. Sharing a code
+     * is a bug this file has already had -- `Intent.filterEquals` ignores
+     * extras, so two intents on one code are a single PendingIntent and
+     * FLAG_UPDATE_CURRENT silently rewrites whichever was made first.
+     *
+     * FLAG_UPDATE_CURRENT rather than a new token each time, so rearming
+     * replaces the alarm already set instead of leaving one behind: the
+     * system holds these across process restarts, and a leaked one is an
+     * alarm nobody can cancel any more.
+     */
+    private fun stepAlarmIntent(): PendingIntent = PendingIntent.getBroadcast(
+        this,
+        7,
+        Intent(this, StepCheckReceiver::class.java).setAction(STEP_CHECK),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /**
+     * Drops the alarm and the token behind it.
+     *
+     * Both, not just the alarm. A PendingIntent lives in the system's own
+     * table and outlives this process, so cancelling the alarm alone would
+     * leave the token for the next start to find and reuse.
+     */
+    private fun cancelStepAlarm() {
+        runCatching {
+            val alarm = stepAlarmIntent()
+            getSystemService(AlarmManager::class.java)?.cancel(alarm)
+            alarm.cancel()
+        }
+    }
+
+    /**
+     * The alarm went off. Called by [StepCheckReceiver] and by nothing
+     * else; the check reschedules as it always did, so each alarm is what
+     * sets the next one.
+     */
+    internal fun onStepAlarm() {
+        Log.i(TAG, "step check woken by its alarm")
+        checkStepGoals()
     }
 
     private fun checkStepGoals(reschedule: Boolean = true) {
@@ -1038,6 +1162,11 @@ class CalendarRelayService : Service() {
         runCatching { air?.close() }
         air = null
         handler.removeCallbacks(silenceTick)
+        // Here as well as in onDestroy, and alone among the timers, because
+        // it is the only one that outlives this process: a handler callback
+        // dies with the service whether anybody remembers it or not, and an
+        // alarm sits in the system waiting to start us again.
+        cancelStepAlarm()
         cancelWaiting("cancelled")
         if (pending == 0) stopSelf()
     }
@@ -1061,6 +1190,7 @@ class CalendarRelayService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(stepCheck)
+        cancelStepAlarm()
         healthScope.cancel()
         ready = false
         stopping = true
@@ -1192,6 +1322,12 @@ class CalendarRelayService : Service() {
         private const val SILENCE = "calendar_relay.SILENCE"
         private const val PAUSE = "calendar_relay.PAUSE"
         private const val RESUME = "calendar_relay.RESUME"
+        /**
+         * Only a label: [StepCheckReceiver] is named explicitly and has no
+         * intent filter. It is here so that the alarm's intent reads like
+         * the four above it in a log or a dumpsys.
+         */
+        private const val STEP_CHECK = "calendar_relay.STEP_CHECK"
         var active: CalendarRelayService? = null
             private set(value) { field = value; publishRunning() }
 
@@ -1211,5 +1347,50 @@ class CalendarRelayService : Service() {
                 .isIgnoringBatteryOptimizations(context.packageName)
         }.getOrDefault(false)
 
+    }
+}
+
+/**
+ * Whether `setExactAndAllowWhileIdle` may be called at all.
+ *
+ * Three facts, kept apart from the system services that answer them so the
+ * rule can be read -- and tested -- without a device:
+ *
+ * - below API 31 every app could set an exact alarm and there was no
+ *   permission to ask about, so the question does not arise;
+ * - from 31 the platform answers for itself through
+ *   `AlarmManager.canScheduleExactAlarms()`, which is already true for an
+ *   app the user has exempted from battery optimisation, because that
+ *   exemption carries the exact-alarm right with it;
+ * - [batteryExempt] is asked anyway, as a second yes. It costs nothing, and
+ *   the two have been known to disagree on OEM builds. A wrong yes here is
+ *   a caught SecurityException and a fall back to the handler; a wrong no
+ *   is a step check that drifts all night.
+ */
+internal fun canArmExactAlarm(
+    sdkInt: Int,
+    systemAllowsExact: Boolean,
+    batteryExempt: Boolean,
+): Boolean = sdkInt < 31 || systemAllowsExact || batteryExempt
+
+/**
+ * Wakes the step check on the wall clock.
+ *
+ * A broadcast rather than a service start, for two reasons. The relay is
+ * already running whenever this alarm exists -- [CalendarRelayService]
+ * cancels it on the way down -- so there is nothing to start, only
+ * something to tell. And `onStartCommand` runs `enterForeground()` before
+ * it looks at the action, which clears the hourly nudge's own notification
+ * on the way past; a fifteen-minute wake-up has no business dismissing the
+ * notification it just posted.
+ *
+ * Nothing to do when the relay is gone. The alarm is one-shot, so a
+ * delivery that finds no service is simply the last one: that happens when
+ * the process was killed outright rather than destroyed, which is the one
+ * path where the cancel never ran.
+ */
+class StepCheckReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        CalendarRelayService.active?.onStepAlarm()
     }
 }

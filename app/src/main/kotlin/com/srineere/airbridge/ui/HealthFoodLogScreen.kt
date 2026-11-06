@@ -43,8 +43,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +66,7 @@ import com.srineere.airbridge.ui.theme.extras
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -86,7 +90,11 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
     // Days back from today. The window the tab holds is the limit, because
     // beyond it there is nothing read to show.
-    var back by remember { mutableIntStateOf(0) }
+    //
+    // Saveable: paging back is the only thing this screen remembers, and a
+    // process killed behind the camera used to drop you back on today
+    // without saying it had.
+    var back by rememberSaveable { mutableIntStateOf(0) }
     var open by remember { mutableStateOf<String?>(null) }
     // Which meals are open, rather than which are shut, so empty means
     // closed. The day then arrives as four headings and their totals --
@@ -103,6 +111,10 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     // from a list this app keeps. One mis-tap on a row that is already open
     // was the whole distance between reading your lunch and losing it.
     var confirming by remember { mutableStateOf<FoodEntry?>(null) }
+    // The one buzz on this screen, and it is on the one tap that cannot be
+    // taken back. A record leaving the phone should be felt as well as read,
+    // and anything less than that is a tap that feels like every other tap.
+    val haptics = LocalHapticFeedback.current
 
     val day = remember(back) { LocalDate.now().minusDays(back.toLong()).toEpochDay() }
     val entries = remember(data.snapshot.food, day) {
@@ -241,6 +253,7 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     confirming = null
                     open = null
                     saying = null
@@ -568,15 +581,25 @@ private fun MealPill(
     )
 }
 
-/** Today and yesterday by name, anything older by date. */
+/**
+ * Today and yesterday by name, anything older by date.
+ *
+ * Through `getBestDateTimePattern` like every other date in the app, not
+ * through a pattern written out here. "EEE d MMM" is one locale's idea of a
+ * short date and it was being handed to all of them: the skeleton asks for
+ * a weekday, a day and a month, and lets the phone decide what order they
+ * go in and what separates them.
+ */
 @Composable
 internal fun dayName(back: Int): String = when (back) {
     0 -> "Today"
     1 -> "Yesterday"
     else -> {
+        val locale = Locale.getDefault()
+        val pattern = remember(locale) { DateFormat.getBestDateTimePattern(locale, "EEEdMMM") }
         val date = LocalDate.now().minusDays(back.toLong())
-        remember(back) {
-            java.time.format.DateTimeFormatter.ofPattern("EEE d MMM").format(date)
+        remember(pattern, date) {
+            java.time.format.DateTimeFormatter.ofPattern(pattern, locale).format(date)
         }
     }
 }
