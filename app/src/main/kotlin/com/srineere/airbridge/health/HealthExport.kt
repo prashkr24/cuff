@@ -111,7 +111,7 @@ object HealthExport {
         // resolver, and finishing the zip is this object's job while
         // closing the stream under it is not.
         zip.setComment(
-            "Air Bridge export, ${LocalDate.now(zone)}, ${range.label.lowercase()}",
+            "CUFF export, ${LocalDate.now(zone)}, ${range.label.lowercase()}",
         )
         parts.forEach { part ->
             zip.putNextEntry(ZipEntry(part.file))

@@ -292,7 +292,7 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
         }
 
         Text(
-            "Sessions are read from Health Connect. Air Bridge records none of its " +
+            "Sessions are read from Health Connect. CUFF records none of its " +
                 "own: the Air already reports them through Google Health, and a " +
                 "second copy would be counted twice by everything that reads your " +
                 "totals.",

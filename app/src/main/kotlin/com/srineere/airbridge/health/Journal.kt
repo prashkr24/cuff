@@ -32,7 +32,7 @@ enum class JournalAnswer { Yes, No }
  * The tags, as this app keeps them.
  *
  * Health Connect has no record for "I had coffee at five", so this list is
- * Air Bridge's own and the screen says so. One key a day rather than one
+ * CUFF's own and the screen says so. One key a day rather than one
  * key for everything: answering tonight rewrites tonight, and a file that
  * rewrites six months every time a pill is tapped is a file that will
  * eventually be half-written when something goes wrong.

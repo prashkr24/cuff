@@ -7,7 +7,7 @@
 
   One line per cell, because the picker has one entry per cell. Each says
   what the size is for and that the reading is chosen afterwards. A picker
-  entry called simply "Air Bridge" would look like a widget that does nothing
+  entry called simply "CUFF" would look like a widget that does nothing
   until you drop it.
 -->
 <resources>

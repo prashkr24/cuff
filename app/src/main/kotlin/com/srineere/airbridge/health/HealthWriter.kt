@@ -58,7 +58,7 @@ sealed interface LogResult {
 }
 
 /**
- * The only thing Air Bridge writes.
+ * The only thing CUFF writes.
  *
  * Everything else on the Health tab is read, and that asymmetry is the point:
  * a relay that quietly wrote to your health record would be a different kind
@@ -87,7 +87,7 @@ object HealthWriter {
         val granted = HealthConnect.granted(client)
         if (HealthPermission.getWritePermission(NutritionRecord::class) !in granted) {
             return LogResult.Refused(
-                "Air Bridge is not allowed to write food yet. Allow it in Health Connect.",
+                "CUFF is not allowed to write food yet. Allow it in Health Connect.",
             )
         }
         val (start, end) = span(at, zone)
@@ -144,7 +144,7 @@ object HealthWriter {
         val granted = HealthConnect.granted(client)
         if (HealthPermission.getWritePermission(NutritionRecord::class) !in granted) {
             return LogResult.Refused(
-                "Air Bridge is not allowed to change food entries. Allow it in Health Connect.",
+                "CUFF is not allowed to change food entries. Allow it in Health Connect.",
             )
         }
         return runCatching {

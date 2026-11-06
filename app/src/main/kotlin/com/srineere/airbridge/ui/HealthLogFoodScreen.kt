@@ -360,7 +360,7 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
         Text(
             "The entry goes to Health Connect, where Google Health and anything " +
-                "else you use can read it. Saved foods stay in Air Bridge — Health " +
+                "else you use can read it. Saved foods stay in CUFF — Health " +
                 "Connect records what you ate, not a list of foods to pick from.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.extras.disabled,

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The wordmark: C, the app's own icon standing in for the U, then F F.
+
+  The band here is not a drawing of the icon, it is the icon. Every path
+  in the middle group is copied verbatim from ic_cuff_foreground, with one
+  translate putting its 108dp canvas where this one wants it: that file
+  draws the strap at x 38 and y 26, and translating by (48, -26) lands it
+  at x 86 with its top on the cap line. The weave spacing, the clasp, the
+  two pairs of arcs, the gradients: all of them are the icon's numbers.
+
+  There were two drawings for a while and they drifted, which is the usual
+  fate of a logo kept in two places. If the icon changes, paste the new
+  paths in here and the wordmark follows; the translate is the only thing
+  that belongs to this file.
+
+  The letters are filled rather than stroked. A monoline C beside a solid
+  band reads as two logos sharing a line. The C's curve is 14 units
+  against the F's 13 stem because equal numbers look unequal: a curve has
+  to be a shade heavier than a straight to match it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="234dp" android:height="56dp"
+    android:viewportWidth="234" android:viewportHeight="56">
+
+    <path android:pathData="M54.2,18 A28,28 0 1 0 54.2,38 L37.8,38 A14,14 0 1 1 37.8,18 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0"
+                android:endX="40" android:endY="56">
+                <item android:offset="0" android:color="#FFD8D1"/>
+                <item android:offset="1" android:color="#CE7B82"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <group android:translateX="48" android:translateY="-26">
+        <path android:pathData="M49,26 h10 a11,11 0 0 1 11,11 v34 a11,11 0 0 1 -11,11 h-10 a11,11 0 0 1 -11,-11 v-34 a11,11 0 0 1 11,-11 z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear"
+                    android:startX="38" android:startY="26"
+                    android:endX="70" android:endY="82">
+                    <item android:offset="0" android:color="#FFE4DE"/>
+                    <item android:offset="1" android:color="#C06C76"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+        <group>
+            <clip-path android:pathData="M49,26 h10 a11,11 0 0 1 11,11 v34 a11,11 0 0 1 -11,11 h-10 a11,11 0 0 1 -11,-11 v-34 a11,11 0 0 1 11,-11 z"/>
+            <path android:pathData="M36,34 h36 M36,40 h36 M36,46 h36 M36,52 h36 M36,58 h36 M36,64 h36 M36,70 h36 M36,76 h36"
+                android:strokeColor="#8E4A52" android:strokeWidth="2" android:strokeAlpha="0.38"/>
+            <path android:pathData="M42,28.5 h24"
+                android:strokeColor="#FFFFFF" android:strokeWidth="3.5" android:strokeAlpha="0.45"
+                android:strokeLineCap="round"/>
+        </group>
+        <path android:pathData="M40,47 h28 a7,7 0 0 1 0,14 h-28 a7,7 0 0 1 0,-14 z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear"
+                    android:startX="54" android:startY="47"
+                    android:endX="54" android:endY="61">
+                    <item android:offset="0" android:color="#FFFFFF"/>
+                    <item android:offset="1" android:color="#EDCFCB"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M34,48 Q30,54 34,60" android:strokeColor="#E7A6A6"
+            android:strokeWidth="3.5" android:strokeLineCap="round"/>
+        <path android:pathData="M28,44 Q23,54 28,64" android:strokeColor="#E7A6A6"
+            android:strokeWidth="3.5" android:strokeAlpha="0.45" android:strokeLineCap="round"/>
+        <path android:pathData="M74,48 Q78,54 74,60" android:strokeColor="#E7A6A6"
+            android:strokeWidth="3.5" android:strokeLineCap="round"/>
+        <path android:pathData="M80,44 Q85,54 80,64" android:strokeColor="#E7A6A6"
+            android:strokeWidth="3.5" android:strokeAlpha="0.45" android:strokeLineCap="round"/>
+    </group>
+
+    <group android:translateX="150">
+        <path android:pathData="M0,0 h36 v13 h-23 v9 h18 v12 h-18 v22 h-13 z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="0" android:startY="0"
+                    android:endX="30" android:endY="56">
+                    <item android:offset="0" android:color="#FFD8D1"/>
+                    <item android:offset="1" android:color="#CE7B82"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+
+    <group android:translateX="198">
+        <path android:pathData="M0,0 h36 v13 h-23 v9 h18 v12 h-18 v22 h-13 z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="0" android:startY="0"
+                    android:endX="30" android:endY="56">
+                    <item android:offset="0" android:color="#FFD8D1"/>
+                    <item android:offset="1" android:color="#CE7B82"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

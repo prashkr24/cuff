@@ -92,10 +92,16 @@ internal fun AboutScreen(onBack: () -> Unit) {
         }
 
         SectionHeader("This app")
-        Fact("Air Bridge", BuildConfig.VERSION_NAME)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 2.dp),
+        ) {
+            Wordmark()
+        }
+        Note("Your Google Health companion. Version ${BuildConfig.VERSION_NAME}.")
         Note(
             "The Air is screenless and ships with no notification support: its motor fires " +
-                "for alarms and Smart Wake and nothing else. Air Bridge drives that motor, so " +
+                "for alarms and Smart Wake and nothing else. CUFF drives that motor, so " +
                 "your phone's calls and notifications reach your wrist — and it reads back the " +
                 "readings the band has already taken, and draws them."
         )
@@ -160,7 +166,7 @@ internal fun AboutScreen(onBack: () -> Unit) {
         SectionHeader("Your readings")
         Note(
             "The band's readings go to Google Health, which files them in Health Connect, " +
-                "and Air Bridge reads them back out from there. Thirteen kinds of reading, " +
+                "and CUFF reads them back out from there. Thirteen kinds of reading, " +
                 "and it writes exactly one thing: the food you log here, which is saved as a " +
                 "nutrition entry like any other app's."
         )
@@ -212,7 +218,7 @@ internal fun AboutScreen(onBack: () -> Unit) {
 
         SectionHeader("How it reaches the band")
         Note(
-            "The Air has no public way in. Air Bridge speaks the transport Fitbit's own app " +
+            "The Air has no public way in. CUFF speaks the transport Fitbit's own app " +
                 "speaks — Golden Gate, then DTLS, then CoAP — and there is no vibrate command " +
                 "in it: a buzz is a side effect of writing to the band's settings. That is why " +
                 "a ring holds one secure session open rather than opening a new one per pulse, " +
@@ -251,7 +257,7 @@ private fun ReportDetails(info: Map<*, *>?) {
     val firmware = field("firmware")
 
     val lines = listOf(
-        "Air Bridge ${BuildConfig.VERSION_NAME}",
+        "CUFF ${BuildConfig.VERSION_NAME}",
         "${Build.MANUFACTURER} ${Build.MODEL}",
         "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
         // Said plainly rather than left out: a report with no firmware is
@@ -273,7 +279,7 @@ private fun ReportDetails(info: Map<*, *>?) {
         onClick = {
             val clipboard = context.getSystemService(ClipboardManager::class.java)
             runCatching {
-                clipboard?.setPrimaryClip(ClipData.newPlainText("Air Bridge", lines.joinToString("\n")))
+                clipboard?.setPrimaryClip(ClipData.newPlainText("CUFF", lines.joinToString("\n")))
                 copied = true
             }
         },
@@ -323,7 +329,7 @@ private fun ErrorLog() {
             onClick = {
                 val send = Intent(Intent.ACTION_SEND)
                     .setType("text/plain")
-                    .putExtra(Intent.EXTRA_SUBJECT, "Air Bridge ${BuildConfig.VERSION_NAME} — error log")
+                    .putExtra(Intent.EXTRA_SUBJECT, "CUFF ${BuildConfig.VERSION_NAME} — error log")
                     .putExtra(Intent.EXTRA_TEXT, CrashLog.asText(context))
                 runCatching {
                     context.startActivity(

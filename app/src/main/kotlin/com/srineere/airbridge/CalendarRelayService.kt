@@ -181,7 +181,7 @@ class CalendarRelayService : Service() {
             .setAction(if (silence == "paused") RESUME else PAUSE), flags)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
         builder.setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setContentTitle("Air Bridge")
+            .setContentTitle("CUFF")
             .setContentText(when {
                 ring != null -> "Ringing your Air · tap Silence to stop"
                 silence == "paused" -> "Paused · No notification vibrations"
@@ -254,7 +254,7 @@ class CalendarRelayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         starting = false
         if (!enterForeground() && air == null) {
-            saveOutcome("Android would not let the relay start. Allow notifications for Air Bridge, then start again.")
+            saveOutcome("Android would not let the relay start. Allow notifications for CUFF, then start again.")
             stopSelf()
             return START_NOT_STICKY
         }

@@ -63,7 +63,7 @@ import com.srineere.airbridge.ui.theme.extras
  *
  * What this screen is for is the half the launcher's picker cannot do: show
  * the thirteen tiles and the band faces as pictures rather than as five
- * entries called "Air Bridge", and say honestly which families are drawn on
+ * entries called "CUFF", and say honestly which families are drawn on
  * the canvas and not yet built.
  */
 @Composable

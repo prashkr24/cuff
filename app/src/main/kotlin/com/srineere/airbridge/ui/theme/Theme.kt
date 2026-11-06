@@ -27,7 +27,7 @@ val MaterialTheme.extras: AirExtraColors
 @Composable
 fun AirBridgeTheme(
     mode: ThemeMode = ThemeMode.System,
-    accent: Accent = Accent.Azure,
+    accent: Accent = Accent.Rose,
     ground: Ground? = null,
     edges: Edges = Edges.Defined,
     custom: Color? = null,

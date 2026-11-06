@@ -2,5 +2,6 @@
 <resources>
     <color name="window_background">#F6F9FA</color>
     <!-- Behind the launcher icon's foreground; not part of the app theme. -->
-    <color name="air_relay_background">#123C36</color>
+    <!-- The icon's ground. Dark so the rose gradient has somewhere to sit. -->
+    <color name="cuff_background">#2A1416</color>
 </resources>

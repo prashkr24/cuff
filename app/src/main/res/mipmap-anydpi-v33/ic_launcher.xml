@@ -1,5 +1,5 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/air_relay_background" />
-    <foreground android:drawable="@drawable/ic_air_relay_foreground" />
-    <monochrome android:drawable="@drawable/ic_air_relay_foreground" />
+    <background android:drawable="@color/cuff_background" />
+    <foreground android:drawable="@drawable/ic_cuff_foreground" />
+    <monochrome android:drawable="@drawable/ic_cuff_monochrome" />
 </adaptive-icon>

@@ -21,7 +21,8 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 data class Appearance(
     val mode: ThemeMode = ThemeMode.System,
-    val accent: Accent = Accent.Azure,
+    /** Ink and Rose: the icon's own pair, so the app opens looking like itself. */
+    val accent: Accent = Accent.Rose,
     val darkGround: Ground = Ground.Ink,
     val lightGround: Ground = Ground.Paper,
     val edges: Edges = Edges.Defined,
@@ -66,7 +67,7 @@ object AppSettings {
         // turned out to be the same hex as a health colour. An old name no
         // longer matches anything, so it falls back to the default rather
         // than to a colour nobody can name.
-        val accent = read(KEY_ACCENT, Accent.entries, Accent.Azure).takeIf { it.isAvailable } ?: Accent.Azure
+        val accent = read(KEY_ACCENT, Accent.entries, Accent.Rose).takeIf { it.isAvailable } ?: Accent.Rose
         val dark = read(KEY_DARK_GROUND, Ground.darks, Ground.Ink)
         val light = read(KEY_LIGHT_GROUND, Ground.lights, Ground.Paper)
         state.value = Appearance(

@@ -72,6 +72,12 @@ import com.srineere.airbridge.ui.theme.isAvailable
 import dev.airpulse.fitbit_air.airResult
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.painterResource
+import com.srineere.airbridge.R
+import com.srineere.airbridge.BuildConfig
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.res.colorResource
 
 @Composable
 internal fun DeviceScreen(onOpen: (String) -> Unit) {
@@ -79,7 +85,22 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
     val appearance by AppSettings.appearance.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle("Device")
+        // The logo in place of the word "Device", at the size the word was.
+        //
+        // It was set at 26dp with a sentence under it, which gave this tab
+        // two headings competing: the app's name in full voice, and then
+        // the band's name in full voice directly beneath. A screen cannot
+        // have two subjects. The band is the subject here, so the logo
+        // takes a title's weight and no more, and the tagline goes — it is
+        // on the About screen, which is the screen about the app.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 10.dp),
+        ) {
+            Wordmark(Modifier.height(19.dp))
+        }
 
         BandCard()
 
@@ -120,6 +141,49 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
             icon = Icons.Outlined.Info,
             onClick = { onOpen("about") },
         )
+
+        // The app's own name, at the foot of the tab about everything else.
+        //
+        // Every other line here names a piece of hardware or a setting;
+        // nothing said what this was. On a phone with two installs of it
+        // side by side that stopped being a philosophical point.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 26.dp),
+        ) {
+            // The icon as it is on the home screen, ground and all, rather
+            // than a silhouette of it tinted to the accent. This row is
+            // about which app you are holding, and a logo that changes
+            // colour with the theme answers that less well than the one
+            // thing the launcher actually shows.
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(colorResource(R.color.cuff_background)),
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_cuff_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(34.dp),
+                )
+            }
+            // The version and nothing else. What this app is not — official,
+            // approved, supported — is said twice on the About screen, in
+            // the two places somebody would look for it: under what can
+            // break it, and under how to report a problem. A third copy at
+            // the foot of a settings list is a disclaimer, not information.
+            Text(
+                "Version ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+        }
 
         Box(Modifier.padding(bottom = 28.dp))
     }
@@ -352,7 +416,11 @@ private fun BandCard() {
         // comes back BUSY, which looked like the button being broken. It
         // was the one control in the app that could be pressed into a
         // guaranteed failure.
-        val reachable = !syncing
+        // And off when the band is not there at all. Unknown counts as not
+        // there: before the first read lands nothing has answered, and a
+        // button that is live before anything has been heard from is a
+        // button whose first press fails.
+        val reachable = !syncing && connected == true
         OutlinedButton(
             onClick = { buzzBand() },
             enabled = reachable && buzz == Buzz.Idle,
@@ -386,7 +454,8 @@ private fun BandCard() {
                 when {
                     buzz == Buzz.Sending -> "Sending\u2026"
                     buzz == Buzz.Sent -> "Sent"
-                    !reachable -> "Syncing with the band\u2026"
+                    syncing -> "Syncing with the band\u2026"
+                    connected != true -> "Band not connected"
                     else -> "Buzz the band"
                 },
                 rising = false,

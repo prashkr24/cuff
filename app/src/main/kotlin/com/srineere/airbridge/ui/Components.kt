@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
@@ -71,6 +72,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.srineere.airbridge.ui.theme.extras
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.srineere.airbridge.R
 
 /**
  * The time now, re-read on each minute boundary.
@@ -96,6 +100,15 @@ internal fun nowTicking(): Long {
  * room under it for the one fact that says which of two same-named things this
  * screen is about.
  */
+@Composable
+fun Wordmark(modifier: Modifier = Modifier) = Image(
+    painter = painterResource(R.drawable.ic_cuff_wordmark),
+    contentDescription = "CUFF",
+    // The drawable carries its own colours, so it is drawn rather than
+    // tinted. A logo that followed the accent would stop being the logo.
+    modifier = modifier.height(22.dp),
+)
+
 @Composable
 fun ScreenTitle(
     title: String,

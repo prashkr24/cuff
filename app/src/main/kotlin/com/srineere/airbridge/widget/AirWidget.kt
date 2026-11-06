@@ -90,7 +90,7 @@ class AirWidget : GlanceAppWidget() {
         val context = LocalContext.current
         Empty(
             colours,
-            "Air Bridge",
+            "CUFF",
             if (cell == WidgetSize.Strip) "Tap to choose" else "Tap to choose what this shows",
             // The id travels as an action parameter, which Glance puts in the
             // launching intent's extras under that key -- the same key the

@@ -33,6 +33,9 @@ enum class Accent(
     Orchid("Orchid", Color(0xFFEFA4DE), Color(0xFFA3298B)),
     Moss("Moss", Color(0xFFADE392), Color(0xFF39741B)),
 
+    /** The icon's own rose, so the app can match what launched it. */
+    Rose("Rose", Color(0xFFE7A6A6), Color(0xFFA8454F)),
+
     /** No colour outside the charts. Selection is carried by a filled shape. */
     Graphite("Graphite", Color(0xFFDDE1E4), Color(0xFF586874)),
 
@@ -72,7 +75,8 @@ enum class ThemePreset(
     val lightGround: Ground,
     val accent: Accent,
 ) {
-    InkTheme("Ink", "Cool near-black, a clear blue.", Ground.Ink, Ground.Paper, Accent.Azure),
+    /** The pair the icon is drawn in, and what a fresh install opens on. */
+    InkTheme("Cuff", "Cool near-black and the app's own rose.", Ground.Ink, Ground.Paper, Accent.Rose),
     PitchTheme(
         "Pitch",
         "True black, for OLED.",

@@ -8,7 +8,7 @@ import android.content.Context
  * Health Connect has no such thing. Its only food record is a
  * [androidx.health.connect.client.records.NutritionRecord], which is a thing
  * eaten at a time — there is no library, no favourites, nothing to pick from.
- * So this list is Air Bridge's own, and the screens say so rather than
+ * So this list is CUFF's own, and the screens say so rather than
  * leaving anyone to wonder why their saved foods are missing from Google
  * Health.
  */

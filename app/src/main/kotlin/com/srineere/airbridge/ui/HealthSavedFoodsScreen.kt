@@ -116,7 +116,7 @@ internal fun HealthSavedFoodsScreen(onBack: () -> Unit) {
         }
 
         Text(
-            "These live in Air Bridge, not in Health Connect — it records what you " +
+            "These live in CUFF, not in Health Connect — it records what you " +
                 "ate, not a list of foods to pick from. Changing one here changes " +
                 "nothing you have already logged.",
             style = MaterialTheme.typography.labelMedium,

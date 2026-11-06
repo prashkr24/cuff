@@ -44,26 +44,26 @@ class HealthRationaleActivity : ComponentActivity() {
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 20.dp, vertical = 24.dp),
                     ) {
-                        Text("How Air Bridge uses your health data", style = MaterialTheme.typography.headlineSmall)
+                        Text("How CUFF uses your health data", style = MaterialTheme.typography.headlineSmall)
                         Paragraph(
-                            "Air Bridge reads your steps, sleep, heart rate, heart rate " +
+                            "CUFF reads your steps, sleep, heart rate, heart rate " +
                                 "variability, breathing rate, skin temperature, workouts, " +
                                 "calories and weight from Health Connect. It uses them to " +
                                 "draw the Health tab: your own trends, and where today sits " +
                                 "against your own usual range.",
                         )
                         Paragraph(
-                            "None of it leaves your phone. Air Bridge has no account, no " +
+                            "None of it leaves your phone. CUFF has no account, no " +
                                 "server and no analytics. Nothing is uploaded, shared or sold.",
                         )
                         Paragraph(
                             "The one thing it writes back is food you log in the app " +
                                 "yourself, saved as a nutrition entry so that Google Health " +
                                 "and anything else you use can read it. Delete an entry in " +
-                                "Air Bridge and it is deleted from Health Connect too.",
+                                "CUFF and it is deleted from Health Connect too.",
                         )
                         Paragraph(
-                            "Air Bridge never writes steps, sleep, heart rate or workouts. " +
+                            "CUFF never writes steps, sleep, heart rate or workouts. " +
                                 "Your band already records those through Google Health, and " +
                                 "a second copy would be counted twice by every app that " +
                                 "reads your totals.",

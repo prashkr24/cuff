@@ -22,7 +22,17 @@ android {
 
     defaultConfig {
         // Final: Play and GitHub releases share this ID; it can never change.
-        applicationId = "com.srineere.airbridge"
+        // The install id, which is what makes this a different app on the
+        // phone rather than an update to Air Bridge. The Kotlin package
+        // underneath stays com.srineere.airbridge: moving 163 files would
+        // change nothing anybody can see, and this is the only line the
+        // system reads when it decides whether two APKs are the same app.
+        //
+        // Consequence worth knowing: a new id starts with nothing. No
+        // Health Connect grants, no tiles, no goals, no food log. That is
+        // the point of it here, and it is also why the old app is still
+        // sitting there with all of that in it.
+        applicationId = "com.srineere.cuff"
         minSdk = 28
         targetSdk = 36
         versionCode = 24
@@ -72,10 +82,14 @@ android {
         // debug installs beside it rather than over it.
         debug {
             applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "Air Bridge dev")
+            // The label says Cuff, not Cuff dev. The .dev suffix below is
+            // the install id and stays: it is what lets a release build sit
+            // beside this one, and changing it would uninstall this app and
+            // everything set up in it for the sake of a word nobody sees.
+            resValue("string", "app_name", "Cuff")
         }
         release {
-            resValue("string", "app_name", "Air Bridge")
+            resValue("string", "app_name", "Cuff")
             // Debug stays unminified, so what is installed on the phone during
             // development is never what R8 produced. See proguard-rules.pro
             // for the one part of this app it cannot reason about.

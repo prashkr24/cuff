@@ -120,7 +120,7 @@ internal fun PermissionsScreen(onBack: () -> Unit) {
         HealthGrantCard()
 
         Text(
-            "Air Bridge talks to the band directly over Bluetooth, and reads your readings " +
+            "CUFF talks to the band directly over Bluetooth, and reads your readings " +
                 "from Health Connect on this phone. No account, no server, nothing uploaded.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -199,10 +199,10 @@ private fun HealthGrantCard() {
             "Health Connect needs updating before it will answer."
         health.allowedReads == 0 ->
             "Nothing allowed yet, so the Health tab has nothing to draw. " +
-                "Air Bridge reads ${health.totalReads} kinds of reading and writes one, food."
+                "CUFF reads ${health.totalReads} kinds of reading and writes one, food."
         everything ->
             "All ${health.totalReads} readings allowed, and food can be logged. " +
-                "Air Bridge only ever writes the food you log here."
+                "CUFF only ever writes the food you log here."
         else ->
             "${health.allowedReads} of ${health.totalReads} readings allowed" +
                 (if (health.canWriteFood) "" else ", and food cannot be logged yet") +
