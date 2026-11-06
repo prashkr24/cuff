@@ -668,6 +668,13 @@ internal fun DayHeartLine(
     // Bucketed once per set of readings rather than once per frame: a drag
     // across the chart would otherwise re-walk eighteen thousand samples
     // sixty times a second to draw the same hundred and fifty bars.
+    // Ordered and bounded here too, for the same reason. These three were
+    // left inside the draw lambda below -- a full sorted copy of the list
+    // plus two more passes over it, per frame, on top of the bucketing this
+    // block exists to avoid.
+    val ordered = remember(samples) { samples.sortedBy { it.atMillis } }
+    val lowest = remember(ordered) { ordered.minOfOrNull { it.bpm }?.toDouble() ?: 0.0 }
+    val highest = remember(ordered) { ordered.maxOfOrNull { it.bpm }?.toDouble() ?: 0.0 }
     val bands = remember(samples) {
         if (samples.size <= 400) emptyList() else {
             // About a slice a minute, capped at what the width can show.
@@ -681,9 +688,6 @@ internal fun DayHeartLine(
     }
     ChartCanvas(modifier, height, false) {
         if (samples.size < 2) return@ChartCanvas
-        val ordered = samples.sortedBy { it.atMillis }
-        val lowest = ordered.minOf { it.bpm }.toDouble()
-        val highest = ordered.maxOf { it.bpm }.toDouble()
         val span = (highest - lowest).takeIf { it > 0.0 } ?: 1.0
         val low = lowest - span * 0.12
         val high = highest + span * 0.12

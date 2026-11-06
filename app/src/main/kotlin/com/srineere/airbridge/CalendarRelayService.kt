@@ -29,6 +29,7 @@ import dev.airpulse.fitbit_air.AirLink
 import com.srineere.airbridge.health.HealthReader
 import com.srineere.airbridge.health.HealthSettings
 import com.srineere.airbridge.health.canPulseBand
+import com.srineere.airbridge.health.nextStepCheckMillis
 import com.srineere.airbridge.health.shouldBuzzForGoal
 import com.srineere.airbridge.health.shouldNudgeForHour
 import dev.airpulse.fitbit_air.AirResult
@@ -269,17 +270,26 @@ class CalendarRelayService : Service() {
             requestStop("Relay stopped.")
             return START_NOT_STICKY
         }
+        // These two leave the relay running, so they must not answer
+        // START_NOT_STICKY: Android keeps one restart policy per service,
+        // taken from the latest start, and the answer here would turn off
+        // the sticky restart the whole relay depends on. Tapping Pause used
+        // to mean the relay never came back from an OEM kill.
         if (intent?.action == SILENCE) {
             stopRing("silenced")
-            if (air == null) stopSelf()
-            return START_NOT_STICKY
+            if (air == null) { stopSelf(); return START_NOT_STICKY }
+            return START_STICKY
         }
         if (intent?.action == PAUSE || intent?.action == RESUME) {
             RelayRuleStore.update(this) { it.copy(silence = it.silence.copy(pauseUntil = if (intent.action == RESUME) 0 else System.currentTimeMillis() + 900_000)) }
-            if (air == null) stopSelf()
-            return START_NOT_STICKY
+            if (air == null) { stopSelf(); return START_NOT_STICKY }
+            return START_STICKY
         }
-        if (air != null) return START_STICKY
+        if (air != null && !stopping) return START_STICKY
+        // Starting again while the last stop is still draining. The link is
+        // already closed and nulled; what is left is the stopping flag, and
+        // leaving it set would make startWorker() undo itself on its last line.
+        stopping = false
         selectedPackages = RelayRuleStore.read(this).selectedPackages
         pulseStyle = RelayAppSelection.pulseStyle(this)
         if (selectedPackages.isEmpty()) {
@@ -536,7 +546,12 @@ class CalendarRelayService : Service() {
             saveOutcome("Ring ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             end()
             // Reaching the duration ends the ring without anyone asking.
-            if (ring === session) stopRing("ring_finished")
+            // A ring the band acknowledged ran its full length, which is the
+            // one case lastRingTimedOut exists for: the phone is very likely
+            // still ringing, and the wrist has already said its piece. A ring
+            // that failed said nothing, so it must be allowed to re-arm.
+            if (ring === session)
+                stopRing(if (result.stage == "verified") "ring_timeout" else "ring_finished")
         }
         val sent = onAir { link ->
             link.ring(
@@ -663,7 +678,13 @@ class CalendarRelayService : Service() {
             runCatching { getSystemService(NotificationManager::class.java).cancel(903) }
         }
         if (!settings.buzzOnGoal && !settings.hourlyNudge) return
-        handler.postDelayed(stepCheck, STEP_CHECK_MILLIS)
+        // Not a flat quarter of an hour: see nextStepCheckMillis. A strict
+        // period samples the same four minutes of every hour and can miss
+        // the nudge's window for good.
+        val clock = java.time.LocalTime.now()
+        handler.postDelayed(stepCheck, nextStepCheckMillis(
+            settings.hourlyNudge, clock.minute, clock.second, STEP_CHECK_MILLIS,
+        ))
 
         // Check now as well as in a quarter of an hour. Someone who switches
         // this on having already walked ten thousand steps should not wait
@@ -754,9 +775,15 @@ class CalendarRelayService : Service() {
             if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
                 NotificationChannel(NUDGE_CHANNEL, "Hourly nudge", NotificationManager.IMPORTANCE_LOW)
             )
+            // Request code 6, not 1: Intent.filterEquals ignores extras, so
+            // sharing the ongoing notification's code made these one
+            // PendingIntent, and FLAG_UPDATE_CURRENT then rewrote whichever
+            // was posted first. The nudge sent the relay's own notification
+            // to the Steps screen, and the next rule change sent the nudge
+            // nowhere.
             val open = PendingIntent.getActivity(
                 this,
-                1,
+                6,
                 Intent(this, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     .putExtra(ROUTE_EXTRA, "healthsteps"),
@@ -1002,7 +1029,14 @@ class CalendarRelayService : Service() {
         stopping = true
         stopRing("cancelled")
         saveOutcome(reason)
+        // Nulled as well as closed. holdsBand is `air != null`, so a closed
+        // link left in the field says the relay still holds the band's one
+        // session: the Device screen's reads answer BUSY, Band refuses to
+        // open a link of its own, and Start is swallowed -- for the whole
+        // drain, which is up to the watchdog's four minutes when an
+        // in-flight command's callback was cut off by the close.
         runCatching { air?.close() }
+        air = null
         handler.removeCallbacks(silenceTick)
         cancelWaiting("cancelled")
         if (pending == 0) stopSelf()
@@ -1132,12 +1166,17 @@ class CalendarRelayService : Service() {
             }
         }
 
-        fun stop() {
+        /**
+         * [context] because an explicit stop must be recorded whether or not
+         * the service has reached [onStartCommand] yet. Stopping inside the
+         * start window used to set cancelStart and nothing else, leaving
+         * wanted true, and the next reboot started a relay the user had
+         * already turned off.
+         */
+        fun stop(context: Context) {
             if (starting) cancelStart = true
-            active?.let {
-                setWanted(it, false)
-                it.requestStop("Relay stopped.")
-            }
+            setWanted(context, false)
+            active?.requestStop("Relay stopped.")
         }
 
         private const val TAG = "AirBridge"

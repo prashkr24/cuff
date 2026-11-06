@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,6 +51,7 @@ import com.srineere.airbridge.ui.theme.AirExtraColors
 import com.srineere.airbridge.ui.theme.extras
 import android.text.format.DateFormat
 import java.time.Duration
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import java.time.ZoneId
@@ -104,13 +106,25 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         val score = remember(night, nights) { sleepScoreOf(night, nights) }
 
         // Last night's beats are already loaded; any other night is a read.
-        var olderBeats by remember(night.day) { mutableStateOf<List<HeartSample>?>(null) }
+        //
+        // Cached by day and settled before it reads. Scrubbing reports a new
+        // index on every pointer move, so a finger dragged across a fortnight
+        // walked night.day through fourteen values in under a second and
+        // fired a Health Connect read for each -- a client that rate-limits
+        // callers -- and re-read every night again on the way back.
+        val readBeats = remember { mutableStateMapOf<Long, List<HeartSample>>() }
+        var olderBeats by remember(night.day) {
+            mutableStateOf(readBeats[night.day])
+        }
         LaunchedEffect(night.day) {
-            olderBeats = if (night.day == newest.day) data.snapshot.heartRecent else {
-                withContext(Dispatchers.IO) {
-                    SessionReader().heartSamples(context, night.start, night.end)
-                }
+            if (night.day == newest.day) { olderBeats = data.snapshot.heartRecent; return@LaunchedEffect }
+            readBeats[night.day]?.let { olderBeats = it; return@LaunchedEffect }
+            delay(250)
+            val read = withContext(Dispatchers.IO) {
+                SessionReader().heartSamples(context, night.start, night.end)
             }
+            readBeats[night.day] = read
+            olderBeats = read
         }
         val beats = olderBeats?.let { sleepingRate(it, night) }
 
@@ -138,7 +152,7 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         // and the newest was called "last night" whatever
                         // day it was -- so at two in the morning this card
                         // put that label on the night before.
-                        dayLabel(night.day),
+                        dayLabel(night.day, "Last night"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (sleptEnough) extras.sleepRem
                         else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -186,7 +200,7 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         // The window ending today does not make its last
                         // night last night: at 2am the newest night in a
                         // window that reaches today is the one before.
-                        dayLabel(shown.last().day),
+                        dayLabel(shown.last().day, "Last night"),
                     ),
                     goalMinutes = goals.sleepMinutes.toDouble(),
                     goalColour = extras.sleepRem,
@@ -387,7 +401,7 @@ private fun NightDetail(night: Night, extras: AirExtraColors) {
             .ofPattern(DateFormat.getBestDateTimePattern(Locale.getDefault(), "Hm"))
             .withZone(ZoneId.systemDefault())
     }
-    SectionHeader(dayLabel(night.day))
+    SectionHeader(dayLabel(night.day, "Last night"))
     DetailCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -522,7 +536,7 @@ private fun NightRow(night: Night, low: Double?, high: Double?, colour: Color) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 9.dp),
     ) {
         Text(
-            dayLabel(night.day),
+            dayLabel(night.day, "Last night"),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(76.dp),
@@ -578,9 +592,16 @@ private fun minutes(value: Double): String {
 
 private val dayFormat = DateTimeFormatter.ofPattern("EEE d MMM")
 
-internal fun dayLabel(epochDay: Long): String {
+/**
+ * [todayAs] because today is two different things depending on what is
+ * being counted. A night filed under today is last night; a day's steps,
+ * a resting rate or a VO2 max read under today is today. This said "Last
+ * night" to everybody, so scrubbing to today's bar on Steps printed
+ * "Last night 8,412 steps" under an axis tick that said "Today".
+ */
+internal fun dayLabel(epochDay: Long, todayAs: String = "Today"): String {
     val date = LocalDate.ofEpochDay(epochDay)
-    return if (date == LocalDate.now()) "Last night" else date.format(dayFormat)
+    return if (date == LocalDate.now()) todayAs else date.format(dayFormat)
 }
 
 @Composable

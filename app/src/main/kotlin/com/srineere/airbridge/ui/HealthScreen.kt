@@ -66,6 +66,7 @@ import com.srineere.airbridge.health.TileKind
 import com.srineere.airbridge.health.TileSize
 import com.srineere.airbridge.health.Trend
 import com.srineere.airbridge.health.packTiles
+import com.srineere.airbridge.ui.theme.AirExtraColors
 import com.srineere.airbridge.ui.theme.extras
 import java.text.NumberFormat
 import java.time.Duration
@@ -131,7 +132,15 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
     val axes = rememberAxes()
     // Resolved here, where the theme is, so the route handler can hand the
     // screen a colour rather than a tile.
-    val tileColours = state.tiles.associate { it.kind to tileColour(it) }
+    // Remembered: rebuilt every pass it was a new Map each time, so the
+    // onOpen lambda below captured a different object on every
+    // recomposition and no tile could skip. The grid recomposes once a
+    // second for the length of a live heart rate reading.
+    val extras = MaterialTheme.extras
+    val scheme = MaterialTheme.colorScheme
+    val tileColours = remember(state.tiles, extras, scheme) {
+        state.tiles.associate { it.kind to tileColour(it, extras, scheme) }
+    }
 
     // The button re-reads and says why that may change nothing. It used to
     // leave for Google Health, which does pull the band -- but a control
@@ -779,9 +788,13 @@ private fun ColumnScope.ZonesTile(
         TileEmpty("Nothing has written beats today yet.", size)
         return
     }
-    val latest = samples.maxByOrNull { it.atMillis }?.bpm ?: 0
-    val low = samples.minOf { it.bpm }
-    val high = samples.maxOf { it.bpm }
+    // Remembered like every other tile's series. This one was missed, and
+    // it is the longest list on the tab: four passes over a whole day of
+    // beats, re-run on any recomposition of the grid.
+    val (latest, low, high) = remember(samples) {
+        Triple(samples.maxByOrNull { it.atMillis }?.bpm ?: 0, samples.minOf { it.bpm }, samples.maxOf { it.bpm })
+    }
+    val ticks = remember(samples) { hourTicks(samples) }
     val line = @Composable { height: Dp, modifier: Modifier, withAxes: Axes? ->
         DayHeartLine(
             samples = samples,
@@ -789,7 +802,7 @@ private fun ColumnScope.ZonesTile(
             modifier = modifier,
             height = height,
             axes = withAxes,
-            xTicks = if (withAxes == null) emptyList() else hourTicks(samples),
+            xTicks = if (withAxes == null) emptyList() else ticks,
         )
     }
     when (size) {
@@ -1897,13 +1910,21 @@ internal fun ChangeChip(
     }
 }
 
-internal fun count(value: Long): String = NumberFormat.getIntegerInstance().format(value)
-
-internal fun formatOneDecimal(value: Double): String =
+// Built once rather than per call. Both of these are called from a dozen
+// tiles on every composition of the tab, and each call was a locale lookup
+// and a DecimalFormat pattern parse. NumberFormat is not thread-safe, but
+// every caller here is a composable on the main thread.
+private val integers by lazy { NumberFormat.getIntegerInstance() }
+private val oneDecimal by lazy {
     NumberFormat.getNumberInstance().apply {
         minimumFractionDigits = 1
         maximumFractionDigits = 1
-    }.format(value)
+    }
+}
+
+internal fun count(value: Long): String = integers.format(value)
+
+internal fun formatOneDecimal(value: Double): String = oneDecimal.format(value)
 
 
 /**
@@ -1944,19 +1965,31 @@ internal fun com.srineere.airbridge.health.Night.fourStages(): FourStages {
 
 /** A tile's own colour, falling back to the one its kind teaches. */
 @Composable
-internal fun tileColour(tile: Tile): Color {
-    val extras = MaterialTheme.extras
-    return when (tile.colour ?: tile.kind.defaultColour) {
+internal fun tileColour(tile: Tile): Color =
+    tileColour(tile, MaterialTheme.extras, MaterialTheme.colorScheme)
+
+/**
+ * The same answer, without being a composable.
+ *
+ * The grid builds a map of these and has to do it inside `remember`, or the
+ * map is a new object every pass and the lambda that captures it defeats
+ * every tile's skipping.
+ */
+internal fun tileColour(
+    tile: Tile,
+    extras: AirExtraColors,
+    scheme: androidx.compose.material3.ColorScheme,
+): Color =
+    when (tile.colour ?: tile.kind.defaultColour) {
         TileColour.Heart -> extras.heart
         TileColour.Sleep -> extras.sleepRem
         TileColour.Steps -> extras.steps
         TileColour.Hrv -> extras.hrv
         TileColour.Activity -> extras.activity
         TileColour.Energy -> extras.energy
-        TileColour.Slate -> MaterialTheme.colorScheme.onSurfaceVariant
-        TileColour.Accent -> MaterialTheme.colorScheme.primary
+        TileColour.Slate -> scheme.onSurfaceVariant
+        TileColour.Accent -> scheme.primary
     }
-}
 
 /**
  * Health Connect holds what Google Health last wrote, which is a sync behind

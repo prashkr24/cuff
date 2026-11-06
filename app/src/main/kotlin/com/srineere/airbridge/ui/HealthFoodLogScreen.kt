@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -42,7 +43,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +81,7 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val state = LocalHealthState.current
     val data by healthData(context)
-    val scope = rememberCoroutineScope()
+
     val accent = LocalTileColour.current ?: MaterialTheme.extras.energy
 
     // Days back from today. The window the tab holds is the limit, because
@@ -98,6 +98,11 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     // row that asked it would ask again on every recomposition. Every path
     // that changes the list updates this in the same breath.
     var savedKeys by remember { mutableStateOf(SavedFoods.read(context).map { it.key }.toSet()) }
+    // Delete takes a real Health Connect record with it, whoever wrote it,
+    // and there is no undo anywhere: the entry is gone from the phone, not
+    // from a list this app keeps. One mis-tap on a row that is already open
+    // was the whole distance between reading your lunch and losing it.
+    var confirming by remember { mutableStateOf<FoodEntry?>(null) }
 
     val day = remember(back) { LocalDate.now().minusDays(back.toLong()).toEpochDay() }
     val entries = remember(data.snapshot.food, day) {
@@ -187,16 +192,7 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                                 }
                                 open = null
                             },
-                            onDelete = {
-                                open = null
-                                saying = null
-                                scope.launch {
-                                    when (val result = HealthWriter.deleteFood(context, entry.id)) {
-                                        LogResult.Saved -> state.refresh(context, force = true)
-                                        is LogResult.Refused -> saying = result.why
-                                    }
-                                }
-                            },
+                            onDelete = { confirming = entry },
                         )
                     }
                 }
@@ -230,6 +226,41 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
         )
         Box(Modifier.padding(bottom = 24.dp))
+    }
+
+    confirming?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { confirming = null },
+            title = { Text("Delete ${entry.name}?") },
+            text = {
+                Text(
+                    "This removes the entry from Health Connect, not just from this " +
+                        "list, and nothing here can put it back.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirming = null
+                    open = null
+                    saying = null
+                    // On the state's scope, not this screen's: the write has
+                    // to finish whether or not the screen is still here to
+                    // hear about it.
+                    state.write {
+                        when (val result = HealthWriter.deleteFood(context, entry.id)) {
+                            LogResult.Saved -> state.refresh(context, force = true)
+                            is LogResult.Refused -> saying = result.why
+                        }
+                    }
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = null }) { Text("Keep it") }
+            },
+        )
     }
 }
 

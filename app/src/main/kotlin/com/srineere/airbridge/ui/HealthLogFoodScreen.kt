@@ -1,5 +1,6 @@
 package com.srineere.airbridge.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +34,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,7 +70,6 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val data by healthData(context)
     val state = LocalHealthState.current
-    val scope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf("") }
     var kcal by remember { mutableStateOf("") }
@@ -89,6 +88,11 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     // not say which part you were meant to start with. Now it asks that
     // first, and whichever answer you give leads to the same form.
     var step by remember { mutableStateOf(Step.Start) }
+    // The gesture does what the arrow does. Without this the title arrow
+    // stepped back through the flow while the system back popped the whole
+    // screen out of it -- two controls that look like one control, doing
+    // different things on the same screen.
+    BackHandler(step != Step.Start) { step = Step.Start }
 
     val ask = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract(),
@@ -282,7 +286,13 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             onClick = {
                 saving = true
                 saying = null
-                scope.launch {
+                // On the state's own scope. This screen pops itself on a
+                // successful save, and a write launched on the screen's
+                // scope is cancelled by that pop: the record may or may not
+                // have landed, and neither the refresh nor the refusal line
+                // ever runs to say which. It is the same rule the read
+                // already follows.
+                state.write {
                     val result = HealthWriter.logFood(
                         context = context,
                         name = name,

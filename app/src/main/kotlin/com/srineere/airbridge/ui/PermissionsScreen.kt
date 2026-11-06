@@ -1,8 +1,10 @@
 package com.srineere.airbridge.ui
 
+import android.app.Activity
 import android.Manifest
 import android.content.ComponentName
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -327,7 +329,56 @@ private fun rememberGrants(context: Context): List<Grant> {
     // launcher's own answer counts as a reason to look again.
     var answered by remember { mutableIntStateOf(0) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { answered++ }
-    return remember(resumes, answered) { grantsFor(context) { permission -> ask.launch(permission) } }
+    return remember(resumes, answered) {
+        grantsFor(context) { permission ->
+            // Once Android has marked a permission permanently denied the
+            // launcher returns at once without showing anything, so Allow
+            // becomes a button that visibly does nothing, forever, while the
+            // header above it keeps counting the thing as outstanding. The
+            // relay is then unfixable from inside the app -- the only two
+            // grants on this screen with a Settings route are the two that
+            // never went through this launcher. The activity is the one that
+            // knows: rationale is false both before the first ask and after
+            // the last, so the stored flag is what tells those apart.
+            if (context.permanentlyDenied(permission)) context.openAppSettings()
+            else {
+                context.rememberAsked(permission)
+                ask.launch(permission)
+            }
+        }
+    }
+}
+
+/**
+ * Whether asking again would show nothing.
+ *
+ * shouldShowRequestPermissionRationale is false in two opposite cases --
+ * never asked, and asked and refused for good -- so it only answers this
+ * question alongside a record of having asked.
+ */
+private fun Context.permanentlyDenied(permission: String): Boolean {
+    if (has(permission)) return false
+    // Unwrapped, because LocalContext in Compose is a ContextWrapper around
+    // the activity rather than the activity itself.
+    var at: Context? = this
+    while (at is ContextWrapper && at !is Activity) at = at.baseContext
+    val activity = at as? Activity ?: return false
+    return asked(permission) && !activity.shouldShowRequestPermissionRationale(permission)
+}
+
+private fun Context.askedKey() = getSharedPreferences("permissions", Context.MODE_PRIVATE)
+private fun Context.asked(permission: String) = askedKey().getBoolean(permission, false)
+private fun Context.rememberAsked(permission: String) =
+    askedKey().edit().putBoolean(permission, true).apply()
+
+private fun Context.openAppSettings() {
+    runCatching {
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.fromParts("package", packageName, null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
 }
 
 private fun grantsFor(context: Context, ask: (String) -> Unit): List<Grant> = buildList {

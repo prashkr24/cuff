@@ -200,7 +200,12 @@ const val ROUTE_EXTRA = "air_route"
  */
 internal object WidgetSnapshotCache {
     private val mutex = Mutex()
-    private var held: WidgetSnapshot? = null
+    // Volatile because invalidate() writes it from whatever thread called
+    // refreshWidgets while the stack's onDataSetChanged reads it through
+    // get() on a binder thread. Without the barrier the stack could redraw
+    // from the snapshot the invalidate was meant to throw away, while the
+    // Glance faces beside it drew the new one.
+    @Volatile private var held: WidgetSnapshot? = null
 
     suspend fun get(context: Context, maxAge: Long = FRESH_MILLIS): WidgetSnapshot = mutex.withLock {
         // A snapshot read for thirty days cannot answer a readiness card

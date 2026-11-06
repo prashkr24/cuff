@@ -69,8 +69,25 @@ internal fun HealthHeartScreen(onBack: () -> Unit) {
     val axes = rememberAxes()
     var atHeart by remember { mutableStateOf<Float?>(null) }
     var hours by remember { mutableIntStateOf(8) }
-    val samples = data.snapshot.heartToday.lastHours(hours)
-    val summary = summarise(samples)
+    // Remembered, because atHeart is read in this same scope: scrubbing the
+    // chart recomposes the screen on every pointer move, and this re-filtered
+    // and re-summarised a whole day of beats -- tens of thousands of them --
+    // once per touch event.
+    val samples = remember(data.snapshot.heartToday, hours) {
+        data.snapshot.heartToday.lastHours(hours)
+    }
+    val summary = remember(samples) { summarise(samples) }
+    val ticks = remember(samples) { hourTicks(samples) }
+    val zoneBands = remember(extras) {
+        Zone.entries.map { zone ->
+            ZoneBand(
+                from = zone.lowBpm(ASSUMED_MAX_HEART_RATE).toDouble(),
+                until = zone.highBpm(ASSUMED_MAX_HEART_RATE).toDouble(),
+                colour = zone.colour(extras),
+                label = zone.shortLabel,
+            )
+        }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Heart", subtitle = "Today", onBack = onBack)
@@ -114,16 +131,9 @@ internal fun HealthHeartScreen(onBack: () -> Unit) {
                         .scrubbableAcross(CHART_GUTTER) { atHeart = it },
                     height = 140.dp,
                     axes = axes,
-                    xTicks = hourTicks(samples),
+                    xTicks = ticks,
                     selected = atHeart,
-                    zones = Zone.entries.map { zone ->
-                        ZoneBand(
-                            from = zone.lowBpm(ASSUMED_MAX_HEART_RATE).toDouble(),
-                            until = zone.highBpm(ASSUMED_MAX_HEART_RATE).toDouble(),
-                            colour = zone.colour(extras),
-                            label = zone.shortLabel,
-                        )
-                    },
+                    zones = zoneBands,
                     markPeak = true,
                     peakColour = extras.zonePeak,
                 )

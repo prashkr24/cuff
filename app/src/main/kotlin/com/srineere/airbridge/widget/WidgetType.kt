@@ -73,6 +73,12 @@ internal fun typeFaceOf(face: TypeFace, snapshot: WidgetSnapshot, now: Long): Fa
  * app's own light-or-dark, which is a guess, but the only one left.
  */
 internal fun wantsDarkInk(context: android.content.Context): Boolean? = runCatching {
+    // colorHints arrived in API 31. Below that the method is simply not
+    // there, so reading it threw NoSuchMethodError into the runCatching
+    // above and every Type widget on Android 9 to 11 silently fell back to
+    // the app's own light-or-dark -- which is the honest answer there, but
+    // it should be reached by asking the version rather than by a throw.
+    if (android.os.Build.VERSION.SDK_INT < 31) return null
     val colours = WallpaperManager.getInstance(context)
         .getWallpaperColors(WallpaperManager.FLAG_SYSTEM) ?: return null
     colours.colorHints and android.app.WallpaperColors.HINT_SUPPORTS_DARK_TEXT != 0

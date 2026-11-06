@@ -319,6 +319,14 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
         if (!force && loadedAt != 0L && age < FRESH_MILLIS) return
         loading = true
         own.launch {
+            // The window this read is for. A widen that arrives while it is
+            // running is dropped by the `loading` guard above, but windowDays
+            // has already moved -- so the next widen to the same figure
+            // early-returns at `days <= windowDays` and the longer read never
+            // happens at all. Opening Readiness during the tab's own first
+            // read used to leave it stuck on "30 of 60 nights" until the
+            // snapshot went stale a minute later.
+            val asked = windowDays
             try {
                 val next = withContext(Dispatchers.IO) { load(context) }
                 data = next
@@ -329,11 +337,26 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
                 // later refresh and the tab never loads again.
                 loading = false
             }
+            if (windowDays != asked) refresh(context, force = true)
         }
     }
 
     private suspend fun load(context: Context): HealthData =
         loadHealthData(context, reader, windowDays)
+
+    /**
+     * Runs something that must finish on the scope the reads use.
+     *
+     * The same rule as [refresh], for the other direction. A write launched
+     * on a screen's own `rememberCoroutineScope` dies when the screen leaves
+     * -- and the two things this app writes, a food entry and its deletion,
+     * are both reached from a screen that pops the moment the button is
+     * pressed. The record may or may not have landed, and neither the error
+     * line nor the refresh ever runs to say which.
+     */
+    fun write(block: suspend () -> Unit) {
+        own.launch { block() }
+    }
 
     private companion object {
         /** What the tab opens with: a month, which every tile's window fits in. */

@@ -276,7 +276,11 @@ private fun AddWidget(
                     if (!stack) {
                         onPick(listOf(design))
                     } else if (!chosen.remove(design)) {
-                        chosen.add(design)
+                        // Capped: see MAX_STACK_CARDS. Every card in a stack
+                        // is composed and held with its own bitmap, so the
+                        // whole catalogue in one cell is a widget that runs
+                        // the app out of memory rather than a long stack.
+                        if (chosen.size < MAX_STACK_CARDS) chosen.add(design)
                     }
                 },
                 place = if (!stack) null else {

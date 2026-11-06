@@ -10,6 +10,18 @@ class CalendarNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         instance = this
         connected = true
+        // A disconnect stops the relay, and Android disconnects us for
+        // reasons that have nothing to do with the user: an app update, a
+        // low-memory rebind, ordinary listener churn. Without this the relay
+        // stayed down for the rest of the boot with nothing on screen saying
+        // so, while wanted was still true the whole time. Guarded because a
+        // background foreground-service start is refused on API 31+ unless
+        // the app is exempt from battery optimisation, and a listener that
+        // throws here is a listener Android stops rebinding.
+        if (CalendarRelayService.isWanted(this) && !CalendarRelayService.isRunning) {
+            runCatching { CalendarRelayService.start(this) }
+                .onFailure { Log.w("AirBridge", "could not revive the relay on reconnect", it) }
+        }
     }
 
     override fun onListenerDisconnected() {

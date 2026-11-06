@@ -555,7 +555,12 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         if (HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class) !in granted) {
             return null
         }
-        return hourlyTotals(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, day) {
+        // The same writers the snapshot's own hourly burn is read from.
+        // Without this, today's curve on the Balance screen excluded the
+        // phone and stepping back one day did not, so the whole line moved
+        // up: two adjacent days drawn from different sets of writers.
+        val origins = originsFor(context, client, granted, Written.Burned)
+        return hourlyTotals(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, day, origins) {
             it.inKilocalories
         }
     }
@@ -701,6 +706,11 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
      * a zero rather than a missing bucket, because the chart these feed is a
      * running total and a gap in the middle of one is meaningless.
      */
+    // metricKey is library-group restricted and lint fails the build on it.
+    // It is read for a log label and nothing else -- the string that names
+    // which read failed -- which is worth a suppression rather than a
+    // guessed label that goes out of date.
+    @android.annotation.SuppressLint("RestrictedApi")
     private suspend fun <T : Any> hourlyTotals(
         client: HealthConnectClient,
         metric: AggregateMetric<T>,

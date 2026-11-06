@@ -136,6 +136,12 @@ internal class WidgetColours(
      * decided when it is drawn. So an arc has to know, and this is the only
      * place in the widget code that resolves the question.
      */
+    // isNightMode is Glance's own and library-restricted, so lint fails the
+    // build on it. It is still the right thing to ask: it is the answer
+    // Glance's own ColorProviders resolve with, and a bitmap drawn from a
+    // different answer than the composables around it is the bug this
+    // exists to prevent.
+    @android.annotation.SuppressLint("RestrictedApi")
     fun isDark(context: Context): Boolean = when (mode) {
         ThemeMode.Light -> false
         ThemeMode.Dark -> true

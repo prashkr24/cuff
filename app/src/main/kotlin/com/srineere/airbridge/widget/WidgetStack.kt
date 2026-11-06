@@ -149,11 +149,18 @@ internal fun stackViews(context: Context, appWidgetId: Int): RemoteViews {
     views.setEmptyView(R.id.stack_view, R.id.stack_empty)
     views.setOnClickPendingIntent(R.id.stack_previous, pageIntent(context, appWidgetId, false))
     views.setOnClickPendingIntent(R.id.stack_next, pageIntent(context, appWidgetId, true))
+    // Clamped to what is actually in the stack now. Reconfiguring five
+    // cards down to two leaves the stored page pointing past the end: the
+    // flipper clamps what it draws, the route came out null so a tap opened
+    // the Health tab, and the next chevron stepped from a number no card
+    // was on.
+    val designs = WidgetStore.read(context, appWidgetId)?.designs.orEmpty()
     val page = StackPage.read(context, appWidgetId)
+        .coerceIn(0, (designs.size - 1).coerceAtLeast(0))
     // The tap belongs to the frame over the flipper rather than to the
     // card; openIntent says why the collection's own template never fires.
     // The route is the showing card's, and this runs on every page turn.
-    val showing = WidgetStore.read(context, appWidgetId)?.designs?.getOrNull(page)
+    val showing = designs.getOrNull(page)
     views.setOnClickPendingIntent(
         R.id.stack_tap,
         openIntent(context, appWidgetId, showing?.let { routeFor(it) }),
@@ -211,6 +218,15 @@ private fun pageIntent(context: Context, appWidgetId: Int, forward: Boolean): Pe
     return PendingIntent.getBroadcast(context, appWidgetId * 2 + if (forward) 1 else 0, intent, flags)
 }
 
+/**
+ * How many cards one stack may hold.
+ *
+ * Each composed card is held for the life of the factory and carries its
+ * own chart bitmap -- about 620 KB -- so this is a memory ceiling rather
+ * than a taste. Eight is already more cards than anybody pages through.
+ */
+internal const val MAX_STACK_CARDS = 8
+
 internal const val ACTION_NEXT = "com.srineere.airbridge.STACK_NEXT"
 internal const val ACTION_PREVIOUS = "com.srineere.airbridge.STACK_PREVIOUS"
 
@@ -265,7 +281,13 @@ internal class StackFactory(
 
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     override fun onDataSetChanged() {
-        val stack = WidgetStore.read(context, appWidgetId)?.designs.orEmpty()
+        // Capped, because every composed card is held in `cards` for as
+        // long as this factory is bound and each carries its own chart
+        // bitmap -- about 620 KB measured, so the whole catalogue in one
+        // stack would be twenty megabytes resident and recomposed in full
+        // on every refresh. The configuration screen caps the choice too;
+        // this is the defence for a row already stored.
+        val stack = WidgetStore.read(context, appWidgetId)?.designs.orEmpty().take(MAX_STACK_CARDS)
         if (stack.isEmpty()) {
             cards = emptyList()
             return

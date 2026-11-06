@@ -31,6 +31,8 @@ internal object Band {
     private var link: AirLink? = null
     private var busy = false
     private var measuring = false
+    /** The screen waiting on a live reading, so closing can answer it. */
+    private var heartSink: AirSink? = null
     private val idle = Runnable { close() }
 
     /**
@@ -47,7 +49,13 @@ internal object Band {
      * the band, so it costs no session and never waits behind one.
      */
     fun isConnected(context: Context, reply: AirResult) {
-        CalendarRelayService.active?.let { return it.readConnection(reply) }
+        // takeIf, as in measureHeartRate below. The relay sets active before
+        // it opens a link and can spend up to ninety seconds waiting on the
+        // notification listener first; asking it in that window answered
+        // NOT_RUNNING and drew the band as disconnected, when the adapter
+        // sitting right here knew the truth and costs nothing to ask.
+        CalendarRelayService.active?.takeIf { it.holdsBand }
+            ?.let { return it.readConnection(reply) }
         own(context).isAirConnected(reply)
     }
 
@@ -120,6 +128,7 @@ internal object Band {
         if (busy) return false
         busy = true
         measuring = true
+        heartSink = sink
         own(context).readHeartRate(object : AirSink {
             override fun success(event: Any?) = sink.success(event)
             override fun error(code: String, message: String?, details: Any?) {
@@ -145,6 +154,7 @@ internal object Band {
     private fun finishMeasuring() {
         if (!measuring) return
         measuring = false
+        heartSink = null
         done()
     }
 
@@ -158,10 +168,21 @@ internal object Band {
         // an answer: silence here is a spinner that never stops.
         val dropped = queue.toList()
         queue.clear()
+        // A reading in flight is owed an answer exactly as a queued command
+        // is, and the band is owed a stop before its link goes. Without this,
+        // the relay taking the band mid-measurement left the screen showing
+        // the last beat it had with nothing to say the stream had died, and
+        // left measuring true over a null link -- so the next stopMeasuring()
+        // told the band nothing and it kept notifying.
+        val stranded = heartSink.takeIf { measuring }
+        if (stranded != null) runCatching { link?.stopHeartRate() }
+        heartSink = null
+        measuring = false
         busy = false
         link?.let { runCatching { it.close() }.onFailure { e -> Log.w(TAG, "closing band link", e) } }
         link = null
         dropped.forEach { it.reply.error("CLOSED", "The link to the band was closed.", null) }
+        stranded?.error("CLOSED", "The link to the band was closed.", null)
     }
 
     private fun own(context: Context): AirLink =
@@ -177,7 +198,11 @@ internal object Band {
         attempt: Int = 0,
         operation: (AirLink, AirResult) -> Unit,
     ) {
-        CalendarRelayService.active?.let { relay ->
+        // Only while it is holding the band, again: otherwise a battery read
+        // during the relay's start window retried three times over four and a
+        // half seconds and then said "the relay is delivering a notification"
+        // with nothing being delivered and nobody holding the session.
+        CalendarRelayService.active?.takeIf { it.holdsBand }?.let { relay ->
             // The relay refuses while it is mid-delivery, and one screen
             // opening after another is enough to collide with its own earlier
             // read. Waiting a moment is a better answer than handing that

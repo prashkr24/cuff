@@ -30,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
@@ -63,7 +62,7 @@ import java.time.LocalDate
 @Composable
 internal fun HealthExportScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val state = LocalHealthState.current
     val accent = LocalTileColour.current ?: MaterialTheme.colorScheme.primary
 
     var range by remember { mutableStateOf(HealthExport.Range.All) }
@@ -97,7 +96,12 @@ internal fun HealthExportScreen(onBack: () -> Unit) {
         if (uri == null || reading == null) return@rememberLauncherForActivityResult
         writing = true
         saying = null
-        scope.launch {
+        // On the state's own scope, not this screen's. A zip of a year of
+        // workouts takes long enough to leave the screen during, and on the
+        // screen's scope the write was cancelled mid-stream: `use` closed a
+        // half-written stream and left a truncated .zip at the URI the
+        // person chose, with nothing to say it had failed.
+        state.write {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     context.contentResolver.openOutputStream(uri)?.use { out ->

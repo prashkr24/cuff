@@ -60,4 +60,33 @@ class MorningMomentTest {
         // And it still says something rather than throwing.
         assertEquals("No night was recorded, and no morning readings yet", empty.headline)
     }
+
+    @Test fun `a night that is not last night is not called last night`() {
+        // With the band two days out of sync, the newest night on file is
+        // the night before last. The report took it anyway -- the retry
+        // gives up at eleven and sends what it has -- so a lock screen read
+        // "You slept 6h 28m" about a night its reader had already lived two
+        // days past. HealthData.lastNight makes the same check; this did not.
+        val twoDaysAgo = java.time.LocalDate.now().toEpochDay() - 2
+        val stale = HealthSnapshot(
+            nights = listOf(
+                Night(
+                    day = twoDaysAgo,
+                    start = java.time.Instant.EPOCH,
+                    end = java.time.Instant.EPOCH.plus(java.time.Duration.ofMinutes(388)),
+                    asleep = java.time.Duration.ofMinutes(388),
+                    awake = java.time.Duration.ZERO,
+                    light = java.time.Duration.ofMinutes(388),
+                    deep = java.time.Duration.ZERO,
+                    rem = java.time.Duration.ZERO,
+                ),
+            ),
+        )
+        val report = morningReport(stale, Goals())
+        assertEquals(null, report.night)
+        assertEquals(null, report.score)
+        assertEquals("No night was recorded, and no morning readings yet", report.headline)
+        // Nothing else to carry, so there is nothing to wake anyone for.
+        assertEquals(false, report.worthSending)
+    }
 }

@@ -82,6 +82,37 @@ fun shouldNudgeForHour(
 const val NUDGE_FROM_MINUTE = 50
 
 /**
+ * How long until the next step check, in milliseconds.
+ *
+ * A plain quarter-hour timer samples four fixed minutes of every hour --
+ * whichever minute the relay happened to start on, plus 15, 30 and 45 -- and
+ * [shouldNudgeForHour] only answers yes in the last ten. Those four land
+ * inside that window for ten of the fifteen possible phases and miss it
+ * entirely for the other five: a relay started at two minutes past checks at
+ * :02, :17, :32 and :47 for as long as it runs, so the hourly nudge never
+ * fires once. Not rarely -- never, and silently.
+ *
+ * So when the nudge is on, the wait is shortened to land on [NUDGE_FROM_MINUTE]
+ * when that comes first. The quarter hour is still the ceiling, because the
+ * daily goal wants checking whether or not the hour does.
+ *
+ * [minute] and [second] are the clock now.
+ */
+fun nextStepCheckMillis(
+    hourlyNudge: Boolean,
+    minute: Int,
+    second: Int,
+    periodMillis: Long,
+): Long {
+    if (!hourlyNudge) return periodMillis
+    val sinceHour = (minute * 60 + second) * 1000L
+    val window = NUDGE_FROM_MINUTE * 60 * 1000L
+    // Already inside the window: the next one is an hour from its start.
+    val untilWindow = if (sinceHour < window) window - sinceHour else 3_600_000L + window - sinceHour
+    return minOf(periodMillis, untilWindow)
+}
+
+/**
  * Whether the band can be pulsed at all right now.
  *
  * One rule, in one place, because the bug it replaces was two copies of it

@@ -126,13 +126,17 @@ fun morningReport(
     val today = LocalDate.now(zone).toEpochDay()
     val yesterday = today - 1
     val week = snapshot.steps.filter { it.day in (yesterday - 6)..yesterday }.sortedBy { it.day }
+    // The night that ended this morning, which Health Connect files under
+    // the day it ended -- and only that one. The newest night on file is not
+    // the same question: with the band two days out of sync it is the night
+    // before last, and the report would open "You slept 7h 12m" about a
+    // night the reader has already lived two days past. HealthData.lastNight
+    // makes the same check for the same reason.
+    val night = snapshot.nights.maxByOrNull { it.day }?.takeIf { it.day == today }
     return MorningReport(
         day = today,
-        // The night that ended this morning, which Health Connect files
-        // under the day it ended.
-        night = snapshot.nights.maxByOrNull { it.day },
-        score = snapshot.nights.maxByOrNull { it.day }
-            ?.let { sleepScoreOf(it, snapshot.nights) },
+        night = night,
+        score = night?.let { sleepScoreOf(it, snapshot.nights) },
         resting = trendOf(snapshot.restingHeartRate),
         hrv = trendOf(snapshot.hrv),
         yesterdaySteps = week.firstOrNull { it.day == yesterday }?.value?.roundToInt()?.toLong(),

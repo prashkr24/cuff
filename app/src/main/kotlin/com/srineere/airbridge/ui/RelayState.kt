@@ -354,7 +354,7 @@ internal class RelayState(private val context: Context, private val invalidate: 
     }
 
     fun stop() {
-        CalendarRelayService.stop()
+        CalendarRelayService.stop(context)
         changed()
     }
 

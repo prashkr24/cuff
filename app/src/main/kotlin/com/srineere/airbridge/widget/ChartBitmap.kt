@@ -34,7 +34,12 @@ import android.graphics.RectF
  * [yLabel] formats a value for the gutter; [xTicks] are positions from 0
  * to 1 across the plot, already chosen by the caller.
  */
-internal class Scale(
+// A data class, because it is a remember key. scaleOf builds a new one on
+// every composition on purpose -- the point of keying on it is that two
+// equal scales skip the redraw -- and with identity equality the key changed
+// every time and a full ARGB_8888 bitmap was reallocated and redrawn to
+// produce the identical picture.
+internal data class Scale(
     val ink: Int,
     val line: Int,
     val xTicks: List<Pair<Float, String>> = emptyList(),

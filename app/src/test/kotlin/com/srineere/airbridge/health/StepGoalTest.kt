@@ -1,5 +1,6 @@
 package com.srineere.airbridge.health
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -151,5 +152,51 @@ class StepGoalTest {
         val history = StepGoalHistory()
         assertFalse(canPulseBand(ready = true, stopping = false, bandLinked = true, measuring = true))
         assertTrue(shouldBuzzForGoal(on, history, 12_000, today, silenced = false))
+    }
+
+    // ------------------------------------------------- when the next check is
+
+    private val quarter = 15 * 60 * 1000L
+
+    @Test
+    fun `every starting minute reaches the nudge window within the hour`() {
+        // The bug: a flat quarter-hour timer samples the same four minutes
+        // of every hour -- whichever it started on, plus 15, 30 and 45 --
+        // and the nudge only answers yes from minute 50. For a third of the
+        // starting phases none of those four is ever inside the window, so
+        // the nudge never fired once. Not rarely. Never, and silently.
+        for (start in 0..59) {
+            var minute = start
+            var reached = false
+            // Four hours of checks is far more than an hour's worth.
+            repeat(32) {
+                if (minute % 60 >= NUDGE_FROM_MINUTE) reached = true
+                val wait = nextStepCheckMillis(hourlyNudge = true, minute = minute % 60, second = 0, periodMillis = quarter)
+                minute += (wait / 60_000L).toInt()
+            }
+            assertTrue("starting at :$start never reaches the nudge window", reached)
+        }
+    }
+
+    @Test
+    fun `the wait lands on the window when the window comes first`() {
+        // Forty past: ten minutes to :50, nearer than the quarter hour, so
+        // the wait is shortened onto the window.
+        assertEquals(10 * 60 * 1000L, nextStepCheckMillis(true, minute = 40, second = 0, periodMillis = quarter))
+        // Twelve past: thirty-eight minutes away, so the quarter hour comes
+        // first and is kept -- the daily goal wants checking whether or not
+        // the hour does.
+        assertEquals(quarter, nextStepCheckMillis(true, minute = 12, second = 0, periodMillis = quarter))
+        // Seconds count, so a check does not land a moment early.
+        assertEquals(9 * 60 * 1000L + 30_000L, nextStepCheckMillis(true, minute = 40, second = 30, periodMillis = quarter))
+    }
+
+    @Test
+    fun `inside the window the next one is an hour on, and the goal keeps its own period`() {
+        // At :55 the window is already open; the next one starts at :50 of
+        // the following hour, which is further off than the quarter hour.
+        assertEquals(quarter, nextStepCheckMillis(true, minute = 55, second = 0, periodMillis = quarter))
+        // With the nudge off nothing is shortened at all.
+        assertEquals(quarter, nextStepCheckMillis(false, minute = 12, second = 0, periodMillis = quarter))
     }
 }

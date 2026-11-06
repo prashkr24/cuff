@@ -98,18 +98,23 @@ internal fun HealthBalanceDayScreen(onBack: () -> Unit) {
 
     // Food arrives as entries at a time, not as an hourly aggregate, so the
     // eaten line is built here from the entries themselves.
-    val eatenByHour = DoubleArray(24)
-    snapshot.food.filter { it.day == day }.forEach { entry ->
-        val hour = entry.at.atZone(zone).hour
-        eatenByHour[hour] += entry.kcal ?: 0.0
+    //
+    // Remembered, as the tile that draws the same two lines already is:
+    // picked is read below, so a drag across the chart rebuilt both arrays
+    // and both running totals on every pointer event.
+    val (burned, eaten) = remember(snapshot.food, snapshot.burnedHourly, olderBurn, day, back, hourNow) {
+        val eatenByHour = DoubleArray(24)
+        snapshot.food.filter { it.day == day }.forEach { entry ->
+            val hour = entry.at.atZone(zone).hour
+            eatenByHour[hour] += entry.kcal ?: 0.0
+        }
+        val hourlySource = if (back == 0) snapshot.burnedHourly else olderBurn.orEmpty()
+        val burnedByHour = hourlySource.takeIf { it.size == 24 } ?: List(24) { 0.0 }
+        runningTotal(burnedByHour, hourNow) to runningTotal(eatenByHour.toList(), hourNow)
     }
-    val hourlySource = if (back == 0) snapshot.burnedHourly else olderBurn.orEmpty()
-    val burnedByHour = hourlySource.takeIf { it.size == 24 } ?: List(24) { 0.0 }
 
     val axes = rememberAxes()
     var picked by remember { mutableStateOf<Int?>(null) }
-    val burned = runningTotal(burnedByHour, hourNow)
-    val eaten = runningTotal(eatenByHour.toList(), hourNow)
     val haveSomething = burned.lastOrNull()?.let { it > 0 } == true ||
         eaten.lastOrNull()?.let { it > 0 } == true
 
