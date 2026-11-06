@@ -166,7 +166,7 @@ internal fun HealthSleepBankScreen(onBack: () -> Unit) {
                 axes = axes,
                 xTicks = dateTicks(
                     days,
-                    if (window.isNow) "Last night" else dayLabel(days.last()),
+                    dayLabel(days.last()),
                 ),
                 label = { span(it) },
                 selected = picked,

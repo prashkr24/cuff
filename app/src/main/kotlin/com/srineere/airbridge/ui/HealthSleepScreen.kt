@@ -132,7 +132,13 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     Text(
                         // Which night, and whether it reached the goal. The
                         // mark alone would not say what was met.
-                        if (night.day == newest.day) "last night" else dayLabel(night.day),
+                        //
+                        // dayLabel decides this by date. It used to be
+                        // asked only for nights that were not the newest,
+                        // and the newest was called "last night" whatever
+                        // day it was -- so at two in the morning this card
+                        // put that label on the night before.
+                        dayLabel(night.day),
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (sleptEnough) extras.sleepRem
                         else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -177,7 +183,10 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     axes = axes,
                     xTicks = dateTicks(
                         shown.map { it.day },
-                        if (window.isNow) "Last night" else dayLabel(shown.last().day),
+                        // The window ending today does not make its last
+                        // night last night: at 2am the newest night in a
+                        // window that reaches today is the one before.
+                        dayLabel(shown.last().day),
                     ),
                     goalMinutes = goals.sleepMinutes.toDouble(),
                     goalColour = extras.sleepRem,
@@ -233,7 +242,7 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             }
         }
 
-        LastNight(night, newest.day, extras)
+        NightDetail(night, extras)
 
         SectionHeader(
             if (night.day == newest.day) "Last night, by stage"
@@ -370,7 +379,7 @@ private fun ColumnScope.ScoreBlock(score: SleepScore?) {
  * which is the part a stacked bar throws away.
  */
 @Composable
-private fun LastNight(night: Night, newestDay: Long, extras: AirExtraColors) {
+private fun NightDetail(night: Night, extras: AirExtraColors) {
     if (night.segments.isEmpty()) return
     var at by remember(night.day) { mutableStateOf<Float?>(null) }
     val clock = remember {
@@ -378,7 +387,7 @@ private fun LastNight(night: Night, newestDay: Long, extras: AirExtraColors) {
             .ofPattern(DateFormat.getBestDateTimePattern(Locale.getDefault(), "Hm"))
             .withZone(ZoneId.systemDefault())
     }
-    SectionHeader(if (night.day == newestDay) "Last night" else dayLabel(night.day))
+    SectionHeader(dayLabel(night.day))
     DetailCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(

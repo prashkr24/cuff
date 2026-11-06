@@ -92,7 +92,15 @@ internal fun HealthHrvScreen(onBack: () -> Unit) {
                         )
                     }
                     Text(
-                        if (window.isNow) "last night, RMSSD" else "last in this window",
+                        // HRV is written overnight, so the newest figure
+                        // is last night's only if a night ended today.
+                        // Before the band syncs it belongs to yesterday.
+                        when {
+                            trend?.readings?.lastOrNull()?.day ==
+                                java.time.LocalDate.now().toEpochDay() -> "last night, RMSSD"
+                            window.isNow -> "latest reading, RMSSD"
+                            else -> "last in this window"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
