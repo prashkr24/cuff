@@ -110,7 +110,15 @@ class SessionReader {
         val until = Instant.now()
         val from = until.minus(Duration.ofDays(days.toLong()))
         return records(client, ExerciseSessionRecord::class, from, until)
-            .map { Session(it.startTime, it.endTime, it.title, it.exerciseType) }
+            .map {
+                Session(
+                    it.startTime,
+                    it.endTime,
+                    it.title,
+                    it.exerciseType,
+                    it.metadata.recordedBy(),
+                )
+            }
             .sortedByDescending { it.start }
     }
 
@@ -135,7 +143,15 @@ class SessionReader {
             at.plus(Duration.ofDays(1)),
         )
             .firstOrNull { it.startTime.toEpochMilli() == startMillis }
-            ?.let { Session(it.startTime, it.endTime, it.title, it.exerciseType) }
+            ?.let {
+                Session(
+                    it.startTime,
+                    it.endTime,
+                    it.title,
+                    it.exerciseType,
+                    it.metadata.recordedBy(),
+                )
+            }
     }
 
     /** One aggregate call: what a row needs and nothing it does not. */

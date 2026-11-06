@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -127,6 +128,31 @@ internal fun HealthSessionScreen(startMillis: Long, onBack: () -> Unit) {
             subtitle = clock.format(workout.start),
             onBack = onBack,
         )
+
+        // Which device this came off, where the record says.
+        //
+        // Absent for most writers and drawn only when present: a row
+        // reading "Unknown device" would be this screen inventing a fact
+        // about hardware, which is the thing it is here to stop doing.
+        workout.device?.let { device ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
+            ) {
+                Icon(
+                    deviceGlyph(device),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp),
+                )
+                Text(
+                    "Recorded on your ${device.label}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
 
         val found = detail
         DetailCard {

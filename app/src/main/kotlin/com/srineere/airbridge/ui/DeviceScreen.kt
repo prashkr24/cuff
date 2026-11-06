@@ -155,6 +155,30 @@ private fun BandCard() {
     var syncing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var buzz by remember { mutableStateOf(Buzz.Idle) }
+    // What the band calls itself, remembered between visits so the heading
+    // does not have to wait on a session to say the right thing. Asked for
+    // once: the name of a piece of hardware does not change, and every ask
+    // costs a session Google Health could have been using to sync.
+    var name by remember { mutableStateOf(BandName.read(context)) }
+
+    fun readName() {
+        if (name != null) return
+        Band.readDeviceInfo(context, airResult(
+            onSuccess = { info ->
+                val said = (info as? Map<*, *>)
+                val found = listOf("name", "model")
+                    .firstNotNullOfOrNull { (said?.get(it) as? String)?.takeIf { v -> v.isNotBlank() } }
+                if (found != null) {
+                    name = found
+                    BandName.write(context, found)
+                }
+            },
+            // Silent. The heading already has something to say, and a
+            // failure to learn a better name is not worth a line of error
+            // on the card about the band being fine.
+            onError = { _, _ -> },
+        ))
+    }
 
     // One at a time: the band holds a single session, so the signal read waits
     // for the battery read rather than racing it.
@@ -183,6 +207,11 @@ private fun BandCard() {
                         syncing = false
                         rssi = (reading as? Map<*, *>)?.get("rssi") as? Int
                         rssiAt = System.currentTimeMillis()
+                        // Last in the chain, and at most once ever. The
+                        // band holds one session, so this waits its turn
+                        // behind the two readings somebody actually came
+                        // here to see.
+                        readName()
                     },
                     onError = { code, detail -> syncing = false; message = reason(code, detail) },
                 ))
@@ -242,17 +271,14 @@ private fun BandCard() {
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             ) {
                 Icon(
-                    // Read from whatever the band calls itself, so a
-                    // different wearable on the other end of this card
-                    // gets its own glyph rather than the Air's.
-                    deviceGlyph(BAND_NAME),
+                    BandIcon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(26.dp),
                 )
             }
             Column(Modifier.weight(1f)) {
-                Text(BAND_NAME, style = MaterialTheme.typography.headlineSmall)
+                Text(name ?: BAND_NAME, style = MaterialTheme.typography.headlineSmall)
                 Row(
                     // A failure takes this line and can run to two, so the
                     // glyph sits on the first line rather than floating in

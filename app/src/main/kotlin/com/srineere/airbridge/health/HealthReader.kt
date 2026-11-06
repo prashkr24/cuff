@@ -89,6 +89,14 @@ data class Session(
     val end: Instant,
     val title: String?,
     val exerciseType: Int,
+    /**
+     * The hardware that recorded it, where the record says.
+     *
+     * Null for most writers, which is the point of it being nullable: a
+     * workout with no device is not a workout from an unknown device, it
+     * is a workout whose writer did not fill the field in.
+     */
+    val device: RecordedBy? = null,
 )
 
 /**
@@ -299,7 +307,15 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
 
         val sessions = if (allowed(ExerciseSessionRecord::class)) {
             records(client, ExerciseSessionRecord::class, today.minusDays(6), today)
-                .map { Session(it.startTime, it.endTime, it.title, it.exerciseType) }
+                .map {
+                    Session(
+                        it.startTime,
+                        it.endTime,
+                        it.title,
+                        it.exerciseType,
+                        it.metadata.recordedBy(),
+                    )
+                }
                 .sortedByDescending { it.start }
         } else {
             emptyList()

@@ -1,7 +1,12 @@
 package com.srineere.airbridge.ui
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.MonitorWeight
+import androidx.compose.material.icons.outlined.PanoramaFishEye
 import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -10,6 +15,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.records.metadata.Device
+import com.srineere.airbridge.health.RecordedBy
 
 /**
  * A screenless tracker, drawn here because no Material set has one.
@@ -106,36 +113,34 @@ private const val WEAVE_WIDTH = 0.9f
 private const val WEAVE_ALPHA = 0.45f
 
 /**
- * The glyph for a piece of hardware, from whatever it calls itself.
+ * The glyph for a piece of hardware, from what the record says it is.
  *
- * Read rather than assumed: [BandCard] knew it was drawing the Air and drew
- * a watch anyway, and the Health tab draws readings from whatever wrote
- * them -- a Pixel Watch, a Garmin, a phone counting its own steps. A band
- * icon on a Galaxy Watch's workout would be the same mistake pointing the
- * other way.
+ * This took two goes. The first matched substrings of the model name
+ * against lists of words I made up -- "versa", "forerunner", "vivoactive"
+ * -- which was brittle for any device on the list and useless for every
+ * device that was not. It was also dead: its only caller passed a
+ * constant, so the watch and phone branches could never run, and the
+ * comment above it described an intention rather than the code.
  *
- * Matched on the model name because that is what both sources give: the
- * band reports its own over GATT, and Health Connect files a device model
- * against every record. Unknown hardware gets the band, since this app's
- * own reason to exist is one.
+ * Health Connect has carried the answer all along. Every record's metadata
+ * can name a device type, and that enum is exactly the question being
+ * asked here -- no guessing, and right for hardware nobody has heard of.
+ *
+ * [Device.TYPE_UNKNOWN] with no maker or model never reaches this, because
+ * [RecordedBy.known] is false for it and the row draws nothing instead.
  */
-fun deviceGlyph(model: String?): ImageVector {
-    val name = model?.lowercase().orEmpty()
-    return when {
-        name.isBlank() -> BandIcon
-        // Phones first: a phone that counts steps is the one source here
-        // that is definitely not worn.
-        PHONES.any { it in name } -> Icons.Outlined.PhoneAndroid
-        WATCHES.any { it in name } -> Icons.Outlined.Watch
-        else -> BandIcon
-    }
+fun deviceGlyph(device: RecordedBy?): ImageVector = when (device?.type) {
+    Device.TYPE_FITNESS_BAND -> BandIcon
+    Device.TYPE_WATCH -> Icons.Outlined.Watch
+    Device.TYPE_PHONE -> Icons.Outlined.PhoneAndroid
+    Device.TYPE_SCALE -> Icons.Outlined.MonitorWeight
+    Device.TYPE_RING -> Icons.Outlined.PanoramaFishEye
+    Device.TYPE_CHEST_STRAP -> Icons.Outlined.MonitorHeart
+    Device.TYPE_HEAD_MOUNTED -> Icons.Outlined.Headphones
+    Device.TYPE_SMART_DISPLAY -> Icons.Outlined.SmartDisplay
+    // A device that named a maker or a model but not a type. It is
+    // something somebody wore or stood on, and the band is this app's own
+    // answer to "some wearable" -- but it is a guess, and it is the only
+    // one here.
+    else -> BandIcon
 }
-
-/** Model names that mean a watch rather than a band. */
-private val WATCHES = listOf(
-    "watch", "versa", "sense", "ionic", "galaxy watch", "forerunner",
-    "fenix", "venu", "vivoactive", "instinct", "epix",
-)
-
-/** And the ones that mean a phone wrote it. */
-private val PHONES = listOf("phone", "pixel 1", "pixel 2", "pixel 3", "sm-", "oneplus", "cph")
