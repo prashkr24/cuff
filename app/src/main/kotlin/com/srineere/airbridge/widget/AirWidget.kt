@@ -203,9 +203,17 @@ internal object WidgetSnapshotCache {
     private var held: WidgetSnapshot? = null
 
     suspend fun get(context: Context, maxAge: Long = FRESH_MILLIS): WidgetSnapshot = mutex.withLock {
+        // A snapshot read for thirty days cannot answer a readiness card
+        // that wants a hundred and twenty, so a held one that is too short
+        // is as stale as an old one however recently it was taken.
+        val want = widgetWindowDays(context)
         val existing = held
-        if (existing != null && System.currentTimeMillis() - existing.readAt < maxAge) return existing
-        readWidgetSnapshot(context).also { held = it }
+        if (existing != null && existing.days >= want &&
+            System.currentTimeMillis() - existing.readAt < maxAge
+        ) {
+            return existing
+        }
+        readWidgetSnapshot(context, want).also { held = it }
     }
 
     /**

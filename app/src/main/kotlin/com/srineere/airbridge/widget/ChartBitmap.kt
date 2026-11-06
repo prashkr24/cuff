@@ -434,6 +434,23 @@ internal object ChartBitmap {
      * @param rails each (position, band start, band end, colour) in 0..1,
      *   or null for a reading nothing on this phone writes
      */
+    /**
+     * How thick one rail is drawn, at most.
+     *
+     * The tab's `BandRows` uses ten; eight here because a widget's rail
+     * carries no label beside it and a thinner line reads as a scale
+     * rather than as a bar.
+     */
+    private const val RAIL_THICKNESS = 8f
+
+    /**
+     * How far a dot sticks out past its rail, as a share of the rail.
+     *
+     * The radius is nine tenths of the rail's height, so a dot is 1.8
+     * rails across against a rail 1 high: four tenths proud at each end.
+     */
+    private const val OVERHANG = 0.4f
+
     fun rails(
         widthPx: Int,
         heightPx: Int,
@@ -451,9 +468,28 @@ internal object ChartBitmap {
         // tab -- rowHeight and gap are the same number there. Four points
         // between five-point rails drew a block of stripes rather than
         // five separate readings.
-        val railHeight = (height.toFloat() / (rails.size * 2 - 1).coerceAtLeast(1)).coerceAtLeast(1f)
+        //
+        // Capped, because the division alone is only right for a stack.
+        // One rail asked for the whole height and got it: a 44dp pill with
+        // a 40dp corner radius, which is a blob rather than a reading.
+        //
+        // And divided by a little more than the slots, because a dot is
+        // wider than the rail it sits on. At nine tenths of the rail for a
+        // radius it overhangs by four tenths of one at each end, so a
+        // stack that filled the height exactly had the top and bottom
+        // dots sliced off against the edge of the bitmap.
+        val slots = (rails.size * 2 - 1).coerceAtLeast(1)
+        val railHeight = (height.toFloat() / (slots + OVERHANG * 2))
+            .coerceIn(1f, RAIL_THICKNESS * density)
         val gap = railHeight
         val radius = (railHeight * 0.9f).coerceAtLeast(2.5f * density)
+        val overhang = (radius - railHeight / 2f).coerceAtLeast(0f)
+        // Spare height is shared above and below rather than all put
+        // under: the layout already drops this whole box to the foot of a
+        // tall card, and a rail sitting on the floor of the floor is a
+        // rail with its bottom edge off the card.
+        val stack = rails.size * railHeight + (rails.size - 1) * gap
+        val drop = ((height - stack) / 2f).coerceAtLeast(overhang)
         // The dot overhangs the rail by its radius at either end, so the
         // rail stops short rather than clipping the newest reading.
         val inset = radius
@@ -461,7 +497,7 @@ internal object ChartBitmap {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         rails.forEachIndexed { index, rail ->
-            val top = index * (railHeight + gap)
+            val top = drop + index * (railHeight + gap)
             val middle = top + railHeight / 2f
             paint.color = track
             canvas.drawRoundRect(

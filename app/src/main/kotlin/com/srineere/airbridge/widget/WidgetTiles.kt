@@ -24,7 +24,9 @@ import com.srineere.airbridge.health.Night
 import com.srineere.airbridge.health.Reading
 import com.srineere.airbridge.health.SleepStage
 import com.srineere.airbridge.health.TileColour
+import com.srineere.airbridge.health.Readiness
 import com.srineere.airbridge.health.TileKind
+import com.srineere.airbridge.health.fitnessAgeOf
 import com.srineere.airbridge.health.Trend
 import com.srineere.airbridge.ui.HealthStage
 import com.srineere.airbridge.ui.asHoursMinutes
@@ -54,6 +56,14 @@ internal data class Face(
     val chip: String? = null,
     /** The tab's head shows "\u00b7 30 days" once the card is wide enough. */
     val window: String? = null,
+    /**
+     * A figure size of this face's own, when the standard one undersells it.
+     *
+     * For a card whose whole point is one number: readiness is a score
+     * with a rail under it, not a reading with a chart, and drawn at the
+     * ordinary size it looked like the smaller half of its own card.
+     */
+    val figureSize: Int? = null,
     /** The full name, for the widths that have room for it. */
     val longKicker: String? = null,
     /**
@@ -330,7 +340,7 @@ private fun DrawFace(
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Kicker(face.kicker, tint, size = KICKER, caps = false)
                     Spacer(GlanceModifier.width(9.dp))
-                    FigureAndUnit(face, FIGURE, colours)
+                    FigureAndUnit(face, face.figureSize ?: FIGURE, colours)
                     Spacer(GlanceModifier.defaultWeight())
                     Sub(face.chip ?: face.sub, colours.muted, size = SUB, weight = FontWeight.Medium)
                 }
@@ -351,7 +361,7 @@ private fun DrawFace(
                     face.chart, colour, colours,
                     // What is left under the figure, rather than a constant
                     // that is right in one cell and wrong in every other.
-                    height = (innerHeight(TILE_PAD_V).value - SQUARE_ABOVE_CHART)
+                    height = (innerHeight(TILE_PAD_V).value - SQUARE_ABOVE_CHART - face.taller())
                         .coerceIn(20f, 72f).dp,
                     width = innerWidth(TILE_PAD_H),
                     scaled = size.scaled(),
@@ -370,7 +380,7 @@ private fun DrawFace(
                 // The score sits at the far end of the hours it scores, as
                 // the tile puts it, rather than under them as another sub.
                 Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    Column { FigureAndUnit(face, FIGURE, colours) }
+                    Column { FigureAndUnit(face, face.figureSize ?: FIGURE, colours) }
                     face.trailingFigure?.let {
                         Spacer(GlanceModifier.defaultWeight())
                         Column(horizontalAlignment = Alignment.End) {
@@ -391,10 +401,16 @@ private fun DrawFace(
                     Gap(8.dp)
                     Meter(it, innerWidth(TILE_PAD_H), tint, colours.track, height = 5.dp)
                 }
-                Gap(10.dp)
+                // A chart drawn to a height of its own leaves the rest of
+                // a tall card empty, so it goes to the foot rather than
+                // floating halfway up under the figure. Not flush to the
+                // floor: the card's own bottom padding is the last thing
+                // between it and the edge, and a rail is drawn centred in
+                // its box so there is air on both sides of it.
+                if (face.chart is Chart.Rails) Grow() else Gap(10.dp)
                 DrawChart(
                     face.chart, colour, colours,
-                    height = (innerHeight(TILE_PAD_V).value - TALL_ABOVE_CHART)
+                    height = (innerHeight(TILE_PAD_V).value - TALL_ABOVE_CHART - face.taller())
                         .coerceIn(40f, 260f).dp,
                     width = innerWidth(TILE_PAD_H),
                     scaled = size.scaled(),
@@ -408,7 +424,7 @@ private fun DrawFace(
                 // under the chart: a launcher's 4x4 is taller than the 300dp
                 // the face was drawn for, and a widget should spend the
                 // space it was given.
-                val chartHeight = (innerHeight(TILE_PAD_V).value - WIDE_ABOVE_CHART)
+                val chartHeight = (innerHeight(TILE_PAD_V).value - WIDE_ABOVE_CHART - face.taller())
                     .coerceIn(44f, 400f).dp
                 @Suppress("UNUSED_EXPRESSION") size
                 // Centred, not sat on the floor: every L tile on the tab
@@ -418,7 +434,7 @@ private fun DrawFace(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = GlanceModifier.width(FIGURE_COLUMN)) {
-                        FigureAndUnit(face, FIGURE, colours)
+                        FigureAndUnit(face, face.figureSize ?: FIGURE, colours)
                         Gap(2.dp)
                         // The tab's `TileSub` is onSurfaceVariant at every
                         // size. Tinting it here made the one line under the
@@ -571,7 +587,7 @@ private fun RingFace(
         Spacer(GlanceModifier.width(12.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             Head(face, size, colour, tint, colours, showTrends, wide = true)
-            FigureAndUnit(face, FIGURE, colours)
+            FigureAndUnit(face, face.figureSize ?: FIGURE, colours)
             Gap(2.dp)
             face.detail?.let { Sub(it, colours.muted, size = SUB, weight = FontWeight.Medium) }
         }
@@ -784,6 +800,39 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                     }
                     ?: night.stageChart(),
                 chip = health.sleepTrend?.let { chipOf(it, "min") },
+            )
+        }
+
+        TileKind.Readiness -> snapshot.readiness?.let { readiness ->
+            val trend = readiness.trend ?: return@let null
+            Face(
+                kicker = "",
+                window = "this morning",
+                figure = readiness.score?.toString() ?: "—",
+                // The score is the card. Everything else on it is working.
+                figureSize = WidgetText.FigureMax,
+                sub = if (readiness.calibrating) {
+                    "calibrating · ${readiness.days} of ${Readiness.NEEDED}"
+                } else {
+                    readiness.word
+                },
+                // The variation rail, which is the same picture the tile
+                // draws. A month of dots is the HRV card's chart, and
+                // putting it here made two cards on one home screen look
+                // like the same reading twice.
+                chart = Chart.Rails(listOf(trend to snapshot.colourFor(TileKind.Readiness))),
+            )
+        }
+
+        TileKind.FitnessAge -> fitnessAgeOf(data, snapshot.profile).let { fitness ->
+            val years = fitness.years ?: return@let null
+            Face(
+                kicker = "",
+                window = "monthly",
+                figure = years.toString(),
+                unit = "years",
+                sub = fitness.word,
+                detail = fitness.vo2?.let { "VO₂ max ${"%.1f".format(it)}" },
             )
         }
 
@@ -1129,6 +1178,16 @@ private const val FIGURE = 26
  * rather than 10, and a chip with the tab's padding under it.
  */
 private const val SQUARE_ABOVE_CHART = 83f
+
+/**
+ * How much taller this face's figure is than the constants assume.
+ *
+ * Every ABOVE_CHART number was measured against the ordinary figure. A
+ * face that asks for a bigger one pushes everything down by the
+ * difference, and a Column that overruns its card does not shrink -- it
+ * drops its last child, which is the chart those numbers exist to size.
+ */
+private fun Face.taller(): Float = ((figureSize ?: FIGURE) - FIGURE).toFloat().coerceAtLeast(0f)
 
 /** The head and its gap: the rest of a wide card is the chart's row. */
 private const val WIDE_ABOVE_CHART = 30f

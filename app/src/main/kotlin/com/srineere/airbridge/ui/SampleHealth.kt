@@ -35,9 +35,12 @@ fun sampleHealthData(): HealthData {
     val today = LocalDate.now().toEpochDay()
     val snapshot = HealthSnapshot(
         stepsToday = 8_240L,
-        steps = days(today, STEPS),
-        restingHeartRate = days(today, RESTING),
-        hrv = days(today, HRV),
+        // Long enough to get past readiness's own gate. A made-up person
+        // whose card says "calibrating, 14 of 60" teaches nothing about
+        // what the card is for, and the catalogue exists to show that.
+        steps = days(today, over(STEPS, SAMPLE_DAYS)),
+        restingHeartRate = days(today, over(RESTING, SAMPLE_DAYS)),
+        hrv = days(today, over(HRV, SAMPLE_DAYS)),
         respiratoryRate = days(today, BREATHING),
         skinTemperature = days(today, SKIN),
         nights = nights(today),
@@ -47,6 +50,13 @@ fun sampleHealthData(): HealthData {
         burnedDaily = days(today, BURNED),
         eatenDaily = days(today, EATEN),
         weight = days(today, WEIGHT),
+        // Written every week or two, which is what makes a fitness age a
+        // monthly figure rather than a morning one.
+        vo2Max = listOf(
+            Reading(today - 24, 43.1),
+            Reading(today - 11, 43.8),
+            Reading(today - 3, 44.2),
+        ),
         burnedHourly = BURNED_HOURLY.toList(),
         stepsHourly = STEPS_HOURLY.toList(),
         burnedToday = 2_410.0,
@@ -102,6 +112,20 @@ val sampleGoals = Goals(
 )
 
 /** Oldest first, ending today, which is the order every chart here expects. */
+/**
+ * The same shape, carried further back.
+ *
+ * The sample's own arrays are a fortnight, which is all most cards draw.
+ * Readiness counts sixty readings and the load ratio wants four weeks, so
+ * the three series it stands on are repeated rather than invented twice:
+ * one person, one habit, more of it.
+ */
+private fun over(values: DoubleArray, count: Int): DoubleArray =
+    DoubleArray(count) { values[it % values.size] }
+
+/** Two months and a little, so sixty is cleared with room to spare. */
+private const val SAMPLE_DAYS = 70
+
 private fun days(today: Long, values: DoubleArray): List<Reading> =
     values.mapIndexed { index, value -> Reading(today - (values.size - 1 - index), value) }
 

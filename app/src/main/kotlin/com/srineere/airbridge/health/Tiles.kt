@@ -44,6 +44,15 @@ enum class TileKind(
     /** The colour the tile teaches, until someone chooses another. */
     val defaultColour: TileColour,
     val optional: Boolean = false,
+    /**
+     * Whether the Health tab offers it at all.
+     *
+     * False makes a kind a widget face and nothing else. The home screen
+     * and the tab ask different questions -- a home screen shows one card
+     * all day, a tab shows thirteen at once -- so a reading worth its own
+     * cell there can be a repetition here.
+     */
+    val onTab: Boolean = true,
 ) {
     // Named for its own number, and opening the screen about that number.
     // It used to open today's zones, which is a different measurement with
@@ -92,21 +101,32 @@ enum class TileKind(
         "Weight", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L),
         "healthweight", TileColour.Slate, optional = true,
     ),
-    // Two more readings of the night the Sleep tile does not make: it is
-    // about the week a night sits in, and these are about the night itself
-    // and about what a run of them comes to.
-    // Both take XL, and both have something to put in it rather than the
-    // same card stretched: the stages get their key, and the bank gets the
-    // count of nights that went each way.
+    // The two composites. Both are figures this app works out rather than
+    // reads, so both carry their own refusal to show one: readiness is
+    // blank until sixty nights, fitness age until a VO2 max arrives.
+    Readiness(
+        "Readiness", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L, TileSize.XL),
+        "readiness", TileColour.Hrv, optional = true,
+    ),
+    FitnessAge(
+        "Fitness age", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L),
+        "fitnessage", TileColour.Activity, optional = true,
+    ),
+    // Two more readings of the night, and the only two kinds the tab does
+    // not offer. The Sleep tile already covers the night there, and a tab
+    // carrying all three says one thing three times. A home screen is a
+    // different question -- one card, chosen, seen all day -- so both are
+    // worth having there. Both take XL and both have something to put in
+    // it: the stages get their key, the bank the count of nights each way.
     Stages(
         "Last night by stage",
         setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L, TileSize.XL),
-        "healthsleep", TileColour.Sleep, optional = true,
+        "healthsleep", TileColour.Sleep, optional = true, onTab = false,
     ),
     SleepBank(
         "Sleep bank",
         setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L, TileSize.XL),
-        "healthsleepbank", TileColour.Sleep, optional = true,
+        "healthsleepbank", TileColour.Sleep, optional = true, onTab = false,
     ),
     // The other two vitals. Each has a screen of its own, so each can be a
     // tile. Blood oxygen was a third until it was taken out: the band
@@ -249,9 +269,15 @@ fun decodeTiles(stored: String?): List<Tile> {
 }
 
 /** The kinds not currently on the tab, for the edit screen's "add" list. */
+/**
+ * What the tab can still be given, which is not everything that exists.
+ *
+ * A kind with [TileKind.onTab] false is a widget face and nothing else:
+ * drawn by the catalogue, offered on a home screen, never listed here.
+ */
 fun unusedKinds(tiles: List<Tile>): List<TileKind> {
     val shown = tiles.map { it.kind }.toSet()
-    return TileKind.entries.filterNot { it in shown }
+    return TileKind.entries.filter { it.onTab }.filterNot { it in shown }
 }
 
 /** Moves a tile one place, or returns the list unchanged at either end. */

@@ -34,7 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.health.Readiness
 import com.srineere.airbridge.health.ReadinessPart
-import com.srineere.airbridge.health.readinessOf
+import com.srineere.airbridge.health.readinessToday
 import com.srineere.airbridge.ui.theme.extras
 import kotlin.math.roundToInt
 
@@ -63,10 +63,21 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
     // counts sixty readings, and nothing else on this screen would ever ask
     // for more. Widening is one way and costs one read.
     LaunchedEffect(Unit) { state.widen(context, Readiness.WINDOW_DAYS) }
-    val readiness = remember(data.snapshot) { readinessOf(data.snapshot) }
+    val readiness = remember(data.snapshot) { readinessToday(context, data.snapshot) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle("Readiness", subtitle = "this morning", onBack = onBack)
+        val today = java.time.LocalDate.now().toEpochDay()
+        ScreenTitle(
+            "Readiness",
+            // Not "this morning" when the newest figure is yesterday's,
+            // which is what it is until the band has synced the night.
+            subtitle = when (readiness.day) {
+                null -> "waiting for a reading"
+                today -> "this morning"
+                else -> dayLabel(readiness.day!!)
+            },
+            onBack = onBack,
+        )
 
         DetailCard {
             Row(verticalAlignment = Alignment.Bottom) {
@@ -130,6 +141,56 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
                 PartRow(part, ink)
+            }
+        }
+
+        // The variation card, moved here from Vitals. It belongs under the
+        // figure it is about: a rail saying "something has moved" on one
+        // screen and a number saying how much on another were two halves
+        // of one reading, kept apart.
+        val vitals = data.hrvTrend ?: data.restingTrend
+        if (vitals != null && vitals.readings.size >= 14) {
+            val swc = vitals.smallestWorthwhileChange
+            val baseline = vitals.average
+            val recent = vitals.recent
+            val moved = listOfNotNull(
+                data.restingTrend?.takeIf { it.recentHasMoved }?.let { "resting rate" },
+                data.hrvTrend?.takeIf { it.recentHasMoved }?.let { "HRV" },
+            )
+            SectionHeader("Normal variation")
+            DetailCard {
+                Text(
+                    if (kotlin.math.abs(recent - baseline) <= swc) "Normal variation"
+                    else "Something has moved",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ink,
+                )
+                // The rail spans three smallest-worthwhile-changes either
+                // side of the baseline, so a reading outside the band is
+                // visibly outside it rather than pinned to the end.
+                val reach = (swc * 3).takeIf { it > 0.0 } ?: 1.0
+                fun at(value: Double) =
+                    (((value - (baseline - reach)) / (reach * 2)).toFloat()).coerceIn(0f, 1f)
+                BandRows(
+                    rails = listOf(
+                        BandRail(at(recent), at(baseline - swc), at(baseline + swc), ink),
+                    ),
+                    track = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.padding(top = 12.dp),
+                    rowHeight = 10.dp,
+                )
+                Text(
+                    if (moved.isEmpty()) {
+                        "Your last seven nights sit inside your own usual range."
+                    } else {
+                        "Your " + moved.joinToString(" and ") + " " +
+                            (if (moved.size == 1) "has" else "have") + " moved more than usual."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
         }
 

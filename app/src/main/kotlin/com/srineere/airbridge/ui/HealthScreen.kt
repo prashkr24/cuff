@@ -52,7 +52,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
+import com.srineere.airbridge.health.FitnessProfileStore
 import com.srineere.airbridge.health.Goals
+import com.srineere.airbridge.health.Readiness
+import com.srineere.airbridge.health.fitnessAgeOf
+import com.srineere.airbridge.health.readinessToday
 import com.srineere.airbridge.health.HealthConnect
 import com.srineere.airbridge.health.Reading
 import com.srineere.airbridge.health.TILE_COLUMNS
@@ -360,6 +364,8 @@ internal fun ColumnScope.TileBody(
         TileKind.Skin ->
             VitalTile(tile.size, tile.kind, data.skinTrend, "°C", colour, 1, signed = true)
         TileKind.Balance -> BalanceTile(tile.size, data, colour, axes)
+        TileKind.Readiness -> ReadinessTile(tile.size, data, colour)
+        TileKind.FitnessAge -> FitnessAgeTile(tile.size, data, colour)
         TileKind.Stages -> StagesTile(tile.size, data, colour, axes)
         TileKind.SleepBank -> SleepBankTile(tile.size, data, colour, goals, axes)
     }
@@ -451,6 +457,77 @@ private fun hourTicksOf(hourNow: Int): List<Pair<Float, String>> {
     val span = hourNow.coerceAtLeast(1).toFloat()
     return listOf(6, 12, 18).filter { it <= hourNow }
         .map { (it / span) to "%02d".format(it) }
+}
+
+/**
+ * This morning against your own mornings.
+ *
+ * The figure and the dots together, never the figure alone: the number
+ * means nothing without the run it came out of, which is the same reason
+ * its own screen draws the band behind it rather than beside it.
+ */
+@Composable
+private fun ColumnScope.ReadinessTile(size: TileSize, data: HealthData, colour: Color) {
+    val context = LocalContext.current
+    TileHead(TileKind.Readiness, colour, size, window = "this morning")
+    val readiness = remember(data.snapshot) { readinessToday(context, data.snapshot) }
+    val trend = readiness.trend
+    if (trend == null) {
+        TileEmpty("Nothing has written an HRV reading yet.", size)
+        return
+    }
+    TileValue(readiness.score?.toString() ?: "—", null, size, dim = readiness.calibrating)
+    if (size != TileSize.S) {
+        TileSub(
+            if (readiness.calibrating) {
+                "calibrating · ${readiness.days} of ${Readiness.NEEDED} nights"
+            } else {
+                readiness.word
+            },
+        )
+    }
+    // The variation rail, not a scatter of dots. A readiness figure is
+    // one number against its own band, and the band is the half of it
+    // worth drawing -- a month of dots is the HRV tile's picture, and
+    // putting it here made two tiles look like the same reading.
+    Box(Modifier.weight(1f).padding(top = 8.dp)) {
+        BandRows(
+            rails = listOf(trend.rail(colour)),
+            track = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxSize(),
+            rowHeight = if (size == TileSize.S) 8.dp else 10.dp,
+        )
+    }
+}
+
+/**
+ * A VO₂ max in years.
+ *
+ * No chart. It moves in months, so a run of dots would be four points and
+ * a lot of white -- and the two readings under it on its own screen are
+ * context rather than inputs, which is not a thing a tile can say.
+ */
+@Composable
+private fun ColumnScope.FitnessAgeTile(size: TileSize, data: HealthData, colour: Color) {
+    val context = LocalContext.current
+    TileHead(TileKind.FitnessAge, colour, size, window = "monthly")
+    val profile = remember(context, resumeTicks()) { FitnessProfileStore.read(context) }
+    val fitness = remember(data.snapshot, profile) { fitnessAgeOf(data.snapshot, profile) }
+    if (fitness.years == null) {
+        TileEmpty(
+            if (fitness.vo2 == null) "Nothing has written a VO₂ max yet."
+            else "Set your year of birth to read the table.",
+            size,
+        )
+        return
+    }
+    TileValue(fitness.years.toString(), "years", size)
+    if (size != TileSize.S) TileSub(fitness.word)
+    fitness.vo2?.let {
+        Box(Modifier.weight(1f)) {
+            TileSub("VO₂ max ${"%.1f".format(it)}")
+        }
+    }
 }
 
 /**

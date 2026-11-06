@@ -91,7 +91,12 @@ class MorningWorker(
 
         val snapshot = runCatching { HealthReader().read(applicationContext, 30) }.getOrNull()
             ?: return Result.success()
-        val report = morningReport(snapshot, HealthGoals.read(applicationContext), zone)
+        val report = morningReport(
+            snapshot,
+            HealthGoals.read(applicationContext),
+            readinessToday(applicationContext, snapshot),
+            zone,
+        )
 
         // Waiting for the night rather than for the clock. Google Health
         // writes it when the band syncs, so the check comes back and asks

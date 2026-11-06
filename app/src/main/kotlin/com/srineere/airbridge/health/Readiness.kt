@@ -1,5 +1,6 @@
 package com.srineere.airbridge.health
 
+import android.content.Context
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -48,6 +49,14 @@ data class Readiness(
     val trend: Trend?,
     val parts: List<ReadinessPart>,
     val days: Int,
+    /**
+     * The morning this figure is about, which is not always today.
+     *
+     * HRV arrives when the band syncs. Before that happens the newest
+     * figure there is belongs to yesterday, and a screen headed "this
+     * morning" showing it would be quietly wrong.
+     */
+    val day: Long? = null,
 ) {
     val calibrating: Boolean get() = score == null
     val standing: List<ReadinessPart> get() = parts.filter { it.present }
@@ -179,6 +188,7 @@ fun readinessOf(snapshot: HealthSnapshot): Readiness {
         trend = trend,
         parts = parts,
         days = series.size,
+        day = series.lastOrNull()?.day,
     )
 }
 
@@ -215,11 +225,67 @@ private fun loadRatios(steps: List<Reading>): List<Reading> {
     if (steps.size < 28) return emptyList()
     val byDay = steps.associate { it.day to it.value }
     return steps.sortedBy { it.day }.mapNotNull { reading ->
-        val acute = (0 until 7).mapNotNull { byDay[reading.day - it] }
-        val chronic = (0 until 28).mapNotNull { byDay[reading.day - it] }
+        // Both windows end the day before, never on the day being scored.
+        //
+        // Today's steps grow all day, so including them made this morning's
+        // readiness climb while you walked -- a figure about how you woke
+        // up, moving because of what you did after. Asked again at six it
+        // gave a different answer to the one the morning report had already
+        // sent. Ending at yesterday makes the day's figure settle when the
+        // night does and stay settled.
+        val acute = (1..7).mapNotNull { byDay[reading.day - it] }
+        val chronic = (1..28).mapNotNull { byDay[reading.day - it] }
         if (acute.size < 5 || chronic.size < 20) return@mapNotNull null
         val base = chronic.average().takeIf { it > 0 } ?: return@mapNotNull null
         Reading(reading.day, acute.average() / base)
+    }
+}
+
+/**
+ * The morning's figure, worked out once and then remembered.
+ *
+ * Readiness is a statement about one morning, so it should be the same
+ * number at breakfast and at bedtime. The arithmetic no longer drifts --
+ * the load window ends at yesterday — but it still reads whatever Health
+ * Connect holds at the moment it is asked, and a reading that is corrected
+ * or arrives late would quietly move a figure somebody has already seen
+ * and had sent to them in the morning report.
+ *
+ * Only a figure that exists is kept. Asked before HRV has synced there is
+ * nothing to remember, so nothing is written and the real figure is picked
+ * up whenever it turns up. Keyed by the morning it describes rather than
+ * by today, which is the same thing on most days and the honest answer on
+ * the rest.
+ *
+ * Everything but the score is worked out fresh: the parts and the band are
+ * measurements, and a measurement that has been corrected should say so.
+ */
+fun readinessToday(context: Context, snapshot: HealthSnapshot): Readiness {
+    val worked = readinessOf(snapshot)
+    val day = worked.day ?: return worked
+    ReadinessStore.remembered(context, day)?.let { return worked.copy(score = it) }
+    worked.score?.let { ReadinessStore.remember(context, day, it) }
+    return worked
+}
+
+/** One morning's figure, in the preferences everything else on this tab uses. */
+object ReadinessStore {
+    private const val PREFS = "air_health"
+    private const val KEY_DAY = "readiness_day"
+    private const val KEY_SCORE = "readiness_score"
+
+    fun remembered(context: Context, day: Long): Int? {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (p.getLong(KEY_DAY, -1) != day) return null
+        return p.getInt(KEY_SCORE, -1).takeIf { it >= 0 }
+    }
+
+    /** One morning at a time: yesterday's is replaced, not kept beside it. */
+    fun remember(context: Context, day: Long, score: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putLong(KEY_DAY, day)
+            .putInt(KEY_SCORE, score)
+            .apply()
     }
 }
 

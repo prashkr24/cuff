@@ -76,7 +76,11 @@ class WidgetCatalogueTest {
 
     @Test
     fun `an id this build does not know decodes to nothing`() {
-        assertNull(WidgetCatalogue.byId("tile:Readiness"))
+        // Deliberately absurd. These stood on "tile:Readiness" until the
+        // build grew a readiness tile and four tests went red at once: a
+        // placeholder that is merely unbuilt is a placeholder with a
+        // shelf life.
+        assertNull(WidgetCatalogue.byId("tile:Horoscope"))
         assertNull(WidgetCatalogue.byId("band:Stop"))
         assertNull(WidgetCatalogue.byId("rings:Three"))
         assertNull(WidgetCatalogue.byId(""))

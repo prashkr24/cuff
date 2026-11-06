@@ -68,6 +68,18 @@ class ReadinessTest {
         assertTrue("$dipScore vs $ordinaryScore", dipScore < ordinaryScore)
     }
 
+    @Test fun `walking today does not change this morning's figure`() {
+        // The load ratio ends at yesterday on purpose. Today's steps grow
+        // all day, and a figure about how you woke up must not climb
+        // because of what you did after -- not least because the morning
+        // report has already sent the earlier number.
+        val morning = ordinary(70)
+        val evening = morning.copy(
+            steps = morning.steps.dropLast(1) + Reading(69L, 25_000.0),
+        )
+        assertEquals(readinessOf(morning).score, readinessOf(evening).score)
+    }
+
     @Test fun `a part with no reading moves the figure by nothing`() {
         val noSleep = ordinary(70).copy(nights = emptyList())
         val readiness = readinessOf(noSleep)

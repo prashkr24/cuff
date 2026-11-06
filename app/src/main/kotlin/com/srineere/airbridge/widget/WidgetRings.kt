@@ -20,6 +20,7 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.size
 import androidx.glance.layout.width
 import com.srineere.airbridge.health.Goals
+import com.srineere.airbridge.health.Readiness
 import com.srineere.airbridge.health.TileColour
 import com.srineere.airbridge.health.Trend
 import com.srineere.airbridge.ui.HealthData
@@ -58,6 +59,30 @@ enum class RingFace(
         setOf(WidgetSize.Wide, WidgetSize.Tall),
     ),
 }
+
+
+/**
+ * How many rows of [each] dp fit under a face's head.
+ *
+ * Measured off the cell the launcher actually gave us, because launchers
+ * do not agree on what a 4 x 2 is and a count tuned on one phone is a
+ * clipped row on another. At least one, so a cramped cell shows something
+ * rather than a head and a space.
+ */
+@Composable
+private fun rowsThatFit(padding: Dp, each: Float): Int =
+    ((innerHeight(padding).value - FACE_HEAD_HEIGHT) / each).toInt().coerceAtLeast(1)
+
+/** The head, its gap, and the hairline under it. */
+private const val FACE_HEAD_HEIGHT = 24f
+
+/** A summary row: a caption, a figure and the gap above them. */
+private const val SUMMARY_ROW_TALL = 48f
+private const val SUMMARY_ROW_WIDE = 40f
+
+/** A trend row: three lines and a rail. */
+private const val TREND_ROW_TALL = 62f
+private const val TREND_ROW_WIDE = 52f
 
 /** One arc: how far round it has gone, and what it is. */
 data class Ring(
@@ -190,7 +215,24 @@ internal data class SummaryRow(
 )
 
 /** The readings the Summary face lists, in the order it lists them. */
-internal fun summaryRows(health: HealthData, goals: Goals): List<SummaryRow> = listOfNotNull(
+internal fun summaryRows(
+    health: HealthData,
+    goals: Goals,
+    readiness: Readiness? = null,
+): List<SummaryRow> = listOfNotNull(
+    // First, because it is the one line here that is about this morning
+    // rather than about a reading taken during it -- and because it is
+    // the only one the other three are ingredients of.
+    readiness?.score?.let { score ->
+        SummaryRow(
+            label = "Readiness",
+            figure = score.toString(),
+            of = null,
+            chip = null,
+            colour = TileColour.Hrv,
+            spark = readiness.trend?.readings?.takeLast(7)?.map { it.value.toFloat() }.orEmpty(),
+        )
+    },
     health.restingTrend?.let { trend ->
         SummaryRow(
             label = "Resting heart",
@@ -251,7 +293,10 @@ internal data class TrendRow(
  * about: both are a single figure a night against a settled band, so "here
  * against where you usually are" is a sentence they can actually finish.
  */
-internal fun trendRows(health: HealthData): List<TrendRow> = listOfNotNull(
+internal fun trendRows(health: HealthData, readiness: Readiness? = null): List<TrendRow> =
+    listOfNotNull(
+    readiness?.trend?.takeIf { readiness.score != null }
+        ?.let { trendRow("Readiness", TileColour.Hrv, it, "", 0) },
     health.restingTrend?.let { trendRow("Resting heart", TileColour.Heart, it, "bpm", 0) },
     health.hrvTrend?.let { trendRow("HRV", TileColour.Hrv, it, "ms", 0) },
     health.stepsTrend?.let { trendRow("Steps", TileColour.Steps, it, "", 0) },
@@ -464,43 +509,6 @@ internal fun RingImage(
 }
 
 /**
- * Four readings, one line each.
- *
- * No chart and no arc: the quietest thing this app can put on a home screen
- * and the easiest to read at arm's length.
- */
-@Composable
-private fun ListFace(
-    kicker: String,
-    rows: List<Triple<String, String, TileColour>>,
-    colours: WidgetColours,
-    onClick: Action?,
-    empty: String,
-) {
-    if (rows.isEmpty()) {
-        Empty(colours, kicker, empty, onClick)
-        return
-    }
-    WidgetCard(colours, onClick) {
-        Kicker(kicker, colours.muted)
-        Gap(8.dp)
-        rows.forEachIndexed { index, (name, value, colour) ->
-            if (index > 0) Gap(7.dp)
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Dot(colours.tile(colour), size = 7.dp)
-                Spacer(GlanceModifier.width(8.dp))
-                Sub(name, colours.muted, size = WidgetText.Label)
-                Spacer(GlanceModifier.defaultWeight())
-                Figure(value, WidgetText.FigureXS, colours.onBackground)
-            }
-        }
-    }
-}
-
-/**
  * Three readings, each with the week behind it.
  *
  * One child per row, as everywhere else in this family: a Glance container
@@ -513,16 +521,22 @@ private fun SummaryFace(
     colours: WidgetColours,
     onClick: Action?,
 ) {
-    val rows = summaryRows(snapshot.health, snapshot.goals)
+    val rows = summaryRows(snapshot.health, snapshot.goals, snapshot.readiness)
     if (rows.isEmpty()) {
         Empty(colours, "Summary", "Nothing has been read yet", onClick)
         return
     }
     val padding = 12.dp
     val spark = (innerWidth(padding).value * 0.32f).coerceIn(56f, 120f).dp
+    // However many fit, measured rather than assumed. This face had no cap
+    // at all and drew every row it was given: four of them already ran off
+    // the bottom of a 4 x 2, and a fifth would have made it worse on both.
+    val shown = rows.take(
+        rowsThatFit(padding, if (size == WidgetSize.Tall) SUMMARY_ROW_TALL else SUMMARY_ROW_WIDE),
+    )
     WidgetCard(colours, onClick, padding) {
         FaceHead("Summary", snapshot.readAt, colours)
-        rows.forEachIndexed { index, row ->
+        shown.forEachIndexed { index, row ->
             SummaryLine(row, size, colours, spark, first = index == 0)
         }
     }
@@ -602,15 +616,19 @@ private fun TrendsFace(
     colours: WidgetColours,
     onClick: Action?,
 ) {
-    val all = trendRows(snapshot.health)
+    val all = trendRows(snapshot.health, snapshot.readiness)
     if (all.isEmpty()) {
         Empty(colours, "Trends", "A fortnight of nights gives a trend", onClick)
         return
     }
-    // Two on a 4x2 and four on a 4x4: a trend row is three lines tall, and
-    // a row squeezed to one line is the list this replaced.
-    val rows = all.take(if (size == WidgetSize.Tall) 4 else 2)
     val padding = 12.dp
+    // A trend row is three lines tall, and a row squeezed to one line is
+    // the list this replaced -- so the count comes off the cell's real
+    // height rather than off a constant that was right for four rows and
+    // is now being asked about five.
+    val rows = all.take(
+        rowsThatFit(padding, if (size == WidgetSize.Tall) TREND_ROW_TALL else TREND_ROW_WIDE),
+    )
     val railWidth = (innerWidth(padding).value - ARROW_COLUMN - USUAL_COLUMN).coerceAtLeast(40f).dp
     WidgetCard(colours, onClick, padding) {
         FaceHead("Trends · your fortnight", snapshot.readAt, colours)

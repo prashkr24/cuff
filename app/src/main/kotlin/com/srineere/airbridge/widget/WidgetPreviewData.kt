@@ -2,7 +2,11 @@ package com.srineere.airbridge.widget
 
 import kotlin.math.roundToInt
 import com.srineere.airbridge.health.Tile
+import com.srineere.airbridge.health.FitnessProfile
+import com.srineere.airbridge.health.Readiness
+import com.srineere.airbridge.health.Sex
 import com.srineere.airbridge.health.TileColour
+import com.srineere.airbridge.health.readinessOf
 import com.srineere.airbridge.ui.asHoursMinutes
 import com.srineere.airbridge.ui.sampleGoals
 import com.srineere.airbridge.ui.sampleHealthData
@@ -62,13 +66,34 @@ private fun stateWordFor(band: BandFacts, now: Long): String = when (band.state(
  * person's own -- a preview in somebody else's mint would be a preview of
  * somebody else's widget.
  */
-internal fun sampleWidgetSnapshot(tiles: List<Tile>): WidgetSnapshot = WidgetSnapshot(
-    health = sampleHealthData(),
-    band = SAMPLE_BAND,
-    goals = sampleGoals,
-    tiles = tiles,
-    showTrends = true,
-    readAt = System.currentTimeMillis(),
+internal fun sampleWidgetSnapshot(tiles: List<Tile>): WidgetSnapshot {
+    val health = sampleHealthData()
+    return WidgetSnapshot(
+        health = health,
+        band = SAMPLE_BAND,
+        goals = sampleGoals,
+        tiles = tiles,
+        showTrends = true,
+        // Worked out here rather than read: the catalogue draws a made-up
+        // person, and asking the preferences for this one's readiness
+        // would hand it the reader's own figure or, far more often, none.
+        readiness = readinessOf(health.snapshot),
+        profile = SAMPLE_PROFILE,
+        days = Readiness.WINDOW_DAYS,
+        readAt = System.currentTimeMillis(),
+    )
+}
+
+/**
+ * The made-up person's own row in the table.
+ *
+ * Needed because a fitness age without one is a blank card, and a blank
+ * card in a catalogue says the widget is broken rather than that it is
+ * waiting on an answer the reader has not given yet.
+ */
+private val SAMPLE_PROFILE = FitnessProfile(
+    birthYear = java.time.LocalDate.now().year - 31,
+    sex = Sex.Male,
 )
 
 private val SAMPLE_BAND = BandFacts(
@@ -148,7 +173,7 @@ private fun ringsFace(face: RingFace, snapshot: WidgetSnapshot): Face? = when (f
         }
     // The thumbnail keeps the names and the figures and drops the
     // sparklines and rails, which at 78dp would be three grey smudges.
-    RingFace.Summary -> summaryRows(snapshot.health, snapshot.goals)
+    RingFace.Summary -> summaryRows(snapshot.health, snapshot.goals, snapshot.readiness)
         .takeIf { it.isNotEmpty() }
         ?.let { rows ->
             Face(
@@ -160,7 +185,7 @@ private fun ringsFace(face: RingFace, snapshot: WidgetSnapshot): Face? = when (f
                 ),
             )
         }
-    RingFace.Trends -> trendRows(snapshot.health)
+    RingFace.Trends -> trendRows(snapshot.health, snapshot.readiness)
         .takeIf { it.isNotEmpty() }
         ?.let { rows ->
             Face(

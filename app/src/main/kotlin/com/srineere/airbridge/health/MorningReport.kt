@@ -29,6 +29,14 @@ data class MorningReport(
     val stepGoal: Int,
     /** The seven days ending yesterday, for the bars. */
     val week: List<Reading>,
+    /**
+     * The morning's readiness, when there is one.
+     *
+     * Handed in rather than worked out here: it is remembered once a
+     * morning, and a report that computed its own would be the second
+     * answer this app gives to the same question before breakfast.
+     */
+    val readiness: Readiness? = null,
 ) {
     val sleepLength: String? get() = night?.asleep?.let { asHoursMinutes(it.toMinutes()) }
 
@@ -46,6 +54,11 @@ data class MorningReport(
      */
     val standing: String
         get() {
+            // The figure when it has earned one, the sentence when it has
+            // not. A readiness that is still calibrating must not become a
+            // silence here: the moved-or-not phrase was the whole report
+            // before readiness existed and is still true.
+            readiness?.score?.let { return "readiness is $it" }
             val moved = listOfNotNull(
                 resting?.takeIf { it.recentHasMoved }?.let { "resting rate" },
                 hrv?.takeIf { it.recentHasMoved }?.let { "HRV" },
@@ -107,6 +120,7 @@ data class MorningReport(
 fun morningReport(
     snapshot: HealthSnapshot,
     goals: Goals,
+    readiness: Readiness? = null,
     zone: ZoneId = ZoneId.systemDefault(),
 ): MorningReport {
     val today = LocalDate.now(zone).toEpochDay()
@@ -125,5 +139,6 @@ fun morningReport(
         weekAverage = week.map { it.value }.takeIf { it.isNotEmpty() }?.average(),
         stepGoal = goals.steps,
         week = week,
+        readiness = readiness,
     )
 }

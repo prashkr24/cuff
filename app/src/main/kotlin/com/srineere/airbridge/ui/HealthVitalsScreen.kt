@@ -87,10 +87,15 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         val movedNames = rows.filter { it.trend?.recentHasMoved == true }
             .map { it.name.lowercase() }
 
-        Readiness(data.hrvTrend ?: data.restingTrend, extras.hrv, movedNames) {
-            onOpen("readiness")
-        }
-
+        // A row, not a card. The band and its sentence live on the
+        // Readiness screen now, where they sit under the figure they are
+        // about -- drawing them here as well put the same reading on two
+        // screens and made the row beneath look like a second thing.
+        SettingsRow(
+            title = "Readiness",
+            subtitle = readinessLine(data.hrvTrend ?: data.restingTrend, movedNames),
+            onClick = { onOpen("readiness") },
+        )
         SettingsRow(
             title = "Fitness age",
             subtitle = "Your VO₂ max, expressed in years",
@@ -124,69 +129,6 @@ internal data class VitalRow(
     /** Where the row goes, for the two that have a screen of their own. */
     val route: String? = null,
 )
-
-/**
- * Readiness, done the only way this app can defend.
- *
- * Not an invented 0-100 score: the published method is a short rolling
- * average read against a longer baseline and your own smallest worthwhile
- * change, which is a band. A number on top of that band would be a clinical
- * claim, so the band is what is drawn and the sentence says what it means.
- */
-@Composable
-private fun Readiness(
-    trend: Trend?,
-    colour: Color,
-    moved: List<String>,
-    onOpen: () -> Unit,
-) {
-    if (trend == null || trend.readings.size < 14) return
-    val swc = trend.smallestWorthwhileChange
-    val baseline = trend.average
-    val recent = trend.recent
-    val inside = kotlin.math.abs(recent - baseline) <= swc
-
-    // The card is the way in rather than a row repeating its own title
-    // underneath it: this says whether anything moved, and the screen
-    // behind it says by how much and what the figure stands on.
-    SectionHeader("Readiness")
-    DetailCard(onClick = onOpen) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (inside) "Normal variation" else "Something has moved",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = colour,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        // The rail spans three smallest-worthwhile-changes either side of
-        // the baseline, so a reading outside the band is visibly outside it
-        // rather than pinned to the end.
-        val reach = (swc * 3).takeIf { it > 0.0 } ?: 1.0
-        fun at(value: Double) =
-            (((value - (baseline - reach)) / (reach * 2)).toFloat()).coerceIn(0f, 1f)
-        BandRows(
-            rails = listOf(BandRail(at(recent), at(baseline - swc), at(baseline + swc), colour)),
-            track = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.padding(top = 12.dp),
-            rowHeight = 10.dp,
-        )
-        // One sentence. It used to be three paragraphs explaining a method
-        // nobody asked about, which buried the one fact the card carries.
-        Text(
-            if (moved.isEmpty()) {
-                "Your last seven nights sit inside your own usual range."
-            } else {
-                "Your " + moved.joinToString(" and ") + " " +
-                    (if (moved.size == 1) "has" else "have") + " moved more than usual."
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-    }
-}
 
 @Composable
 private fun VitalLine(row: VitalRow, onOpen: (String) -> Unit) = Row(
@@ -296,4 +238,18 @@ private fun RangeBar(trend: Trend, colour: Color, modifier: Modifier) {
 private fun format(value: Double, decimals: Int, signed: Boolean = false): String {
     val text = if (decimals == 0) value.roundToInt().toString() else "%.${decimals}f".format(value)
     return if (signed && value > 0) "+$text" else text
+}
+
+/**
+ * What the Readiness row says without being opened.
+ *
+ * The same sentence the card used to carry, which is the one fact it was
+ * ever really for: whether anything has moved further than noise explains.
+ */
+@Composable
+private fun readinessLine(trend: Trend?, moved: List<String>): String = when {
+    trend == null || trend.readings.size < 14 -> "This morning against your own mornings"
+    moved.isEmpty() -> "Your last seven nights sit inside your usual range"
+    else -> "Your " + moved.joinToString(" and ") + " " +
+        (if (moved.size == 1) "has" else "have") + " moved more than usual"
 }

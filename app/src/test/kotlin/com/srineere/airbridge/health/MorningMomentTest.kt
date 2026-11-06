@@ -21,6 +21,39 @@ class MorningMomentTest {
         assertEquals("no band yet", MorningReport.against(null))
     }
 
+    @Test fun `readiness leads the headline, and its absence does not silence it`() {
+        val slept = HealthSnapshot(
+            nights = listOf(
+                Night(
+                    day = java.time.LocalDate.now().toEpochDay(),
+                    start = java.time.Instant.EPOCH,
+                    end = java.time.Instant.EPOCH.plus(java.time.Duration.ofMinutes(388)),
+                    asleep = java.time.Duration.ofMinutes(388),
+                    awake = java.time.Duration.ZERO,
+                    light = java.time.Duration.ofMinutes(388),
+                    deep = java.time.Duration.ZERO,
+                    rem = java.time.Duration.ZERO,
+                ),
+            ),
+        )
+        // With a figure, the headline carries it.
+        val scored = morningReport(
+            slept,
+            Goals(),
+            Readiness(score = 68, trend = null, parts = emptyList(), days = 60),
+        )
+        assertEquals("You slept 6h 28m, and readiness is 68", scored.headline)
+
+        // Calibrating is not a reason to say nothing: the phrase the report
+        // carried before readiness existed is still true.
+        val calibrating = morningReport(
+            slept,
+            Goals(),
+            Readiness(score = null, trend = null, parts = emptyList(), days = 9),
+        )
+        assertEquals("You slept 6h 28m, and no morning readings yet", calibrating.headline)
+    }
+
     @Test fun `a report with nothing in it is not worth waking anyone for`() {
         val empty = morningReport(HealthSnapshot(), Goals())
         assertEquals(false, empty.worthSending)

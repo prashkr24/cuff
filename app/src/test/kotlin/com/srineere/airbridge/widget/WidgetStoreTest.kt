@@ -33,7 +33,7 @@ class WidgetStoreTest {
 
     @Test
     fun `a row naming a design this build dropped is refused whole`() {
-        assertNull(WidgetStore.decode("tile:Readiness\u001FSquare\u001F1"))
+        assertNull(WidgetStore.decode("tile:Horoscope\u001FSquare\u001F1"))
         assertNull(WidgetStore.decode("band:Stop\u001F\u001F0"))
     }
 
@@ -110,13 +110,13 @@ class WidgetStoreTest {
      */
     @Test
     fun `a stack naming one design this build dropped keeps the rest`() {
-        val decoded = WidgetStore.decode("band:Everything\u001Ftile:Readiness\u001Ftile:Steps")
+        val decoded = WidgetStore.decode("band:Everything\u001Ftile:Horoscope\u001Ftile:Steps")
         assertEquals(listOf(band, steps), decoded?.designs)
     }
 
     @Test
     fun `a row of nothing this build knows is refused whole`() {
-        assertNull(WidgetStore.decode("tile:Readiness\u001Fband:Stop"))
+        assertNull(WidgetStore.decode("tile:Horoscope\u001Fband:Stop"))
     }
 
     @Test

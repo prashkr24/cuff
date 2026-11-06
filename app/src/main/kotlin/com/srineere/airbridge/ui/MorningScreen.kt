@@ -33,6 +33,7 @@ import com.srineere.airbridge.health.HealthSettings
 import com.srineere.airbridge.health.MorningMoment
 import com.srineere.airbridge.health.MorningReport
 import com.srineere.airbridge.health.morningReport
+import com.srineere.airbridge.health.readinessToday
 import com.srineere.airbridge.ui.theme.extras
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -60,7 +61,7 @@ internal fun MorningScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
     var settings by remember { mutableStateOf(HealthSettings.morning(context)) }
     val report = remember(data.snapshot, state.goals) {
-        morningReport(data.snapshot, state.goals)
+        morningReport(data.snapshot, state.goals, readinessToday(context, data.snapshot))
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -141,12 +142,17 @@ internal fun MorningScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         // lines rather than three cards.
         SectionHeader("This morning")
         DetailCard {
+            // Readiness leads, because it is the one line that is about
+            // this morning rather than about a reading taken during it.
+            // Still its own words while it is calibrating: a dash here
+            // would say the morning had nothing to report.
             MorningLine(
-                "Standing",
-                report.standing.replaceFirstChar { it.uppercase() },
-                null,
+                "Readiness",
+                report.readiness?.score?.toString()
+                    ?: report.standing.replaceFirstChar { it.uppercase() },
+                report.readiness?.score?.let { report.readiness?.word },
                 extras.hrv,
-            ) { onOpen("healthvitals") }
+            ) { onOpen("readiness") }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             MorningLine(
                 "Resting heart rate",

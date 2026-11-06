@@ -172,6 +172,8 @@ private fun tileSummary(kind: TileKind): String = when (kind) {
     TileKind.Heart -> "Where it settled overnight, against your fortnight"
     TileKind.Zones -> "Today's beats, by the hour"
     TileKind.Sleep -> "Last night and the week behind it"
+    TileKind.Readiness -> "This morning against your own sixty mornings"
+    TileKind.FitnessAge -> "Your VO₂ max, expressed in years"
     TileKind.Stages -> "What last night was made of, in proportion"
     TileKind.SleepBank -> "What a week of nights comes to, against your goal"
     TileKind.Steps -> "Today against your goal, and the week"
