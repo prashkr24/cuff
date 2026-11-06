@@ -37,7 +37,7 @@ class StartupProfile {
 
     @Test
     fun startUpAndReadTheHealthTab() = rule.collect(
-        packageName = "com.srineere.airbridge",
+        packageName = PACKAGE,
         includeInStartupProfile = true,
     ) {
         pressHome()
@@ -122,7 +122,14 @@ private const val UNGRANTED = "Allow Health Connect"
 /** Long enough for the tab's first read to come back off the IO thread. */
 private const val WAIT_MS = 4_000L
 
-private const val PACKAGE = "com.srineere.airbridge"
+/**
+ * The app's install id, which is not its Kotlin package.
+ *
+ * Named once because the rename to Cuff moved one and not the other, and
+ * a profile recorded against a package that no longer exists fails in a
+ * way that looks like a device problem.
+ */
+private const val PACKAGE = "com.srineere.cuff"
 
 /**
  * The thirteen reads, plus the two grants that widen them: history, which
