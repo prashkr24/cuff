@@ -116,6 +116,10 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
     val blocking = remember(resumeTicks()) { blockingGrants(context) }
     val paused = state.config.silence.reason(System.currentTimeMillis()) != null
 
+    // Only on the way on. Turning it off needs no explaining: the thing it
+    // explains is what you have just stopped.
+    val (askStart, startDialog) = explained(Explain.Relay) { state.start() }
+    startDialog()
     StatusToggle(
         title = when {
             // No subtext, so anything that has to be said is said here or not
@@ -131,7 +135,7 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
                 // It cannot start, so the switch takes you to the reason
                 // instead of pretending to flip.
                 wanted && blocking > 0 -> onOpen("permissions")
-                wanted -> state.start()
+                wanted -> askStart()
                 else -> state.stop()
             }
         },

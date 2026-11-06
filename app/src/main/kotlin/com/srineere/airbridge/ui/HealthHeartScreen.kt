@@ -396,7 +396,12 @@ private fun MeasureCard(axes: Axes) {
                     modifier = Modifier.size(20.dp),
                 )
 
-                else -> OutlinedButton(onClick = measure.start) { Text("Measure") }
+                else -> {
+                    val (askMeasure, measureDialog) =
+                        explained(Explain.MeasureHeart) { measure.start() }
+                    measureDialog()
+                    OutlinedButton(onClick = askMeasure) { Text("Measure") }
+                }
             }
         }
 
