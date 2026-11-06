@@ -29,10 +29,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
@@ -181,6 +183,39 @@ fun Stat(
         softWrap = false,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(top = 3.dp),
+    )
+}
+
+/**
+ * The mark that says a goal was met.
+ *
+ * One mark for every goal in this app, sitting beside the figure that met
+ * it. Before this, meeting a goal looked very like not meeting one: the
+ * Steps screen said "goal met today" in the same muted grey it used for
+ * "4,210 to go", and a bar that reached its line was drawn a few hundredths
+ * lighter than one that did not. Crossing a goal is the one moment this tab
+ * has to offer, and it was being reported rather than marked.
+ *
+ * It takes the metric's own colour, because that is how everything here says
+ * which reading it belongs to, and the tick is filled rather than outlined
+ * so it reads as something done rather than as another control to press.
+ */
+@Composable
+fun GoalMark(
+    colour: Color,
+    size: Dp = 18.dp,
+    description: String? = "Goal met",
+) = Box(
+    contentAlignment = Alignment.Center,
+    modifier = Modifier.size(size).clip(CircleShape).background(colour),
+) {
+    Icon(
+        Icons.Filled.Check,
+        contentDescription = description,
+        // The card behind it, so the tick is a hole in the disc rather than
+        // a second colour to pick.
+        tint = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.size(size * 0.68f),
     )
 }
 

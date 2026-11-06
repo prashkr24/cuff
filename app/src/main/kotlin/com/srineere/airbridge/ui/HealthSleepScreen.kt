@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -113,18 +114,28 @@ internal fun HealthSleepScreen(onBack: () -> Unit) {
         }
         val beats = olderBeats?.let { sleepingRate(it, night) }
 
+        val sleptEnough = goals.sleepMinutes > 0 && night.asleep.toMinutes() >= goals.sleepMinutes
         DetailCard {
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            night.asleep.asHoursMinutes(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (sleptEnough) {
+                            Spacer(Modifier.width(8.dp))
+                            GoalMark(extras.sleepRem, size = 22.dp)
+                        }
+                    }
                     Text(
-                        night.asleep.asHoursMinutes(),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
+                        // Which night, and whether it reached the goal. The
+                        // mark alone would not say what was met.
                         if (night.day == newest.day) "last night" else dayLabel(night.day),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (sleptEnough) extras.sleepRem
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 data.sleepTrend?.let { trend ->

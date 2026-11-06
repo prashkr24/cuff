@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -122,17 +123,27 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
         // One card: the week's total, the days it came from, and the goal it
         // is measured against. They were three cards saying one thing.
         DetailCard {
+            // A week's goal, so the mark is for the week and the line says
+            // so. Nothing here is about today on its own.
+            val weekMet = goals.activeMinutes > 0 && total.toMinutes() >= goals.activeMinutes
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${total.toMinutes()}",
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (weekMet) {
+                            Spacer(Modifier.width(8.dp))
+                            GoalMark(activity, size = 22.dp)
+                        }
+                    }
                     Text(
-                        "${total.toMinutes()}",
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        "minutes in the last 7 days · goal ${goals.activeMinutes}",
+                        if (weekMet) "minutes · goal ${goals.activeMinutes} met this week"
+                        else "minutes in the last 7 days · goal ${goals.activeMinutes}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (weekMet) activity else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 ChangeChip(

@@ -867,9 +867,11 @@ private fun ColumnScope.SleepTile(
         )
     }
     val efficiency = last.efficiency?.let { "${(it * 100).roundToInt()}% efficient" }
+    val sleptEnough = goals.sleepMinutes > 0 && last.asleep.toMinutes() >= goals.sleepMinutes
+    val sleepMark = colour.takeIf { sleptEnough }
     when (size) {
         TileSize.S, TileSize.M, TileSize.W -> {
-            TileValue(last.asleep.asHoursMinutes(), null, size)
+            TileValue(last.asleep.asHoursMinutes(), null, size, met = sleepMark)
             // W is two thirds of a row and was leaving the bottom third of
             // itself empty: the width buys a line of text and taller bars.
             if (size != TileSize.S) efficiency?.let { TileSub(it) }
@@ -885,7 +887,7 @@ private fun ColumnScope.SleepTile(
             modifier = Modifier.weight(1f),
         ) {
             Column(Modifier.width(92.dp)) {
-                TileValue(last.asleep.asHoursMinutes(), null, size)
+                TileValue(last.asleep.asHoursMinutes(), null, size, met = sleepMark)
                 efficiency?.let { TileSub(it) }
             }
             bars(54.dp, Modifier.padding(start = 6.dp), false, axes)
@@ -896,7 +898,7 @@ private fun ColumnScope.SleepTile(
             // second thing the tile says.
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.weight(1f)) {
-                    TileValue(last.asleep.asHoursMinutes(), null, size)
+                    TileValue(last.asleep.asHoursMinutes(), null, size, met = sleepMark)
                     efficiency?.let { TileSub(it) }
                 }
                 if (score != null) {
@@ -942,6 +944,9 @@ private fun ColumnScope.StepsTile(
     val average = remember(values) { values.average().takeIf { values.isNotEmpty() } }
     val met = remember(week, goals.steps) { week.count { it.value >= goals.steps } }
     val percent = (data.stepProgress(goals.steps) * 100).roundToInt()
+    // stepsToGo coerces at zero, so a goal of zero would read as met.
+    val metToday = goals.steps > 0 && data.stepsToday >= goals.steps
+    val mark = colour.takeIf { metToday }
     val summary = buildString {
         average?.let { append("avg ${count(it.roundToInt().toLong())}") }
         if (average != null) append(" · ")
@@ -972,8 +977,8 @@ private fun ColumnScope.StepsTile(
             TileHead(TileKind.Steps, colour, size, window = "7 days") {
                 stepShare(data)?.let { ChangeChip(it, "%", colour, size) }
             }
-            TileValue(count(data.stepsToday), null, size)
-            TileSub("$percent% of ${count(goals.steps.toLong())}")
+            TileValue(count(data.stepsToday), null, size, met = mark)
+            TileSub(if (metToday) "goal met today" else "$percent% of ${count(goals.steps.toLong())}")
             bars(22.dp, Modifier.padding(top = 4.dp), null)
         }
         // XL is twice the height, and the L layout simply sat in the top
@@ -998,7 +1003,7 @@ private fun ColumnScope.StepsTile(
                     TileHead(TileKind.Steps, colour, size, window = "7 days") {
                         stepShare(data)?.let { ChangeChip(it, "%", colour, size) }
                     }
-                    TileValue(count(data.stepsToday), "steps", size)
+                    TileValue(count(data.stepsToday), "steps", size, met = mark)
                     TileSub(summary)
                 }
             }
@@ -1271,8 +1276,14 @@ private fun ColumnScope.NutritionTile(
     }
     TileValue(count(eaten.roundToInt().toLong()), "kcal", size)
     val protein = data.snapshot.proteinToday
+    // The goal on this tile belongs to the protein figure, not to the
+    // calories above it, so the mark goes on the line that carries it.
+    val proteinMet = goals.proteinGrams?.let { target ->
+        protein != null && protein >= target
+    } == true
     TileSub(
-        when {
+        met = colour.takeIf { proteinMet },
+        text = when {
             protein == null -> "no macros logged"
             // The word costs eight characters S does not have, and the
             // heading already says this tile is about food.
@@ -1441,6 +1452,8 @@ private fun ColumnScope.TileValue(
     unit: String?,
     size: TileSize,
     dim: Boolean = false,
+    /** The metric's colour when its goal is met today, and null when not. */
+    met: Color? = null,
 ) = Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
     Text(
         value,
@@ -1465,16 +1478,44 @@ private fun ColumnScope.TileValue(
             modifier = Modifier.padding(bottom = if (size == TileSize.XL) 6.dp else 2.dp),
         )
     }
+    if (met != null) {
+        Spacer(Modifier.width(6.dp))
+        GoalMark(
+            met,
+            size = if (size == TileSize.XL) 18.dp else 15.dp,
+            // The figure beside it is already read out; a second voice
+            // saying "goal met" after every number is noise.
+            description = null,
+        )
+    }
 }
 
+/**
+ * A tile's second line. [met] marks the goal that line is about -- the
+ * protein figure on the food tile, say, where the big number above it is
+ * calories and has no goal of its own.
+ */
 @Composable
-private fun TileSub(text: String) = Text(
-    text,
-    style = MaterialTheme.typography.labelSmall,
-    color = MaterialTheme.colorScheme.onSurfaceVariant,
-    maxLines = 1,
-    overflow = TextOverflow.Ellipsis,
-)
+private fun TileSub(text: String, met: Color? = null) = if (met == null) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+} else {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        GoalMark(met, size = 12.dp, description = null)
+        Text(
+            " $text",
+            style = MaterialTheme.typography.labelSmall,
+            color = met,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 @Composable
 private fun TileChip(text: String, colour: Color) = Surface(

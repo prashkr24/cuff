@@ -142,7 +142,13 @@ internal fun HealthNutritionScreen(onBack: () -> Unit, onOpen: (String) -> Unit)
                     }
                 }
                 macros.forEach { (name, grams, colour) ->
-                    MacroRow(name, grams, grams * kcalPerGram(name) / energy, colour)
+                    MacroRow(
+                        name, grams, grams * kcalPerGram(name) / energy, colour,
+                        // Protein is the only macro anybody sets a target
+                        // for, and the only one with a goal to mark.
+                        met = name == "Protein" &&
+                            goals.proteinGrams?.let { grams >= it } == true,
+                    )
                 }
             }
         }
@@ -178,7 +184,13 @@ internal fun HealthNutritionScreen(onBack: () -> Unit, onOpen: (String) -> Unit)
 }
 
 @Composable
-private fun MacroRow(name: String, grams: Double, share: Double, colour: Color) = Row(
+private fun MacroRow(
+    name: String,
+    grams: Double,
+    share: Double,
+    colour: Color,
+    met: Boolean = false,
+) = Row(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(10.dp),
     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -198,8 +210,11 @@ private fun MacroRow(name: String, grams: Double, share: Double, colour: Color) 
         "${grams.roundToInt()} g",
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.width(52.dp),
+        // The mark takes its own room rather than squeezing the figure,
+        // which is the same width on every row whether marked or not.
+        modifier = Modifier.width(if (met) 38.dp else 52.dp),
     )
+    if (met) GoalMark(colour, size = 14.dp)
 }
 
 /**

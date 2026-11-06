@@ -432,7 +432,14 @@ internal fun DivergingBars(
     }
 }
 
-/** A progress ring. Only a metric with a goal gets one. */
+/**
+ * A progress ring. Only a metric with a goal gets one.
+ *
+ * A full ring lights its own track. At 100% the arc closes on a grey circle
+ * nobody can see behind it, so the finished state looked like the state one
+ * step before it; now the whole ring carries the colour and the difference
+ * is visible from across the tab.
+ */
 @Composable
 internal fun GoalRing(
     progress: Float,
@@ -442,13 +449,14 @@ internal fun GoalRing(
     stroke: Dp = 7.dp,
     content: @Composable () -> Unit,
 ) {
+    val met = progress >= 1f
     Box(modifier, contentAlignment = androidx.compose.ui.Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val width = stroke.toPx()
             val inset = width / 2f
             val arcSize = Size(size.width - width, size.height - width)
             drawArc(
-                color = track,
+                color = if (met) colour.copy(alpha = 0.3f) else track,
                 startAngle = -90f,
                 sweepAngle = 360f,
                 useCenter = false,

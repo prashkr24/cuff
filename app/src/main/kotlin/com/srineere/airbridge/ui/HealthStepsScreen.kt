@@ -3,6 +3,8 @@ package com.srineere.airbridge.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -105,20 +107,26 @@ internal fun HealthStepsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         )
                     }
                 }
+                val metToday = goal > 0 && data.stepsToday >= goal
                 Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            count(data.stepsToday),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (metToday) {
+                            Spacer(Modifier.width(8.dp))
+                            GoalMark(steps, size = 22.dp)
+                        }
+                    }
                     Text(
-                        count(data.stepsToday),
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        if (data.stepsToGo(goal) > 0) {
-                            "${count(data.stepsToGo(goal))} to go · goal ${count(goal.toLong())}"
-                        } else {
-                            "goal met today"
-                        },
+                        if (metToday) "goal met today"
+                        else "${count(data.stepsToGo(goal))} to go · goal ${count(goal.toLong())}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        // The line the goal is on carries the colour too, so
+                        // the state reads at a glance and not only up close.
+                        color = if (metToday) steps else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
