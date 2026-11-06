@@ -89,6 +89,14 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
         Readiness(data.hrvTrend ?: data.restingTrend, extras.hrv, movedNames)
 
+        // The card above says whether anything moved; the screen behind
+        // this says by how much, and what the figure stands on.
+        SettingsRow(
+            title = "Readiness",
+            subtitle = "This morning against your own mornings, as a figure",
+            onClick = { onOpen("readiness") },
+        )
+
         Text(
             "These are your own ranges, built from your own nights — the band is " +
                 "half a standard deviation of your own baseline, the smallest change " +
