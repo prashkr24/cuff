@@ -18,6 +18,24 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Added
 
+- **Spoken descriptions on every chart worth hearing.** A screen reader landed
+  on a Canvas, found nothing, and said nothing; the readout under it fills
+  from a scrub, which is not available to someone using a reader. Each chart
+  now carries one sentence built from the data it draws, with units, signs and
+  durations written as words because a reader speaks none of the symbols.
+  Charts inside tiles stay silent on purpose: the tile's own text already says
+  it. [6 Nov]
+- **Tile heights that follow the font scale**, clamped at 1.5×. At the largest
+  system font size a small tile's chart was squeezed to zero and vanished
+  without any error. [6 Nov]
+- **State that survives process death.** The half-filled Log food form, every
+  chart window, the picked night and the food log's day are `rememberSaveable`
+  now; `ChartWindow` round-trips through its own `Saver`. Rotation was already
+  safe through `configChanges`. [6 Nov]
+- **A confirmation before forgetting a saved food**, matching the one the
+  logged-entry delete already had, and a haptic on both destructive confirms.
+  [6 Nov]
+
 - **The relay.** A notification listener and a foreground service that buzz a
   Fitbit Air for calls and notifications, over Golden Gate → DTLS → CoAP. The
   band has no vibrate command; every pulse is a write to its `/settings`
@@ -114,6 +132,33 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Fixed
 
+- **The step check drifted through the night.** It ran on
+  `handler.postDelayed`, which counts in `SystemClock.uptimeMillis` and stops
+  while the phone is suspended, so a night in Doze pushed the daily goal and
+  the hourly nudge arbitrarily late. It is an `AlarmManager` alarm now,
+  delivered to a receiver rather than through the service — routing it through
+  `onStartCommand` would have dismissed each hourly nudge within a quarter
+  hour of posting it, because `enterForeground` cancels that notification
+  before it reads the action. Falls back to the old handler where no exact
+  alarm can be scheduled, rather than throwing. [6 Nov]
+- **Macro rows that did not add up to their own total.** Nutrition sums were
+  filtered by writer in two reads out of seven, so with a source chosen and two
+  food apps the Nutrition screen showed rows drawn from every writer under a
+  heading drawn from one. All eight sums take the filter now; the food log and
+  the meal count deliberately do not. [6 Nov]
+- **`hourlyTotals` was wrong on both daylight-saving transitions.** It assumed
+  a fixed 24-hour day and indexed buckets by elapsed hours rather than the
+  local clock, so every bucket after a spring-forward sat one slot low and an
+  autumn day's final hour was never read. [6 Nov]
+- **`Written.Distance` was declared and never used** while the Goals screen
+  told the user the source choice covered distance, and `SessionReader` read
+  distance and energy unfiltered beside a day's burn that was filtered. [6 Nov]
+- **Contacts were queried twice a second during a ring, on the UI thread.**
+  The lookup is memoised for the length of one ring and dropped when it ends.
+  [6 Nov]
+- The food log's date used a hardcoded pattern rather than the locale's own,
+  and the Health header's date froze when a tab was left open across midnight.
+  [6 Nov]
 - Calls on a locked phone and grouped WhatsApp calls were being silenced. [2 Nov]
 - A ring stopped on a notification being removed rather than on the phone
   stopping ringing, and only the first call from a key would ring. [2 Nov]
@@ -147,6 +192,10 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Removed
 
+- **The `INTERNET` permission from debug builds**, left over from Flutter's
+  hot reload. This app makes no network call in any build type. [6 Nov]
+- **The DataStore dependency**, declared and never used — all state is
+  `SharedPreferences`. [6 Nov]
 - **The Flutter lab and its state.** `master` still holds the original Flutter
   proof of concept; `native` is a ground-up rewrite and is where all work
   happens. [3 Nov]

@@ -392,6 +392,16 @@ logged in MyFitnessPal is a meal eaten, and the food log should show it. What
 changed is only that a *second* nutrition writer can no longer double the
 day's calorie total.
 
+That line divides nutrition in two, and the division is the thing to hold on
+to: **a list shows every writer, a sum comes from one.** The food log and the
+meal count are lists. The day's calories, the three macro dailies and the
+three figures for today are sums, and all of them take `foodOrigins`. For a
+while only the first two did, which is the worst of both: the macro rows on
+the Nutrition screen were drawn from every writer while the calorie total
+above them came from one, so a day with two food apps showed rows that did
+not add up to their own heading. There is a comment at the log's read saying
+not to hand it the same set, because doing so would hide somebody's lunch.
+
 ## The device a record came off
 
 Also 6 November. Health Connect attaches a device to every record —
@@ -624,6 +634,27 @@ adb logcat -s AirBridge
   newline argument empties the file and *then* raises. It cost a file.
 - **Formatting time:** use `DateFormat.getTimeFormat(context)`, never a format
   string. A hardcoded `h:mm a` printed "10:24 pm" onto a 24-hour phone.
+- **`handler.postDelayed` is not a clock.** It counts in
+  `SystemClock.uptimeMillis`, which stops while the phone is suspended, so
+  anything scheduled that way drifts by however long the device slept. The
+  step check ran on it and a night in Doze pushed the daily goal and the
+  hourly nudge arbitrarily late. Anything that has to happen at a *time*
+  wants `AlarmManager`; `postDelayed` is only for "a while from now, while
+  we are awake anyway".
+- **An alarm delivered to the service dismisses the nudge.** `enterForeground`
+  runs before `onStartCommand` reads the action and it cancels notification
+  903 — the hourly nudge's own. So a periodic alarm routed through the
+  service would quietly clear each nudge within a quarter hour of posting
+  it. The step alarm goes to `StepCheckReceiver` and into the live instance
+  instead, which is why it is a broadcast and not the simpler
+  `PendingIntent.getService`.
+- **A day is not twenty-four hours twice a year.** `hourlyTotals` used
+  `start.plus(Duration.ofDays(1))` and indexed by *elapsed* hours, so after a
+  spring-forward every bucket sat one slot low and an autumn day's last hour
+  was never read. Use `localDay` for the boundaries and `byLocalHour` for
+  the index, and note the latter *sums* — autumn runs 01:00 twice and both
+  belong in slot 1. `dailyTotals` was always safe because it uses
+  `LocalDateTime` and `Period`; the hourly one was not.
 - **The installed-app list is held for the process, in `InstalledApps`.** It is
   expensive — every launcher entry, a `getPackageInfo` and a `TelecomManager`
   call per app, and an icon to rasterise — so it is read once, off the main
@@ -1235,6 +1266,88 @@ badge, so Recent tells the three apart.
 Both go through the relay's link, so neither fires while relaying is off. The
 rows say so, but only when it is off: a caveat that is always on screen stops
 being read.
+
+**What schedules them.** `scheduleStepCheck()` still picks the wait with
+`nextStepCheckMillis`, which shortens the quarter hour so it lands inside the
+nudge's `[50,59]` window — without it, a relay started at two minutes past
+checks at :02, :17, :32 and :47 for as long as it runs and the nudge never
+fires once. The wait then goes to an `AlarmManager` one-shot rather than the
+handler, because the handler's clock stops in Doze. Each delivery reschedules
+the next.
+
+On API 31 and up an exact alarm needs either `SCHEDULE_EXACT_ALARM` — declared,
+granted at install on 31–32, deny-by-default from 33 — or exemption from
+battery optimisation, which the Device screen already asks for. With neither,
+`armStepAlarm` returns false and the handler takes over: later than it should
+be, but not gone. Nothing throws. `canScheduleExactAlarms()` sits behind a
+plain `sdkInt < 31` early return with no lambda between the guard and the
+call, deliberately, so lint's `NewApi` analysis can still follow it.
+
+There is no UI to ask for the exact-alarm grant. On a phone running 33 or
+later that has also refused the battery exemption, the step check is back on
+the handler and will drift. That is the one gap left here.
+
+## What a chart says out loud
+
+Every chart was reachable and silent: a screen reader landed on the Canvas,
+found no `contentDescription` and nothing under it worth walking, said
+nothing, and `ChartReadout` — which fills from a scrub — stayed empty for
+somebody who cannot scrub. Reachable and silent is worse than unreachable,
+because it reads as an app that is broken rather than one that stopped short.
+
+Each chart that is worth hearing now carries one sentence, built in
+`ChartLabel` from the same lists it is drawing, so it cannot drift from the
+picture. The shape is fixed in one place on purpose — a dozen screens with
+two ways of saying the same thing has one too many:
+
+> `<Metric>, <window>. <low> to <high> <unit>. Latest <x>. Goal <g>.`
+
+Three rules that are easy to undo by accident. **Units are words** —
+"beats per minute", not "bpm", because a reader left to spell an
+abbreviation has told you less than one that says it. **Signs are words** —
+a reader says nothing at all for `−`, so an energy balance of −420 has to
+say "minus 420" or it reads as 420. **Durations are words**, via
+`spokenMinutes`, not the card's "6h 28m".
+
+`clearAndSetSemantics`, not `semantics`: there is nothing under a chart but a
+thousand drawn circles, and a thousand nothings is not a tree worth walking.
+
+Charts inside tiles stay silent, and that is the design rather than an
+omission. A tile is already one node whose own text names the metric and
+reads the figure; a sentence on the Canvas inside it says the same thing
+twice. The same goes for the session rows' sparklines and Readiness's rail,
+where the card's prose above and below already says what the drawing shows.
+
+There is no point-by-point stepping action. The summary carries the range,
+the latest and the goal, which is most of what a scrub yields, and a working
+`CustomAccessibilityAction` would have to drive `picked` — which lives in
+each of the ten screens, not in the chart — and then get focus onto a
+separate Text to read the answer. Worth doing on its own; not worth
+half-doing here.
+
+## Two things that only break on somebody else's phone
+
+**Large type.** Tile heights were fixed dp while everything inside them grew
+with `fontScale`, so at the largest step in Display → Font size a small
+tile's heading and figure ate the whole 112 dp and the `weight(1f)` chart was
+squeezed to zero and simply vanished. Nothing crashed, which is why it went
+unseen. `tileHeight` now scales with `fontScale`, clamped to `1f..1.5f`:
+the floor because answering a request for smaller letters with a smaller tab
+is not what was asked, the ceiling because Android 14 reports up to 2.0 and
+at 2.0 the XL hero is 432 dp — half a phone for one tile.
+
+**Process death.** Rotation has always been safe, because `MainActivity`
+declares `configChanges` over orientation, fontScale, density, uiMode and
+locale. Process death was not, and it took the Log food form mid-entry, every
+chart window, the picked night and the food log's day. Those are
+`rememberSaveable` now; `ChartWindow` goes through `ChartWindowSaver`, a
+`listSaver` of length and offset, which is why `ChartWindow` has an
+`initialOffset` parameter it would otherwise have no use for.
+
+Left on plain `remember` on purpose: anything tied to an in-flight write, a
+transient refusal line, something re-read from disk, and the two dialogs that
+hold a `FoodEntry` or a `SavedFood` — neither is a Bundle-able kind, and
+making them saveable throws.
 
 ## If you change the stored config
 
