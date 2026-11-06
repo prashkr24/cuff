@@ -12,6 +12,24 @@ import java.time.Instant
 import java.time.ZoneId
 
 /** Which meal an entry belongs to, in Health Connect's own terms. */
+/**
+ * A day's entries, in the order a day is eaten, and then everything else.
+ *
+ * The last group is the whole point. Health Connect's meal type is optional
+ * and plenty of writers leave it unset; grouped by the four meals alone,
+ * those entries matched nothing and vanished from the screen while the
+ * day's total went on counting them -- a day whose rows did not add up to
+ * its own figure. This app always sets a meal, so it took a foreign writer
+ * to show it.
+ *
+ * Empty groups are kept here and dropped by the caller, so this function
+ * has one job and the invariant worth testing is plain: every entry comes
+ * out exactly once.
+ */
+fun mealGroups(entries: List<FoodEntry>): List<Pair<String, List<FoodEntry>>> =
+    Meal.entries.map { meal -> meal.label to entries.filter { it.mealType == meal.type } } +
+        ("Other" to entries.filterNot { entry -> Meal.entries.any { it.type == entry.mealType } })
+
 enum class Meal(val label: String, val type: Int) {
     Breakfast("Breakfast", MealType.MEAL_TYPE_BREAKFAST),
     Lunch("Lunch", MealType.MEAL_TYPE_LUNCH),
@@ -136,7 +154,12 @@ object HealthWriter {
             onFailure = { error ->
                 Log.w("AirBridge", "Could not delete food entry", error)
                 LogResult.Refused(
-                    "Health Connect would not delete it: ${error.message ?: "no reason given"}.",
+                    // The likeliest reason by far, and one no error message
+                    // says plainly: Health Connect lets an app delete only
+                    // what it wrote itself.
+                    "Health Connect would not delete it. An app can only delete " +
+                        "entries it wrote itself, so this one has to go from the " +
+                        "app that logged it.",
                 )
             },
         )

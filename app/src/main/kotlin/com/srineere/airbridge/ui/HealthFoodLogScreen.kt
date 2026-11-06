@@ -51,6 +51,7 @@ import com.srineere.airbridge.health.FoodEntry
 import com.srineere.airbridge.health.HealthWriter
 import com.srineere.airbridge.health.LogResult
 import com.srineere.airbridge.health.Meal
+import com.srineere.airbridge.health.mealGroups
 import com.srineere.airbridge.health.SavedFood
 import com.srineere.airbridge.health.SavedFoods
 import com.srineere.airbridge.ui.theme.extras
@@ -84,7 +85,7 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     var open by remember { mutableStateOf<String?>(null) }
     // Which meals are folded away. Empty is the useful default: you came
     // here to read the day, not to unfold it.
-    var folded by remember { mutableStateOf(setOf<Int>()) }
+    var folded by remember { mutableStateOf(setOf<String>()) }
     var saying by remember { mutableStateOf<String?>(null) }
     // Held rather than asked for per row: the answer comes off disk, and a
     // row that asked it would ask again on every recomposition. Every path
@@ -126,18 +127,24 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         }
 
         // Grouped by meal, in the order a day is eaten rather than the order
-        // the records happen to come back in.
-        Meal.entries.forEach { meal ->
-            val forMeal = entries.filter { it.mealType == meal.type }
+        // the records happen to come back in -- and then everything else,
+        // under a heading of its own.
+        //
+        // Health Connect's meal type is optional and plenty of writers leave
+        // it unset. Those entries used to match none of the four groups and
+        // disappear, while DayTotals above went on counting them: a day whose
+        // rows did not add up to its own figure. This app always sets a meal,
+        // so it took a foreign writer to show it.
+        mealGroups(entries).forEach { (label, forMeal) ->
             if (forMeal.isEmpty()) return@forEach
-            val shut = meal.type in folded
+            val shut = label in folded
             MealHeader(
-                label = meal.label,
+                label = label,
                 kcal = forMeal.sumOf { it.kcal ?: 0.0 },
                 count = forMeal.size,
                 shut = shut,
                 onToggle = {
-                    folded = if (shut) folded - meal.type else folded + meal.type
+                    folded = if (shut) folded - label else folded + label
                     open = null
                 },
             )
@@ -150,6 +157,7 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     open = open == entry.id,
                     accent = accent,
                     saved = kept,
+                    ours = entry.isOurs(context.packageName),
                     onOpen = { open = if (open == entry.id) null else entry.id },
                     // The star is a switch, the way a star is everywhere.
                     // Before this it only ever filled the list, and an entry
@@ -198,7 +206,8 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
         Text(
             "Everything Health Connect holds for this day, whichever app wrote it. " +
-                "Deleting removes it there too.",
+                "Deleting one of yours removes it there too; an entry another app " +
+                "wrote has to go from that app.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.extras.disabled,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
@@ -352,6 +361,7 @@ private fun EntryRow(
     open: Boolean,
     accent: Color,
     saved: Boolean,
+    ours: Boolean,
     onOpen: () -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
@@ -413,6 +423,21 @@ private fun EntryRow(
                     )
                     Text(" Delete", color = MaterialTheme.colorScheme.error)
                 }
+            }
+            // Said before the button is pressed rather than after it fails.
+            // Whether a foreign record can be deleted from here is Health
+            // Connect's decision and the documented answer is no, so the
+            // row says whose it is and the button is left where it was --
+            // a refusal that explains itself is better than a control
+            // quietly missing.
+            if (!ours) {
+                Text(
+                    "Written by " + appLabel(entry.source) +
+                        ". Only the app that wrote an entry can delete it.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.extras.disabled,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
         }
     }
@@ -505,5 +530,23 @@ internal fun dayName(back: Int): String = when (back) {
         remember(back) {
             java.time.format.DateTimeFormatter.ofPattern("EEE d MMM").format(date)
         }
+    }
+}
+
+/**
+ * An app's own name for a package, or the package when nothing answers.
+ *
+ * A row saying "written by com.myfitnesspal.android" is a row that has
+ * technically told you and practically has not.
+ */
+@Composable
+private fun appLabel(packageName: String?): String {
+    if (packageName.isNullOrBlank()) return "another app"
+    val context = LocalContext.current
+    return remember(packageName) {
+        runCatching {
+            val manager = context.packageManager
+            manager.getApplicationLabel(manager.getApplicationInfo(packageName, 0)).toString()
+        }.getOrDefault(packageName)
     }
 }

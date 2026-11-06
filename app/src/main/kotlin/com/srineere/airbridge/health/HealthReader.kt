@@ -110,7 +110,19 @@ data class FoodEntry(
     val fat: Double?,
     /** Which meal it was filed under, in Health Connect's numbering. */
     val mealType: Int = 0,
-)
+    /**
+     * The package that wrote it.
+     *
+     * Nutrition is read with no origin filter, which is Health Connect's
+     * default and the right one: the food log is meant to show the day
+     * whoever logged it. That makes the writer a fact the screen needs,
+     * because what can be done with a row depends on whose row it is.
+     */
+    val source: String? = null,
+) {
+    /** True when this app wrote it, which is the only kind it may delete. */
+    fun isOurs(packageName: String): Boolean = source == null || source == packageName
+}
 
 /** What the Health tab draws. Any field may be absent; none is faked. */
 data class HealthSnapshot(
@@ -387,6 +399,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         val food = if (allowed(NutritionRecord::class)) {
             records(client, NutritionRecord::class, from, today).map { entry ->
                 FoodEntry(
+                    source = entry.metadata.dataOrigin.packageName.takeIf { it.isNotBlank() },
                     id = entry.metadata.id,
                     at = entry.startTime,
                     day = entry.startTime.atZone(zone).toLocalDate().toEpochDay(),
