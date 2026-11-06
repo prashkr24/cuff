@@ -115,16 +115,26 @@ object HealthSources {
 
     private const val CACHE_MS = 6 * 60 * 60 * 1000L
 
+    /**
+     * Who writes what, per kind of reading, each remembered on its own.
+     *
+     * One cache per metric rather than one for everything, because the
+     * answers genuinely differ: a scale writes weight and has never
+     * written a step, and a phone writes steps and distance but not a
+     * night's sleep. Filtering one reading by another's writers is how
+     * you delete somebody's weight history while trying to stop their
+     * steps being double-counted.
+     */
     @Volatile
-    private var cached: List<HealthSource>? = null
+    private var cached: Map<String, List<HealthSource>> = emptyMap()
 
     @Volatile
-    private var cachedAt = 0L
+    private var cachedAt: Map<String, Long> = emptyMap()
 
-    /** Called when a source may have changed under us — the picker does this. */
+    /** Called when a source may have changed under us -- the picker does this. */
     fun forget() {
-        cached = null
-        cachedAt = 0L
+        cached = emptyMap()
+        cachedAt = emptyMap()
     }
 
     /**
@@ -143,62 +153,97 @@ object HealthSources {
      * for six hours. The caller already knows; asking twice only added a way
      * to be wrong.
      */
+    /**
+     * Who has written steps lately.
+     *
+     * Kept as its own name because the step filter and its picker are
+     * written around it; it is now one call of [writersOf].
+     */
     suspend fun stepWriters(
         context: Context,
         client: HealthConnectClient,
         granted: Set<String>,
+    ): List<HealthSource> = writersOf(context, client, granted, Written.Steps)
+
+    /**
+     * Who has written one kind of reading lately.
+     *
+     * Empty when the permission is missing or nothing has been written,
+     * which the caller must tell apart from "one source, and it is the
+     * phone" -- [resolveSources] does, and so does the picker.
+     *
+     * [granted] is passed in rather than asked for. This used to call
+     * `HealthConnect.granted` itself, a second permission round trip
+     * inside a read that had just made one, and on a real phone it came
+     * back without steps in it while the caller's own copy had them -- so
+     * this returned empty, `resolveSources` read that as "nothing to
+     * exclude", and the step filter quietly switched itself off. Then the
+     * empty answer was cached for six hours. The caller already knows;
+     * asking twice only added a way to be wrong.
+     */
+    suspend fun writersOf(
+        context: Context,
+        client: HealthConnectClient,
+        granted: Set<String>,
+        written: Written,
     ): List<HealthSource> {
         val now = System.currentTimeMillis()
-        cached?.let { if (now - cachedAt < CACHE_MS) return it }
+        cached[written.key]?.let {
+            if (now - (cachedAt[written.key] ?: 0L) < CACHE_MS) return it
+        }
 
-        if (HealthPermission.getReadPermission(StepsRecord::class) !in granted) {
+        if (HealthPermission.getReadPermission(written.type) !in granted) {
             // Said out loud. The whole fault above was a silent return.
-            Log.i(TAG, "step writers: steps not granted, so no filter")
+            Log.i(TAG, "${written.key} writers: not granted, so no filter")
             return emptyList()
         }
 
-        // An aggregate reports which origins contributed to it, which is this
-        // question asked directly: one call, no paging, and no record is
-        // converted on the way.
+        // An aggregate reports which origins contributed to it, which is
+        // this question asked directly: one call, no paging, and no record
+        // is converted on the way.
         //
         // Reading the records instead was the obvious first attempt and it
         // does not work on a real phone. Health Connect stores step records
         // whose start equals their end, and `StepsRecord`'s own constructor
-        // rejects those -- so `readRecords` throws from inside the library's
-        // converter, on data the platform was happy to keep, and there is
-        // nothing a caller can do about it. The aggregate never builds a
-        // record, so it never hits that.
+        // rejects those -- so `readRecords` throws from inside the
+        // library's converter, on data the platform was happy to keep, and
+        // there is nothing a caller can do about it. The aggregate never
+        // builds a record, so it never hits that.
         val packages = runCatching {
             client.aggregate(
                 AggregateRequest(
-                    metrics = setOf(StepsRecord.COUNT_TOTAL),
-                    timeRangeFilter = TimeRangeFilter.between(Instant.now().minus(WINDOW), Instant.now()),
+                    metrics = setOf(written.metric),
+                    timeRangeFilter = TimeRangeFilter.between(
+                        Instant.now().minus(WINDOW),
+                        Instant.now(),
+                    ),
                 ),
             ).dataOrigins.map { it.packageName }
         }.onFailure {
-            Log.w(TAG, "could not enumerate step writers", it)
+            Log.w(TAG, "could not enumerate ${written.key} writers", it)
         }.getOrDefault(emptyList())
 
         val sources = packages.map { describe(context, it) }
-        // Who writes steps is the question behind every wrong step figure,
-        // and it cannot be answered from the screen: one source and three
-        // look identical once they are added together. Logged for the same
-        // reason HealthReader logs the types nobody granted.
+        // Who writes a reading is the question behind every wrong figure
+        // on the tab, and it cannot be answered from the screen: one
+        // source and three look identical once they are added together.
+        // Logged for the same reason HealthReader logs the types nobody
+        // granted.
         Log.i(
             TAG,
-            "step writers: " + if (sources.isEmpty()) {
+            "${written.key} writers: " + if (sources.isEmpty()) {
                 "none in the last ${WINDOW.toDays()} days"
             } else {
                 sources.joinToString { "${it.packageName}${if (it.isPhone) " (phone)" else ""}" }
             },
         )
         // Only a real answer is kept. An empty one means the question
-        // failed or nothing has walked in a fortnight, and caching either
+        // failed or nothing was written in a fortnight, and caching either
         // for six hours turns a moment's trouble into an afternoon of
         // counting the phone's steps as the band's.
         if (sources.isNotEmpty()) {
-            cached = sources
-            cachedAt = now
+            cached = cached + (written.key to sources)
+            cachedAt = cachedAt + (written.key to now)
         }
         return sources
     }

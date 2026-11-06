@@ -256,7 +256,7 @@ private fun StepSourcePicker() {
 
     DetailCard {
         Text(
-            "Steps counted from",
+            "Readings counted from",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, bottom = 2.dp),
@@ -272,7 +272,9 @@ private fun StepSourcePicker() {
                         "out whichever of these you pick."
                 else ->
                     "Your phone counts steps too, and counted alongside the band " +
-                        "they turn one walk into two — so by default it is left out."
+                        "they turn one walk into two — so by default it is left " +
+                        "out. The same choice covers distance, calories, food, " +
+                        "sleep and workouts, each judged by who writes that one."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

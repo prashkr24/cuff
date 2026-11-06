@@ -288,7 +288,13 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         }
 
         val nights = if (allowed(SleepSessionRecord::class)) {
-            records(client, SleepSessionRecord::class, from, today).map(::toNight)
+            records(
+                client,
+                SleepSessionRecord::class,
+                from,
+                today,
+                originsFor(context, client, granted, Written.Sleep),
+            ).map(::toNight)
         } else {
             emptyList()
         }
@@ -306,7 +312,13 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         )
 
         val sessions = if (allowed(ExerciseSessionRecord::class)) {
-            records(client, ExerciseSessionRecord::class, today.minusDays(6), today)
+            records(
+                client,
+                ExerciseSessionRecord::class,
+                today.minusDays(6),
+                today,
+                originsFor(context, client, granted, Written.Workouts),
+            )
                 .map {
                     Session(
                         it.startTime,
@@ -338,8 +350,15 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         // Today by the hour, for the two running totals and for the hourly
         // step pattern. Twenty-four buckets from one call each, which is
         // cheaper than it looks: these are aggregates, not records.
+        // Worked out once each, beside the step filter that has been here
+        // all along. Burn and food are summed the same way steps are, so
+        // two writers inflate them the same way -- and until now only
+        // steps were protected from it.
+        val burnOrigins = originsFor(context, client, granted, Written.Burned)
+        val foodOrigins = originsFor(context, client, granted, Written.Eaten)
+
         val burnedHourly = if (allowed(TotalCaloriesBurnedRecord::class)) {
-            hourlyTotals(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, today) {
+            hourlyTotals(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, today, burnOrigins) {
                 it.inKilocalories
             }
         } else {
@@ -352,7 +371,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         }
 
         val burnedDaily = if (allowed(TotalCaloriesBurnedRecord::class)) {
-            dailyTotals(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, from, today) {
+            dailyTotals(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, from, today, burnOrigins) {
                 it.inKilocalories
             }
         } else {
@@ -360,7 +379,9 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         }
 
         val eatenDaily = if (allowed(NutritionRecord::class)) {
-            dailyTotals(client, NutritionRecord.ENERGY_TOTAL, from, today) { it.inKilocalories }
+            dailyTotals(client, NutritionRecord.ENERGY_TOTAL, from, today, foodOrigins) {
+                it.inKilocalories
+            }
         } else {
             emptyList()
         }
@@ -377,13 +398,13 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         }
 
         val burned = if (allowed(TotalCaloriesBurnedRecord::class)) {
-            total(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, today)?.inKilocalories
+            total(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, today, burnOrigins)?.inKilocalories
         } else {
             null
         }
 
         val eaten = if (allowed(NutritionRecord::class)) {
-            total(client, NutritionRecord.ENERGY_TOTAL, today)?.inKilocalories
+            total(client, NutritionRecord.ENERGY_TOTAL, today, foodOrigins)?.inKilocalories
         } else {
             null
         }
@@ -599,13 +620,43 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
         context: Context,
         client: HealthConnectClient,
         granted: Set<String>,
+    ): Set<String>? = originsFor(context, client, granted, Written.Steps)
+
+    /**
+     * The packages one kind of reading should be counted from.
+     *
+     * Resolved against **that reading's own writers**, never another's.
+     * The whole hazard here is that the sets differ: a scale writes
+     * weight and has never written a step, so a filter built from step
+     * writers and applied to weight would delete the lot. Asking per
+     * reading costs one cached aggregate each and makes that impossible.
+     *
+     * [SourceChoice.Only] gets the same protection in a different shape.
+     * Somebody who picks their band to settle a step argument has said
+     * nothing about food, and if the band has never written a meal then
+     * honouring that choice literally would empty the food log. So it
+     * applies only where the chosen app actually writes this reading, and
+     * stands aside where it does not -- a preference, not an instruction
+     * to discard everything else.
+     */
+    private suspend fun originsFor(
+        context: Context,
+        client: HealthConnectClient,
+        granted: Set<String>,
+        written: Written,
     ): Set<String>? {
         val choice = HealthSettings.stepSource(context)
-        // Only one choice needs to know who is writing; the other two answer
-        // without a read, and the common case is cheap.
-        if (choice is SourceChoice.Only) return setOf(choice.packageName)
+        // The common case answers without a read.
         if (choice == SourceChoice.Everything) return null
-        return resolveSources(choice, HealthSources.stepWriters(context, client, granted))
+        val writers = HealthSources.writersOf(context, client, granted, written)
+        if (choice is SourceChoice.Only) {
+            return if (writers.any { it.packageName == choice.packageName }) {
+                setOf(choice.packageName)
+            } else {
+                null
+            }
+        }
+        return resolveSources(choice, writers)
     }
 
     /**
