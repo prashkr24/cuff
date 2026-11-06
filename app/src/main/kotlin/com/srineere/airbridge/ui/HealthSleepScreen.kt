@@ -144,7 +144,7 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         )
                         if (sleptEnough) {
                             Spacer(Modifier.width(8.dp))
-                            GoalMark(extras.sleepRem, size = 22.dp)
+                            GoalMark(stagePalette().rem, size = 22.dp)
                         }
                     }
                     Text(
@@ -158,12 +158,12 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         // put that label on the night before.
                         dayLabel(night.day, "Last night"),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (sleptEnough) extras.sleepRem
+                        color = if (sleptEnough) stagePalette().rem
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 data.sleepTrend?.let { trend ->
-                    ChangeChip(trend.change, "min", extras.sleepRem)
+                    ChangeChip(trend.change, "min", stagePalette().rem)
                 }
             }
 
@@ -191,10 +191,10 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             } else {
                 StageBars(
                     nights = shown.map { it.stages() },
-                    deep = extras.sleepDeep,
-                    light = extras.sleepLight,
-                    rem = extras.sleepRem,
-                    awake = extras.sleepAwake,
+                    deep = stagePalette().deep,
+                    light = stagePalette().light,
+                    rem = stagePalette().rem,
+                    awake = stagePalette().awake,
                     height = 150.dp,
                     modifier = Modifier.padding(top = 12.dp)
                         .scrubbable(shown.size, CHART_GUTTER) { picked = it },
@@ -207,7 +207,7 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         dayLabel(shown.last().day, "Last night"),
                     ),
                     goalMinutes = goals.sleepMinutes.toDouble(),
-                    goalColour = extras.sleepRem,
+                    goalColour = stagePalette().rem,
                     goalLabel = "${goals.sleepMinutes / 60}h",
                     selected = picked,
                     // The stages are the drawing; how long each night came
@@ -285,10 +285,10 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             )
         } else {
             val total = night.stages().total.takeIf { it > 0 } ?: 1.0
-            StageRow("Deep", night.deep, total, extras.sleepDeep)
-            StageRow("Light", night.light, total, extras.sleepLight)
-            StageRow("REM", night.rem, total, extras.sleepRem)
-            StageRow("Awake", night.awake, total, extras.sleepAwake)
+            StageRow("Deep", night.deep, total, stagePalette().deep)
+            StageRow("Light", night.light, total, stagePalette().light)
+            StageRow("REM", night.rem, total, stagePalette().rem)
+            StageRow("Awake", night.awake, total, stagePalette().awake)
         }
 
         SettingsRow(
@@ -341,7 +341,7 @@ private fun ColumnScope.ScoreBlock(score: SleepScore?) {
         )
         return
     }
-    val colour = MaterialTheme.extras.sleepRem
+    val colour = stagePalette().rem
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.width(94.dp)) {
             Text(
@@ -463,17 +463,17 @@ private fun NightDetail(night: Night, extras: AirExtraColors) {
                         SleepStage.Deep -> 3
                     },
                     colour = when (segment.stage) {
-                        SleepStage.Awake -> extras.sleepAwake
-                        SleepStage.Rem -> extras.sleepRem
-                        SleepStage.Light -> extras.sleepLight
-                        SleepStage.Deep -> extras.sleepDeep
+                        SleepStage.Awake -> stagePalette().awake
+                        SleepStage.Rem -> stagePalette().rem
+                        SleepStage.Light -> stagePalette().light
+                        SleepStage.Deep -> stagePalette().deep
                     },
                 )
             },
                     modifier = Modifier.weight(1f)
                     .scrubbableAcross(0.dp) { at = it },
                 selected = at,
-                markerColour = extras.sleepRem,
+                markerColour = stagePalette().rem,
                 // A hypnogram has no range to read out, so the sentence is
                 // the four totals the lanes add up to -- said in the order
                 // the lanes run, deepest last, so it matches the picture

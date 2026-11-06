@@ -57,7 +57,7 @@ internal fun MorningScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val state = LocalHealthState.current
     LaunchedEffect(Unit) { state.loadGoals(context) }
     val extras = MaterialTheme.extras
-    val sleep = extras.sleepRem
+    val sleep = stagePalette().rem
 
     var settings by remember { mutableStateOf(HealthSettings.morning(context)) }
     val report = remember(data.snapshot, state.goals) {
@@ -111,10 +111,10 @@ internal fun MorningScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                 }
                 StageBars(
                     nights = listOf(night.fourStages()),
-                    deep = extras.sleepDeep,
-                    light = extras.sleepLight,
-                    rem = extras.sleepRem,
-                    awake = extras.sleepAwake,
+                    deep = stagePalette().deep,
+                    light = stagePalette().light,
+                    rem = stagePalette().rem,
+                    awake = stagePalette().awake,
                     height = 26.dp,
                     modifier = Modifier.padding(top = 10.dp),
                 )

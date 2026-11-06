@@ -406,7 +406,7 @@ internal fun ColumnScope.TileBody(
     val axes = rememberAxes()
     when (tile.kind) {
         TileKind.Heart -> HeartTile(tile.size, data, colour, axes)
-        TileKind.Sleep -> SleepTile(tile.size, data, colour, goals, axes)
+        TileKind.Sleep -> SleepTile(tile.size, data, colour, goals, axes, tile.colour?.let { stageTones(colour) })
         TileKind.Steps -> StepsTile(tile.size, data, colour, goals, axes)
         TileKind.Energy -> EnergyTile(tile.size, data, colour, goals, axes)
         TileKind.Activity -> ActivityTile(tile.size, data, colour)
@@ -422,7 +422,7 @@ internal fun ColumnScope.TileBody(
         TileKind.Balance -> BalanceTile(tile.size, data, colour, axes)
         TileKind.Readiness -> ReadinessTile(tile.size, data, colour)
         TileKind.FitnessAge -> FitnessAgeTile(tile.size, data, colour)
-        TileKind.Stages -> StagesTile(tile.size, data, colour, axes)
+        TileKind.Stages -> StagesTile(tile.size, data, colour, axes, tile.colour?.let { stageTones(colour) })
         TileKind.SleepBank -> SleepBankTile(tile.size, data, colour, goals, axes)
     }
 }
@@ -613,6 +613,7 @@ private fun ColumnScope.StagesTile(
     data: HealthData,
     colour: Color,
     axes: Axes,
+    tones: StageTones? = null,
 ) {
     val extras = MaterialTheme.extras
     TileHead(TileKind.Stages, colour, size, window = "last night")
@@ -641,10 +642,10 @@ private fun ColumnScope.StagesTile(
     Box(Modifier.weight(1f).padding(top = 6.dp)) {
         StageBars(
             nights = listOf(night.fourStages()),
-            deep = extras.sleepDeep,
-            light = extras.sleepLight,
-            rem = extras.sleepRem,
-            awake = extras.sleepAwake,
+            deep = tones?.deep ?: extras.sleepDeep,
+            light = tones?.light ?: extras.sleepLight,
+            rem = tones?.rem ?: extras.sleepRem,
+            awake = tones?.awake ?: extras.sleepAwake,
             modifier = Modifier.fillMaxSize(),
             fill = true,
             axes = if (size == TileSize.S) null else axes,
@@ -652,7 +653,7 @@ private fun ColumnScope.StagesTile(
     }
     // One bar of four colours says nothing without the key, and XL is the
     // only size with a line to spare for it.
-    if (size == TileSize.XL) StageKey()
+    if (size == TileSize.XL) StageKey(tones)
 }
 
 /**
@@ -1076,6 +1077,8 @@ private fun ColumnScope.SleepTile(
     colour: Color,
     goals: Goals,
     axes: Axes,
+    /** Set only when this tile has been given a colour of its own. */
+    tones: StageTones? = null,
 ) {
     val extras = MaterialTheme.extras
     val last = data.lastNight
@@ -1104,10 +1107,10 @@ private fun ColumnScope.SleepTile(
     val bars = @Composable { height: Dp, modifier: Modifier, fill: Boolean, withAxes: Axes? ->
         StageBars(
             nights = stages,
-            deep = extras.sleepDeep,
-            light = extras.sleepLight,
-            rem = extras.sleepRem,
-            awake = extras.sleepAwake,
+            deep = tones?.deep ?: extras.sleepDeep,
+            light = tones?.light ?: extras.sleepLight,
+            rem = tones?.rem ?: extras.sleepRem,
+            awake = tones?.awake ?: extras.sleepAwake,
             modifier = modifier,
             height = height,
             fill = fill,
@@ -1177,7 +1180,7 @@ private fun ColumnScope.SleepTile(
             Box(Modifier.weight(1f).padding(top = 6.dp)) {
                 bars(70.dp, Modifier.fillMaxSize(), true, axes)
             }
-            StageKey()
+            StageKey(tones)
         }
     }
 }
@@ -1814,7 +1817,7 @@ private fun TileEmpty(text: String, size: TileSize) = Text(
 
 /** Which stage is which, for the one tile big enough to say so. */
 @Composable
-internal fun StageKey() {
+internal fun StageKey(tones: StageTones? = null) {
     val extras = MaterialTheme.extras
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1822,10 +1825,12 @@ internal fun StageKey() {
         modifier = Modifier.padding(top = 6.dp),
     ) {
         listOf(
-            "Deep" to extras.sleepDeep,
-            "Light" to extras.sleepLight,
-            "REM" to extras.sleepRem,
-            "Awake" to extras.sleepAwake,
+            // The key has to match the bars, or recolouring the chart
+            // turns the legend into a lie about which block is which.
+            "Deep" to (tones?.deep ?: extras.sleepDeep),
+            "Light" to (tones?.light ?: extras.sleepLight),
+            "REM" to (tones?.rem ?: extras.sleepRem),
+            "Awake" to (tones?.awake ?: extras.sleepAwake),
         ).forEach { (label, tint) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -1862,7 +1867,7 @@ private fun HealthNotConnected(onConnect: () -> Unit, needsUpdate: Boolean = fal
                     "from the Play Store is all this needs."
             } else {
                 "Your Air already writes to Health Connect through Google Health. " +
-                    "Air Bridge reads it back as trends — where each night sits " +
+                    "CUFF reads it back as trends — where each night sits " +
                     "against your own usual — and adds the one thing Google Health " +
                     "cannot do from here: buzz your wrist."
             },
@@ -2004,6 +2009,61 @@ internal fun com.srineere.airbridge.health.Night.fourStages(): FourStages {
         rem = rem.toMinutes().toDouble(),
         awake = awake.toMinutes().toDouble(),
     )
+}
+
+/**
+ * Four tones of one colour, for a stacked chart somebody has recoloured.
+ *
+ * "Use the app colour on every tile" left the sleep bars purple, and the
+ * reason was defensible rather than right: in a stage chart colour is the
+ * data, so flattening deep, light, REM and awake into one rose would have
+ * drawn four indistinguishable blocks.
+ *
+ * But a person who picks a colour has asked for something, and answering
+ * "no, that one means something" is only correct if there is no third
+ * option. There is. Four weights of the chosen colour stay as separable
+ * as four hues while belonging to the colour that was asked for, and the
+ * stage key beside them still says which is which.
+ *
+ * Only when a colour was picked deliberately. Left alone, a sleep tile
+ * keeps the palette where deep really is a different colour from REM.
+ */
+internal data class StageTones(val deep: Color, val light: Color, val rem: Color, val awake: Color)
+
+internal fun stageTones(base: Color) = StageTones(
+    deep = base,
+    light = base.copy(alpha = 0.66f),
+    rem = base.copy(alpha = 0.44f),
+    awake = base.copy(alpha = 0.24f),
+)
+
+/**
+ * The four tones a sleep screen should draw in.
+ *
+ * [LocalTileColour] carries the colour of the tile you came in through,
+ * already resolved -- so a Sleep tile nobody has touched arrives carrying
+ * `sleepRem`, which is the Sleep kind's own colour. That is the test: the
+ * kind's own colour means nothing was chosen, anything else means it was.
+ *
+ * Without that check, applying tones unconditionally would flatten every
+ * default sleep chart into four alpha steps of one purple -- fixing the
+ * recolour by breaking the thing it was meant to leave alone.
+ */
+@Composable
+internal fun stagePalette(): StageTones {
+    val extras = MaterialTheme.extras
+    // The tile you came in through, where there was one. The sleep bank
+    // and the morning report are about sleep and are reached from a row
+    // rather than from the Sleep tile, so they ask that tile directly --
+    // otherwise recolouring sleep leaves two sleep screens behind.
+    val sleepTile = LocalHealthState.current.tiles.firstOrNull { it.kind == TileKind.Sleep }
+    val chosen = LocalTileColour.current
+        ?: sleepTile?.takeIf { it.colour != null }?.let { tileColour(it) }
+    return if (chosen == null || chosen == extras.sleepRem) {
+        StageTones(extras.sleepDeep, extras.sleepLight, extras.sleepRem, extras.sleepAwake)
+    } else {
+        stageTones(chosen)
+    }
 }
 
 /** A tile's own colour, falling back to the one its kind teaches. */

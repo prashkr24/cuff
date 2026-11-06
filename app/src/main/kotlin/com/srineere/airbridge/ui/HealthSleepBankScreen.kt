@@ -54,7 +54,7 @@ internal fun HealthSleepBankScreen(onBack: () -> Unit) {
     // The sleep tile's own colour for a night that fell short, and the
     // app's one positive ink for a night that did not. Two colours, and
     // the figure takes whichever the balance earned.
-    val short = LocalTileColour.current ?: extras.sleepRem
+    val short = stagePalette().rem
     val over = extras.positive
     val axes = rememberAxes()
     val window = rememberChartWindow(7)
