@@ -119,6 +119,25 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
         runCatching { nav.navigate(route) }
     }
 
+    // The very first launch lands on Permissions.
+    //
+    // A fresh install opens on the Health tab, which is a page of empty
+    // cards and one "Allow Health Connect" row, while the relay sits off
+    // and silent because nothing has been granted either. Nothing on that
+    // screen tells somebody there is a Permissions page two taps away in
+    // another tab, so the app reads as broken rather than as unconfigured.
+    //
+    // Skipped when a widget asked for a particular screen: that is a
+    // deliberate destination and it outranks an introduction.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (openRoute != null) return@LaunchedEffect
+        if (!FirstRun.needsIntroducing(context)) return@LaunchedEffect
+        // Marked on arrival, not on completion. Somebody who opens it and
+        // backs out has been shown it, and showing it again is arguing.
+        FirstRun.introduced(context)
+        runCatching { nav.navigate("permissions") }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         bottomBar = {
