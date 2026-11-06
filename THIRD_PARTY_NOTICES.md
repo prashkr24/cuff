@@ -34,9 +34,15 @@ adaptations: a per-stack TLS key resolver and logging cleanups.
 
 - Source: https://savannah.nongnu.org/projects/lwip/ (Golden Gate submodule pin)
 - Copyright (c) 2001, 2002 Swedish Institute of Computer Science
-- License: BSD 3-Clause. The upstream text is `COPYING` in the lwIP source
-  tree; it is not vendored here, because the sources are not either — only
-  the compiled result inside `libgg.so` is.
+- License: BSD 3-Clause, reproduced verbatim from upstream in
+  [`third_party/lwip/COPYING`](third_party/lwip/COPYING).
 
-Both of the above are compiled into the `.so` files this app ships, so a
-release APK redistributes them and must carry these notices with it.
+Clause 2 is why that file is checked in rather than linked. It requires a
+binary redistribution to reproduce the copyright notice and the licence text,
+and a release APK is a binary redistribution: the sources are not in this
+repository, but the compiled result is inside `libgg.so`, and the obligation
+travels with the binary rather than with the source. Apache-2.0 §4 puts the
+same requirement on Mbed TLS, which is why its text is checked in too.
+
+Anything that ships these `.so` files — a release APK included — carries both
+notices with them.
