@@ -1,12 +1,13 @@
 name: Something isn't working
-description: Vibrations missing, errors, Google Health sync problems or crashes.
+description: Vibrations missing, errors, Health Connect or Google Health sync problems, or crashes.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. The Air's interface is undocumented, so your phone and firmware details help most.
-        Find the firmware under **Device** in Air Relay, or in **About**.
+        Thanks for reporting. The Air's interface is undocumented and version sensitive, so your phone and firmware details help most.
+
+        **Device → About → Copy these details** puts the app version, your Android version and the band's firmware on the clipboard in one go. Paste that into the fields below.
   - type: textarea
     id: what
     attributes:
@@ -18,14 +19,16 @@ body:
     id: firmware
     attributes:
       label: Air firmware
+      description: Device → About → Firmware. Say "not read" if the band would not answer.
       placeholder: 67.20001.253.2
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: Air Relay or fitbit_air version
-      placeholder: "0.2.0"
+      label: Air Bridge version
+      description: Device → About → Air Bridge.
+      placeholder: "0.3.0"
     validations:
       required: true
   - type: input
@@ -36,14 +39,36 @@ body:
     validations:
       required: true
   - type: dropdown
+    id: half
+    attributes:
+      label: Which half is affected?
+      options:
+        - The relay (calls and notifications reaching the band)
+        - The Health tab (readings from Health Connect)
+        - Widgets
+        - Both, or not sure
+    validations:
+      required: true
+  - type: dropdown
     id: sync
     attributes:
-      label: Does Google Health still sync?
+      label: Does Google Health still sync with the band?
+      description: The band grants one secure session at a time, so this is often the clue.
       options: ["Yes", "No, it stalls", "Not sure"]
-  - type: textarea
-    id: report
+  - type: checkboxes
+    id: checked
     attributes:
-      label: Diagnostic report (optional)
+      label: Already checked
+      description: Device → Permissions shows all of these in one place.
+      options:
+        - label: Notification access is granted
+        - label: Nearby devices (Bluetooth) is granted
+        - label: The app is allowed to run in the background
+        - label: Only one build of this app is installed — two fight over the band
+  - type: textarea
+    id: log
+    attributes:
+      label: Error log (optional)
       description: |
-        Home → Activity details → **Copy diagnostic report**. It contains no message text, but lists the app packages that triggered alerts. Review it before posting.
-      render: json
+        Device → About carries an error-log section, which appears only when something has gone wrong. Its **Send** button hands the log to Android's share sheet. It holds stack traces, your app version, your Android version and the band's firmware — no message text and no contact names. Read it before posting.
+      render: text

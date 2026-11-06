@@ -2,7 +2,16 @@
 
 Chosen 5 November 2026, from the four explorations in `explorations/`. This is
 the list, in the owner's order, with what each one costs and what it has to
-avoid. Nothing here is built.
+avoid.
+
+> **All seven were built on 5 and 6 November 2026.** This document is kept as
+> the record of what was chosen and why — in particular the reasoning in
+> **Readiness, and the composite rule** below, which is the reversal of a rule
+> `HANDOVER.md` had recorded as settled. Read it as a brief, not as a list of
+> outstanding work. Where a constraint here was honoured, the code says so:
+> readiness is withheld below sixty readings, the composite is never shown
+> without its parts, and "biological age" is called **fitness age** throughout
+> for the reason item 2 gives.
 
 Two of these overturn a decision the handover records as settled. That is the
 owner's call and it is made — see **Readiness, and the composite rule** below,

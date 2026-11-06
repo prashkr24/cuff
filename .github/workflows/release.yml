@@ -1,0 +1,147 @@
+name: Release
+
+# A pushed tag like v0.3.0 builds the release APK and publishes it as a
+# GitHub Release with generated notes and the APK attached.
+#
+# Signing, honestly: no keystore and no key.properties are checked in, and
+# none can be -- key.properties is gitignored. app/build.gradle.kts already
+# knows how to read a keystore from the AIR_RELAY_* environment variables and
+# falls back to the DEBUG key when none is set. So this workflow does the same
+# thing, and says in the release notes which of the two happened rather than
+# leaving somebody to find out at install time.
+#
+# To publish properly signed builds, set these four repository secrets
+# (Settings > Secrets and variables > Actions). NONE of them is currently set,
+# and nothing here invents one that is:
+#
+#   AIR_RELAY_KEYSTORE_BASE64     the .jks, base64-encoded:
+#                                   base64 -w0 release.jks
+#   AIR_RELAY_KEYSTORE_PASSWORD   the store password
+#   AIR_RELAY_KEY_ALIAS           the key alias inside the store
+#   AIR_RELAY_KEY_PASSWORD        that key's password
+#
+# Set all four or none. A keystore with the wrong password fails the build,
+# which is the right outcome: a release that silently fell back to the debug
+# key while somebody thought it was signed is worse than one that did not
+# build.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Fail before building rather than after: a tag whose name does not
+      # match the versionName in the build file produces an APK that reports
+      # one version and is published as another.
+      - name: Check the tag against versionName
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          declared=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          echo "tag=$tag declared=$declared"
+          if [ "$tag" != "$declared" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match versionName $declared in app/build.gradle.kts"
+            exit 1
+          fi
+
+      # The same three CI runs, because a tag is not a reason to publish
+      # something that does not compile or lint.
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest :air:testDebugUnitTest --console=plain
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug --console=plain
+
+      - name: Write the signing keystore, if one is configured
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AIR_RELAY_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "A keystore secret is set; this build will be signed with it."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "No keystore secret is set; this build will fall back to the debug key."
+          fi
+
+      # The build file reads these and uses the debug key when storeFile is
+      # null, which is exactly what happens when the step above found no
+      # secret and AIR_RELAY_KEYSTORE is therefore empty.
+      - name: Assemble the release APK
+        env:
+          AIR_RELAY_KEYSTORE: ${{ steps.signing.outputs.signed == 'true' && format('{0}/release.jks', runner.temp) || '' }}
+          AIR_RELAY_KEYSTORE_PASSWORD: ${{ secrets.AIR_RELAY_KEYSTORE_PASSWORD }}
+          AIR_RELAY_KEY_ALIAS: ${{ secrets.AIR_RELAY_KEY_ALIAS }}
+          AIR_RELAY_KEY_PASSWORD: ${{ secrets.AIR_RELAY_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --console=plain
+
+      - name: Name the APK after the tag
+        id: apk
+        run: |
+          src=$(find app/build/outputs/apk/release -name '*.apk' -print -quit)
+          if [ -z "$src" ]; then
+            echo "::error::No APK was produced under app/build/outputs/apk/release"
+            exit 1
+          fi
+          dest="air-bridge-${GITHUB_REF_NAME}.apk"
+          cp "$src" "$dest"
+          echo "path=$dest" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$dest" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Write the preamble for the release notes
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          APK: ${{ steps.apk.outputs.path }}
+          SHA: ${{ steps.apk.outputs.sha256 }}
+        run: |
+          {
+            echo "**Android only, sideloaded, unofficial.** \`arm64-v8a\`, Android 9 (API 28) and up."
+            echo
+            if [ "$SIGNED" = "true" ]; then
+              echo "This APK is signed with the project's release key."
+            else
+              echo "> **This APK is debug-signed.** No release keystore is configured for this"
+              echo "> repository, so the build fell back to a debug key generated on the CI"
+              echo "> runner. It installs and runs, but Android will refuse to install it over"
+              echo "> a build signed with a different key — uninstall any earlier version"
+              echo "> first, which also clears its settings. Do not treat this as a"
+              echo "> distribution-grade artefact."
+            fi
+            echo
+            echo "\`\`\`"
+            echo "$APK"
+            echo "sha256  $SHA"
+            echo "\`\`\`"
+            echo
+            echo "Installing needs four grants no installer can make for you — Bluetooth,"
+            echo "notification access, background running, and Health Connect for the Health"
+            echo "tab. See [Install](https://github.com/srineere/air-bridge#install)."
+          } > release-notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --generate-notes \
+            --verify-tag \
+            "${{ steps.apk.outputs.path }}"

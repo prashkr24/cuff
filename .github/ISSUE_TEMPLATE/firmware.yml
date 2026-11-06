@@ -1,12 +1,19 @@
 name: New Air firmware
-description: Tell us whether Air Relay works on a firmware version it hasn't been tested with.
+description: Tell us whether Air Bridge works on a firmware version it hasn't been tested with.
 labels: [firmware]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        The Air's protocol is reverse-engineered and version sensitive, so a report that a new firmware **still works** is as useful as a report that it broke.
+
+        **Device → About** reads the firmware off the band itself, so it is whatever your Air is running today rather than what it shipped with.
   - type: input
     id: firmware
     attributes:
       label: Air firmware
-      description: Shown under Device in Air Relay as "not yet tested".
+      description: Device → About → Firmware.
+      placeholder: 67.20001.253.2
     validations:
       required: true
   - type: dropdown
@@ -14,18 +21,31 @@ body:
     attributes:
       label: Does it work?
       options:
-        - Everything works (vibrations, battery, Google Health sync)
+        - Everything works (vibrations, battery, live heart rate, Health Connect)
         - Partly
         - Nothing reaches the Air
     validations:
       required: true
+  - type: checkboxes
+    id: parts
+    attributes:
+      label: What still works
+      description: Leave a box unticked if you have not tried it.
+      options:
+        - label: A single pulse (Device → Buzz the band)
+        - label: A ring for an incoming call
+        - label: Battery and signal
+        - label: Live heart rate (the Measure button on the heart rate tile)
+        - label: Google Health still syncs the band
   - type: input
     id: phone
     attributes:
-      label: Phone, Android version and Air Relay version
+      label: Phone, Android version and Air Bridge version
+      placeholder: Pixel 7 Pro, Android 16, Air Bridge 0.3.0
     validations:
       required: true
   - type: textarea
     id: details
     attributes:
       label: Details (optional)
+      description: Error codes shown on screen, or anything that behaves differently from before.
