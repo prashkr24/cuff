@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.BluetoothDisabled
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.SignalCellularAlt
@@ -106,6 +107,12 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
             subtitle = permissionsSummary(),
             icon = Icons.Outlined.Lock,
             onClick = { onOpen("permissions") },
+        )
+        SettingsRow(
+            title = "Export",
+            subtitle = "Your readings as files, kept where you choose",
+            icon = Icons.Outlined.FileDownload,
+            onClick = { onOpen("export") },
         )
         SettingsRow(
             title = "About",

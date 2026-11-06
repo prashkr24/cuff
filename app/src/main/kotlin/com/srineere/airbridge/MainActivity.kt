@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import com.srineere.airbridge.ui.theme.ThemeMode
 import com.srineere.airbridge.ui.theme.AirBridgeTheme
 import com.srineere.airbridge.widget.ROUTE_EXTRA
+import com.srineere.airbridge.health.JournalReminder
+import com.srineere.airbridge.health.MorningMoment
 import com.srineere.airbridge.widget.WidgetRefresh
 import com.srineere.airbridge.widget.refreshWidgets
 import kotlinx.coroutines.launch
@@ -38,6 +40,10 @@ class MainActivity : ComponentActivity() {
         AppSettings.load(this)
         openRoute = intent?.getStringExtra(ROUTE_EXTRA)
         WidgetRefresh.reconcile(this)
+        // Re-books the morning report, which an update or a cleared
+        // WorkManager database would otherwise have silently dropped.
+        MorningMoment.schedule(this)
+        JournalReminder.schedule(this)
         setContent {
             val appearance by AppSettings.appearance.collectAsState()
             AirBridgeTheme(

@@ -185,18 +185,25 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
             }
         }
 
-        // Arranging the tab and setting its targets are both things you do
-        // once and then leave alone, so they sit under the tab rather than
-        // taking a corner of the header away from the day's readings.
+        // In the order you come back to them: the journal is answered most
+        // days, the goals are revisited now and then, and the tab's own
+        // arrangement is a thing you settle once. All three sit under the
+        // tab rather than taking a corner of the header away from the day's
+        // readings.
         SettingsRow(
-            title = "Edit tiles",
-            subtitle = "Reorder, resize and recolour what this tab shows",
-            onClick = { onOpen("healthtiles") },
+            title = "Journal",
+            subtitle = "What you did before a night, and what it turned out to mean",
+            onClick = { onOpen("journal") },
         )
         SettingsRow(
             title = "Goals",
             subtitle = "The targets every goal line here is drawn from",
             onClick = { onOpen("healthgoals") },
+        )
+        SettingsRow(
+            title = "Edit tiles",
+            subtitle = "Reorder, resize and recolour what this tab shows",
+            onClick = { onOpen("healthtiles") },
         )
 
         Text(

@@ -46,6 +46,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.srineere.airbridge.health.MorningMoment
 import com.srineere.airbridge.ui.theme.extras
 
 /**
@@ -192,6 +193,11 @@ fun AirBridgeApp(openRoute: String? = null) {
                 }
                 pushed("healthsleep") {
                     HealthSleepScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("export") { HealthExportScreen(onBack = nav::popBackStack) }
+                pushed("journal") { JournalScreen(onBack = nav::popBackStack) }
+                pushed(MorningMoment.ROUTE) {
+                    MorningScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
                 }
                 pushed("healthsleepbank") {
                     HealthSleepBankScreen(onBack = nav::popBackStack)

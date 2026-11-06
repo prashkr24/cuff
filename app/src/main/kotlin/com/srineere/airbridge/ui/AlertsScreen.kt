@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import com.srineere.airbridge.RelayPreset
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.health.StepGoalSettings
 import com.srineere.airbridge.health.HealthSettings
+import com.srineere.airbridge.health.MorningMoment
 
 @Composable
 internal fun AlertsScreen(onOpen: (String) -> Unit) {
@@ -73,6 +75,16 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
         // more things that reach the wrist, with the app rather than a
         // notification behind them.
         SectionHeader("From your activity")
+        // First: it is the one of the three that arrives whether or not you
+        // are looking, and the only one that goes to the phone rather than
+        // to the wrist. Not in StepBuzzRows, because the Steps screen draws
+        // those too and a morning report is not a step setting.
+        SettingsRow(
+            title = "Morning report",
+            subtitle = morningSummary(LocalContext.current),
+            icon = Icons.Outlined.WbSunny,
+            onClick = { onOpen(MorningMoment.ROUTE) },
+        )
         StepBuzzRows(onOpen, goals = false)
 
         if (state.history.isNotEmpty()) {
@@ -223,6 +235,17 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
             icon = Icons.Outlined.Flag,
             onClick = { onOpen("healthgoals") },
         )
+    }
+}
+
+/** What the Morning report row says without being opened. */
+@Composable
+private fun morningSummary(context: android.content.Context): String {
+    val settings = remember(resumeTicks()) { HealthSettings.morning(context) }
+    return when {
+        !settings.on -> "A summary of your night, when you want one"
+        settings.afterWaking -> "Each morning, once your band writes the night"
+        else -> "Each morning at ${settings.clock}, on this phone"
     }
 }
 

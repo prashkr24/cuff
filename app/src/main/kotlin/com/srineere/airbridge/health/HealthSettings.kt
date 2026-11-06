@@ -26,6 +26,12 @@ object HealthSettings {
     private const val KEY_TILES = "tiles"
     private const val KEY_TRENDS = "show_trends"
     private const val KEY_STEP_SOURCE = "step_source"
+    private const val KEY_MORNING = "morning_on"
+    private const val KEY_MORNING_AT = "morning_minute"
+    private const val KEY_MORNING_DAY = "morning_sent_day"
+    private const val KEY_MORNING_WAKE = "morning_after_waking"
+    private const val KEY_JOURNAL = "journal_on"
+    private const val KEY_JOURNAL_AT = "journal_minute"
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -53,6 +59,55 @@ object HealthSettings {
             .putInt(KEY_FROM, settings.activeFrom)
             .putInt(KEY_UNTIL, settings.activeUntil)
             .putBoolean(KEY_NUDGE_PHONE, settings.nudgeOnPhone)
+            .apply()
+    }
+
+    /** Whether the morning report is sent, and when. */
+    fun morning(context: Context): MorningSettings {
+        val p = prefs(context)
+        val fallback = MorningSettings()
+        return MorningSettings(
+            on = p.getBoolean(KEY_MORNING, fallback.on),
+            minute = p.getInt(KEY_MORNING_AT, fallback.minute).coerceIn(0, 1439),
+            afterWaking = p.getBoolean(KEY_MORNING_WAKE, fallback.afterWaking),
+        )
+    }
+
+    fun writeMorning(context: Context, settings: MorningSettings) {
+        prefs(context).edit()
+            .putBoolean(KEY_MORNING, settings.on)
+            .putInt(KEY_MORNING_AT, settings.minute)
+            .putBoolean(KEY_MORNING_WAKE, settings.afterWaking)
+            .apply()
+    }
+
+    /**
+     * The day the morning report last went out, or -1.
+     *
+     * Kept because WorkManager will run a booking it missed as soon as it
+     * can, and a phone that was off at seven should not be told about its
+     * night at noon and then again tomorrow morning.
+     */
+    fun morningSentDay(context: Context): Long = prefs(context).getLong(KEY_MORNING_DAY, -1)
+
+    fun morningSent(context: Context, day: Long) {
+        prefs(context).edit().putLong(KEY_MORNING_DAY, day).apply()
+    }
+
+    /** Whether the journal asks at the end of the day, and when. */
+    fun journal(context: Context): JournalSettings {
+        val p = prefs(context)
+        val fallback = JournalSettings()
+        return JournalSettings(
+            on = p.getBoolean(KEY_JOURNAL, fallback.on),
+            minute = p.getInt(KEY_JOURNAL_AT, fallback.minute).coerceIn(0, 1439),
+        )
+    }
+
+    fun writeJournal(context: Context, settings: JournalSettings) {
+        prefs(context).edit()
+            .putBoolean(KEY_JOURNAL, settings.on)
+            .putInt(KEY_JOURNAL_AT, settings.minute)
             .apply()
     }
 
