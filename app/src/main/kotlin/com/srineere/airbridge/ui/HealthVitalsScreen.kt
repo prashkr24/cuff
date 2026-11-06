@@ -96,6 +96,11 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             subtitle = "This morning against your own mornings, as a figure",
             onClick = { onOpen("readiness") },
         )
+        SettingsRow(
+            title = "Fitness age",
+            subtitle = "Your VO₂ max, expressed in years",
+            onClick = { onOpen("fitnessage") },
+        )
 
         Text(
             "These are your own ranges, built from your own nights — the band is " +

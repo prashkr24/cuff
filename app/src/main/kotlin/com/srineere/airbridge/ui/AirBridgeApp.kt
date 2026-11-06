@@ -197,6 +197,9 @@ fun AirBridgeApp(openRoute: String? = null) {
                 pushed("export") { HealthExportScreen(onBack = nav::popBackStack) }
                 pushed("journal") { JournalScreen(onBack = nav::popBackStack) }
                 pushed("readiness") { ReadinessScreen(onBack = nav::popBackStack) }
+                pushed("fitnessage") {
+                    FitnessAgeScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
                 pushed(MorningMoment.ROUTE) {
                     MorningScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
                 }

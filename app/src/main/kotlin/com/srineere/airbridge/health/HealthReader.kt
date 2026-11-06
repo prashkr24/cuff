@@ -17,6 +17,7 @@ import androidx.health.connect.client.records.SkinTemperatureRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
+import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateGroupByDurationRequest
@@ -119,6 +120,14 @@ data class HealthSnapshot(
     val hrv: List<Reading> = emptyList(),
     val respiratoryRate: List<Reading> = emptyList(),
     val skinTemperature: List<Reading> = emptyList(),
+    /**
+     * Millilitres per minute per kilogram, one a day at most.
+     *
+     * Written every week or two rather than daily, so this series is a
+     * handful of points where the others are thirty. Anything drawn from
+     * it has to say so.
+     */
+    val vo2Max: List<Reading> = emptyList(),
     val nights: List<Night> = emptyList(),
     val sessions: List<Session> = emptyList(),
     /** Today's heart rate samples, for the zones. */
@@ -245,6 +254,15 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             dailyTotals(client, SkinTemperatureRecord.TEMPERATURE_DELTA_AVG, from, today) {
                 it.inCelsius
             }
+        } else {
+            emptyList()
+        }
+
+        val vo2 = if (allowed(Vo2MaxRecord::class)) {
+            records(client, Vo2MaxRecord::class, from, today)
+                .groupBy { it.time.atZone(zone).toLocalDate().toEpochDay() }
+                .map { (day, rows) -> Reading(day, rows.last().vo2MillilitersPerMinuteKilogram) }
+                .sortedBy { it.day }
         } else {
             emptyList()
         }
@@ -418,6 +436,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             hrv = hrv,
             respiratoryRate = breathing,
             skinTemperature = skin,
+            vo2Max = vo2,
             nights = nights,
             sessions = sessions,
             heartToday = heartToday,
