@@ -62,9 +62,21 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) { state.loadGoals(context) }
     val goals = state.goals
 
+    // Held in state, not read fresh at the point of use.
+    //
+    // This was `val buzz = HealthSettings.read(context)` down beside the
+    // rows, so the plus and minus buttons wrote to preferences and the
+    // screen had no reason to recompose: the figure stayed where it was
+    // and all three controls looked dead. They were working the whole
+    // time, which is the worst kind of broken -- the step goal really did
+    // move, the band really would have buzzed at the new one, and nothing
+    // on screen said so.
+    var buzz by remember { mutableStateOf(HealthSettings.read(context)) }
+
     // The nudge's own settings live with the relay's, because the service
     // reads them on its own schedule and has to be told when they move.
     fun setBuzz(next: StepGoalSettings) {
+        buzz = next
         HealthSettings.write(context, next)
         CalendarRelayService.active?.settingsChanged()
         state.refresh(context, force = true)
@@ -83,7 +95,7 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
         Text(
             "Health Connect carries measurements, not targets: whatever you set " +
                 "inside Google Health stays there, and no app can read it. These " +
-                "are Air Bridge's own, and every goal line on the tab is drawn " +
+                "are CUFF's own, and every goal line on the tab is drawn " +
                 "from them.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -151,7 +163,6 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
         )
 
         SectionHeader("Hourly nudge")
-        val buzz = HealthSettings.read(context)
         GoalRow(
             value = "${buzz.hourlyGoal}",
             unit = "steps an hour",
