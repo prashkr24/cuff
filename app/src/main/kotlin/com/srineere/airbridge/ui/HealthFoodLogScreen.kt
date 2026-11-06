@@ -5,6 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -83,9 +88,11 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     // beyond it there is nothing read to show.
     var back by remember { mutableIntStateOf(0) }
     var open by remember { mutableStateOf<String?>(null) }
-    // Which meals are folded away. Empty is the useful default: you came
-    // here to read the day, not to unfold it.
-    var folded by remember { mutableStateOf(setOf<String>()) }
+    // Which meals are open, rather than which are shut, so empty means
+    // closed. The day then arrives as four headings and their totals --
+    // the shape of it on one screen, instead of a list you scroll through
+    // to find out what lunch came to.
+    var unfolded by remember { mutableStateOf(setOf<String>()) }
     var saying by remember { mutableStateOf<String?>(null) }
     // Held rather than asked for per row: the answer comes off disk, and a
     // row that asked it would ask again on every recomposition. Every path
@@ -137,52 +144,62 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         // so it took a foreign writer to show it.
         mealGroups(entries).forEach { (label, forMeal) ->
             if (forMeal.isEmpty()) return@forEach
-            val shut = label in folded
+            val shut = label !in unfolded
             MealHeader(
                 label = label,
                 kcal = forMeal.sumOf { it.kcal ?: 0.0 },
                 count = forMeal.size,
                 shut = shut,
                 onToggle = {
-                    folded = if (shut) folded - label else folded + label
+                    unfolded = if (shut) unfolded + label else unfolded - label
                     open = null
                 },
             )
-            if (shut) return@forEach
-            forMeal.forEach { entry ->
-                val food = entry.asSavedFood()
-                val kept = food.key in savedKeys
-                EntryRow(
-                    entry = entry,
-                    open = open == entry.id,
-                    accent = accent,
-                    saved = kept,
-                    ours = entry.isOurs(context.packageName),
-                    onOpen = { open = if (open == entry.id) null else entry.id },
-                    // The star is a switch, the way a star is everywhere.
-                    // Before this it only ever filled the list, and an entry
-                    // already in it offered to save it again.
-                    onSave = {
-                        savedKeys = if (kept) {
-                            saying = "${food.name} removed from your foods."
-                            SavedFoods.remove(context, food).map { it.key }.toSet()
-                        } else {
-                            saying = "${food.name} saved to your foods."
-                            SavedFoods.save(context, food).map { it.key }.toSet()
-                        }
-                        open = null
-                    },
-                    onDelete = {
-                        open = null
-                        saying = null
-                        scope.launch {
-                            when (val result = HealthWriter.deleteFood(context, entry.id)) {
-                                LogResult.Saved -> state.refresh(context, force = true)
-                                is LogResult.Refused -> saying = result.why
-                            }
-                        }
-                    },
-                )
+            AnimatedVisibility(
+                visible = !shut,
+                // Height and fade together, on the spatial spring rather
+                // than the bouncy one: a list of food that overshoots and
+                // settles back is a list you cannot read while it does it.
+                enter = expandVertically(Motion.spatial()) + fadeIn(Motion.spatial()),
+                exit = shrinkVertically(Motion.spatial()) + fadeOut(Motion.spatial()),
+            ) {
+                Column {
+                    forMeal.forEach { entry ->
+                        val food = entry.asSavedFood()
+                        val kept = food.key in savedKeys
+                        EntryRow(
+                            entry = entry,
+                            open = open == entry.id,
+                            accent = accent,
+                            saved = kept,
+                            ours = entry.isOurs(context.packageName),
+                            onOpen = { open = if (open == entry.id) null else entry.id },
+                            // The star is a switch, the way a star is everywhere.
+                            // Before this it only ever filled the list, and an entry
+                            // already in it offered to save it again.
+                            onSave = {
+                                savedKeys = if (kept) {
+                                    saying = "${food.name} removed from your foods."
+                                    SavedFoods.remove(context, food).map { it.key }.toSet()
+                                } else {
+                                    saying = "${food.name} saved to your foods."
+                                    SavedFoods.save(context, food).map { it.key }.toSet()
+                                }
+                                open = null
+                            },
+                            onDelete = {
+                                open = null
+                                saying = null
+                                scope.launch {
+                                    when (val result = HealthWriter.deleteFood(context, entry.id)) {
+                                        LogResult.Saved -> state.refresh(context, force = true)
+                                        is LogResult.Refused -> saying = result.why
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }
 
@@ -313,7 +330,7 @@ private fun MealHeader(
     shape = RoundedCornerShape(12.dp),
     modifier = Modifier.fillMaxWidth()
         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 2.dp)
-        .clickable(onClick = onToggle),
+        .pressFeedback(onClick = onToggle),
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -505,7 +522,7 @@ private fun MealPill(
     color = if (on) MaterialTheme.colorScheme.primaryContainer
     else MaterialTheme.colorScheme.surfaceContainerHigh,
     shape = RoundedCornerShape(50),
-    modifier = modifier.clickable(onClick = onClick),
+    modifier = modifier.pressFeedback(onClick = onClick),
 ) {
     Text(
         label,

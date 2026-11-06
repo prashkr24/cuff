@@ -145,7 +145,7 @@ private fun SavedRow(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
-            .clickable { onOpen(food) }
+            .pressFeedback(Motion.PRESS_SCALE_ROW) { onOpen(food) }
             .heightIn(min = 56.dp)
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {

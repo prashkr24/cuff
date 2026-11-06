@@ -168,7 +168,7 @@ internal fun AppsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
  */
 @Composable
 private fun SectionToggle(text: String, count: Int, open: Boolean, onToggle: () -> Unit) {
-    val turn by animateFloatAsState(if (open) 90f else 0f, label = "caret")
+    val turn by animateFloatAsState(if (open) 90f else 0f, Motion.spatial(), label = "caret")
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

@@ -269,7 +269,7 @@ private fun GroundChip(ground: Ground, selected: Boolean, modifier: Modifier, on
                     else MaterialTheme.colorScheme.outline,
                     RoundedCornerShape(12.dp),
                 )
-                .clickable(onClick = onPick),
+                .pressFeedback(onClick = onPick),
             contentAlignment = Alignment.Center,
         ) {
             // A sample of the card that will sit on it, so the chip shows the
@@ -330,7 +330,7 @@ private fun Dot(
                 Modifier.background(fill)
             },
         )
-        .clickable(onClick = onClick)
+        .pressFeedback(onClick = onClick)
         .semanticsLabel(label),
 )
 

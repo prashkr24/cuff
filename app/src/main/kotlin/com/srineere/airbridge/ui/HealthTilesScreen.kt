@@ -274,7 +274,7 @@ private fun EditTile(
             // does that look like at that size, in that colour.
             Box(
                 Modifier.height(tileHeight(tile.kind, tile.size))
-                    .clickable(onClick = onPick),
+                    .pressFeedback(onClick = onPick),
             ) {
                 TilePreview(tile, data, goals, colour)
             }
@@ -392,7 +392,7 @@ private fun TilePanel(
                         color = if (on) MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surfaceContainerHighest,
                         shape = RoundedCornerShape(50),
-                        modifier = Modifier.weight(1f).clickable { onSize(option) },
+                        modifier = Modifier.weight(1f).pressFeedback { onSize(option) },
                     ) {
                         Text(
                             option.label,
@@ -438,7 +438,7 @@ private fun TilePanel(
                                     Modifier
                                 },
                             )
-                            .clickable { onChoose(option) },
+                            .pressFeedback { onChoose(option) },
                     ) {}
                 }
             }
@@ -487,7 +487,7 @@ private fun swatchColour(option: TileColour): Color {
 @Composable
 private fun AddRow(kind: TileKind, onAdd: () -> Unit) = Row(
     verticalAlignment = Alignment.CenterVertically,
-    modifier = Modifier.fillMaxWidth().clickable(onClick = onAdd)
+    modifier = Modifier.fillMaxWidth().pressFeedback(Motion.PRESS_SCALE_ROW, onClick = onAdd)
         .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
 ) {
     Text(kind.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))

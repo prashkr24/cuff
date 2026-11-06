@@ -6,6 +6,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -34,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
@@ -106,7 +110,26 @@ fun AirBridgeApp(openRoute: String? = null) {
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(tab.icon, contentDescription = null) },
+                            icon = {
+                                // The indicator pill is Material's own and
+                                // already animates; the icon inside it did
+                                // not move at all. A small bounce on the
+                                // one you just chose is the cheapest way
+                                // for the bar to answer a tap.
+                                val lift by animateFloatAsState(
+                                    if (selected) 1f else 0.88f,
+                                    Motion.enter,
+                                    label = "tabIcon",
+                                )
+                                Icon(
+                                    tab.icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = lift
+                                        scaleY = lift
+                                    },
+                                )
+                            },
                             label = { Text(tab.label, style = MaterialTheme.typography.labelMedium) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
@@ -130,8 +153,12 @@ fun AirBridgeApp(openRoute: String? = null) {
                 startDestination = Tab.Health.route,
                 modifier = Modifier.fillMaxSize().padding(insets),
                 // Tabs cross-fade; pushed screens slide, set per route below.
-                enterTransition = { fadeIn(tween(180)) },
-                exitTransition = { fadeOut(tween(180)) },
+                enterTransition = {
+                    fadeIn(tween(170)) + scaleIn(tween(170), initialScale = 0.98f)
+                },
+                exitTransition = {
+                    fadeOut(tween(140)) + scaleOut(tween(140), targetScale = 1.02f)
+                },
             ) {
                 composable(Tab.Health.route) { HealthScreen(onOpen = nav::navigate) }
                 composable(Tab.Alerts.route) { AlertsScreen(onOpen = nav::navigate) }

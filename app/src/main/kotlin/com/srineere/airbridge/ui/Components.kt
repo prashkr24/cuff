@@ -10,6 +10,7 @@ package com.srineere.airbridge.ui
  */
 
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
@@ -54,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -181,16 +184,17 @@ fun Stat(
     // made a single row show three figures at two sizes, which reads as a
     // mistake rather than as emphasis -- a long value gets more width from
     // its caller instead.
-    Text(
-        value ?: "\u2014",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = if (value == null) MaterialTheme.extras.disabled else Color.Unspecified,
-        maxLines = 1,
-        softWrap = false,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(top = 3.dp),
-    )
+    AnimatedFigure(value ?: "\u2014", modifier = Modifier.padding(top = 3.dp)) { shown ->
+        Text(
+            shown,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (value == null) MaterialTheme.extras.disabled else Color.Unspecified,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /**
@@ -212,18 +216,37 @@ fun GoalMark(
     colour: Color,
     size: Dp = 18.dp,
     description: String? = "Goal met",
-) = Box(
-    contentAlignment = Alignment.Center,
-    modifier = Modifier.size(size).clip(CircleShape).background(colour),
 ) {
-    Icon(
-        Icons.Filled.Check,
-        contentDescription = description,
-        // The card behind it, so the tick is a hole in the disc rather than
-        // a second colour to pick.
-        tint = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.size(size * 0.68f),
+    var landed by remember { mutableStateOf(false) }
+    val pop by animateFloatAsState(
+        targetValue = if (landed) 1f else 0f,
+        animationSpec = Motion.enter,
+        label = "goalMark",
     )
+    LaunchedEffect(Unit) { landed = true }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                // Overshoot comes from the spring itself: Motion.enter
+                // carries past 1 and settles back, so the disc lands
+                // slightly too big and shrinks into place.
+                scaleX = pop
+                scaleY = pop
+            }
+            .clip(CircleShape)
+            .background(colour),
+    ) {
+        Icon(
+            Icons.Filled.Check,
+            contentDescription = description,
+            // The card behind it, so the tick is a hole in the disc rather
+            // than a second colour to pick.
+            tint = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.size(size * 0.68f),
+        )
+    }
 }
 
 /**
@@ -295,17 +318,31 @@ fun SectionHeader(text: String, action: String? = null, onAction: (() -> Unit)? 
  */
 @Composable
 fun StatusToggle(title: String, live: Boolean, onToggle: (Boolean) -> Unit) {
+    // Going live is the one state change in this app that matters most,
+    // and the card used to swap its colours between two frames. Colour is
+    // the whole signal here, so colour is what moves.
+    val fill by animateColorAsState(
+        if (live) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceContainer,
+        Motion.spatial(),
+        label = "relayFill",
+    )
+    val ink by animateColorAsState(
+        if (live) MaterialTheme.colorScheme.onPrimaryContainer
+        else MaterialTheme.colorScheme.onSurface,
+        Motion.spatial(),
+        label = "relayInk",
+    )
+    val edge by animateColorAsState(
+        if (live) MaterialTheme.extras.accentOutline else MaterialTheme.colorScheme.outline,
+        Motion.spatial(),
+        label = "relayEdge",
+    )
     Box(Modifier.padding(top = 10.dp, bottom = 12.dp)) {
         Surface(
-            color = if (live) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceContainer,
-            contentColor = if (live) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSurface,
-            border = BorderStroke(
-                1.dp,
-                if (live) MaterialTheme.extras.accentOutline
-                else MaterialTheme.colorScheme.outline,
-            ),
+            color = fill,
+            contentColor = ink,
+            border = BorderStroke(1.dp, edge),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         ) {
@@ -415,19 +452,13 @@ fun SettingsRow(
     indent: Dp = 0.dp,
 ) {
     val nested = indent > 0.dp
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.975f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
-        label = "rowPress",
-    )
+    val interaction = rememberPressSource()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .scale(scale)
+            .pressBounce(interaction, Motion.PRESS_SCALE_ROW)
             .then(
                 if (onClick == null) Modifier
                 else Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick)

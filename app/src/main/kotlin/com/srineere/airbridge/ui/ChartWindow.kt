@@ -1,6 +1,7 @@
 package com.srineere.airbridge.ui
 
 import android.text.format.DateFormat
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -117,21 +118,35 @@ internal fun WindowBar(
     ) {
         options.forEach { option ->
             val on = option == window.length
-            Surface(
-                color = if (on) MaterialTheme.colorScheme.primaryContainer
+            val interaction = rememberPressSource()
+            val fill by animateColorAsState(
+                if (on) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surfaceContainerHigh,
+                Motion.spatial(),
+                label = "windowFill",
+            )
+            val ink by animateColorAsState(
+                if (on) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                Motion.spatial(),
+                label = "windowInk",
+            )
+            Surface(
+                color = fill,
                 shape = RoundedCornerShape(50),
-                modifier = Modifier.weight(1f).clickable {
-                    window.resize(option)
-                    onChange()
-                },
+                modifier = Modifier
+                    .weight(1f)
+                    .pressBounce(interaction)
+                    .clickable(interactionSource = interaction, indication = null) {
+                        window.resize(option)
+                        onChange()
+                    },
             ) {
                 Text(
                     label(option),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (on) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = ink,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),

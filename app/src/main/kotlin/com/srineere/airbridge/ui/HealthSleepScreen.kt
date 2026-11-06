@@ -578,16 +578,32 @@ internal fun dayLabel(epochDay: Long): String {
 internal fun DetailCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
-) = Surface(
-    color = MaterialTheme.colorScheme.surfaceContainer,
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-    shape = RoundedCornerShape(20.dp),
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
 ) {
-    Column(
-        Modifier
-            .then(if (onClick == null) Modifier else Modifier.clickable(onClick = onClick))
-            .padding(14.dp),
-        content = content,
-    )
+    // Only a card that does something gets a press: a card that shrinks
+    // under a finger and then does nothing is a promise it did not keep,
+    // and most of these are read rather than tapped.
+    val interaction = rememberPressSource()
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .then(if (onClick == null) Modifier else Modifier.pressBounce(interaction)),
+    ) {
+        Column(
+            Modifier
+                .then(
+                    if (onClick == null) Modifier
+                    else Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                )
+                .padding(14.dp),
+            content = content,
+        )
+    }
 }

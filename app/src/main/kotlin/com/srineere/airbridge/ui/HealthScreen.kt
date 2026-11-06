@@ -147,6 +147,7 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
             onRefresh = askSync,
         )
 
+        var placed = 0
         packTiles(state.tiles).forEach { row ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -154,6 +155,7 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
             ) {
                 row.tiles.forEach { tile ->
                     HealthTile(
+                        index = placed++,
                         tile = tile,
                         data = data,
                         goals = goals,
@@ -307,6 +309,7 @@ internal fun tileHeight(kind: TileKind, size: TileSize): Dp = when (size) {
  */
 @Composable
 private fun HealthTile(
+    index: Int,
     tile: Tile,
     data: HealthData,
     goals: Goals,
@@ -325,6 +328,7 @@ private fun HealthTile(
         onClick = if (measuring) null else ({ onOpen(tile.kind.route) }),
         modifier = modifier,
         tint = if (measuring) MaterialTheme.extras.heart else null,
+        index = index,
     ) {
         TileBody(tile, data, goals, colour, measure = measure)
     }
@@ -792,10 +796,16 @@ private fun ColumnScope.ZonesTile(
                 }
                 // The one reading on this tab the band can answer now, asked
                 // for where the live trace will appear.
+                //
+                // Explained here too. There are three Measure buttons in
+                // this app and wiring one of them is wiring none: this is
+                // the one on the tab, which is the one most people press.
                 if (measure == null) {
                     OutlinedButton(onClick = {}) { Text("Measure") }
                 } else {
-                    OutlinedButton(onClick = measure.start) { Text("Measure") }
+                    val (ask, dialog) = explained(Explain.MeasureHeart) { measure.start() }
+                    dialog()
+                    OutlinedButton(onClick = ask) { Text("Measure") }
                 }
             }
             Box(Modifier.weight(1f).padding(top = 6.dp)) {
@@ -870,8 +880,10 @@ private fun ColumnScope.MeasuringTile(
                 modifier = Modifier.padding(start = 10.dp, bottom = 2.dp),
             ) { Text("Stop") }
         } else {
+            val (askAgain, againDialog) = explained(Explain.MeasureHeart) { measure.start() }
+            againDialog()
             OutlinedButton(
-                onClick = measure.start,
+                onClick = askAgain,
                 modifier = Modifier.padding(start = 10.dp, bottom = 2.dp),
             ) { Text("Again") }
         }
@@ -1545,19 +1557,35 @@ private fun TileFrame(
     modifier: Modifier,
     /** A colour the whole card wears while something live is happening in it. */
     tint: Color? = null,
+    /** Its place on the tab, which is the order the grid fills in. */
+    index: Int = 0,
     content: @Composable ColumnScope.() -> Unit,
-) = Surface(
-    color = tint?.copy(alpha = 0.10f)?.compositeOver(MaterialTheme.colorScheme.surfaceContainer)
-        ?: MaterialTheme.colorScheme.surfaceContainer,
-    border = BorderStroke(1.dp, tint?.copy(alpha = 0.45f) ?: MaterialTheme.colorScheme.outline),
-    shape = RoundedCornerShape(20.dp),
-    modifier = modifier.height(height),
 ) {
-    Column(
-        Modifier.then(if (onClick == null) Modifier else Modifier.clickable(onClick = onClick))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        content = content,
-    )
+    val interaction = rememberPressSource()
+    Surface(
+        color = tint?.copy(alpha = 0.10f)?.compositeOver(MaterialTheme.colorScheme.surfaceContainer)
+            ?: MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, tint?.copy(alpha = 0.45f) ?: MaterialTheme.colorScheme.outline),
+        shape = RoundedCornerShape(20.dp),
+        modifier = modifier
+            .height(height)
+            .then(if (onClick == null) Modifier else Modifier.pressBounce(interaction))
+            .springIn(index),
+    ) {
+        Column(
+            Modifier
+                .then(
+                    if (onClick == null) Modifier
+                    else Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                )
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            content = content,
+        )
+    }
 }
 
 /**
@@ -1614,20 +1642,22 @@ private fun ColumnScope.TileValue(
     /** The metric's colour when its goal is met today, and null when not. */
     met: Color? = null,
 ) = Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 2.dp)) {
-    Text(
-        value,
-        style = when {
-            size == TileSize.XL -> MaterialTheme.typography.displaySmall
-            // A long figure in two columns steps down rather than clipping.
-            size == TileSize.S && value.length > 5 -> MaterialTheme.typography.titleLarge
-            else -> MaterialTheme.typography.headlineSmall
-        },
-        fontWeight = FontWeight.SemiBold,
-        color = if (dim) MaterialTheme.extras.disabled else MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        softWrap = false,
-        overflow = TextOverflow.Visible,
-    )
+    AnimatedFigure(value) { shown ->
+        Text(
+            shown,
+            style = when {
+                size == TileSize.XL -> MaterialTheme.typography.displaySmall
+                // A long figure in two columns steps down rather than clipping.
+                size == TileSize.S && shown.length > 5 -> MaterialTheme.typography.titleLarge
+                else -> MaterialTheme.typography.headlineSmall
+            },
+            fontWeight = FontWeight.SemiBold,
+            color = if (dim) MaterialTheme.extras.disabled else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Visible,
+        )
+    }
     if (unit != null) {
         Text(
             " $unit",

@@ -48,7 +48,12 @@ private fun ChartCanvas(
     fill: Boolean,
     draw: DrawScope.() -> Unit,
 ) = Canvas(
-    modifier.fillMaxWidth().then(if (fill) Modifier.fillMaxHeight() else Modifier.height(height)),
+    modifier
+        .fillMaxWidth()
+        .then(if (fill) Modifier.fillMaxHeight() else Modifier.height(height))
+        // One hook, eleven charts. Put here rather than on each of them so
+        // a chart added later arrives the same way without being told to.
+        .chartEntrance(),
     draw,
 )
 
@@ -554,6 +559,12 @@ internal fun GoalRing(
     content: @Composable () -> Unit,
 ) {
     val met = progress >= 1f
+    // Swept rather than drawn: the ring filling to where you got to is the
+    // closest this app comes to showing effort, and it is the first thing
+    // on the tab. Clamped inside animatedFraction, so it never sweeps past
+    // the goal and back -- a ring that completes and then un-completes has
+    // told you something that is not true.
+    val sweep = animatedFraction(progress.coerceIn(0f, 1f))
     Box(modifier, contentAlignment = androidx.compose.ui.Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val width = stroke.toPx()
@@ -568,11 +579,11 @@ internal fun GoalRing(
                 size = arcSize,
                 style = Stroke(width = width),
             )
-            if (progress > 0f) {
+            if (sweep > 0f) {
                 drawArc(
                     color = colour,
                     startAngle = -90f,
-                    sweepAngle = 360f * progress.coerceIn(0f, 1f),
+                    sweepAngle = 360f * sweep,
                     useCenter = false,
                     topLeft = Offset(inset, inset),
                     size = arcSize,

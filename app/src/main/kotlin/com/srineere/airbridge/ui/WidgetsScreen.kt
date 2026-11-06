@@ -93,16 +93,6 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Widgets", onBack = onBack)
 
-        Text(
-            "Long-press your home screen, choose Widgets, then Air Bridge. Five of the six " +
-                "entries are sizes: dropping one opens this app, where you pick which of these " +
-                "it shows. The sixth is a stack — one cell holding as many of them as you like, " +
-                "swiped through in place.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-        )
-
         if (placed.isNotEmpty()) {
             SectionHeader("On your home screen")
             placed.forEach { (id, config) ->
@@ -136,28 +126,16 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
             notBuilt.forEach { ComingRow(it) }
         }
 
-        Text(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                "Tap one above to change what it shows. Long-pressing it on the home " +
-                    "screen and choosing Edit opens the same thing."
-            } else {
-                "This version of Android has no Edit on a widget's long-press menu, so changing " +
-                    "one means taking it off and putting it back."
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.extras.disabled,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-        )
-
-        Text(
-            "These previews are a made-up week, like the tile editor's. Widgets refresh about " +
-                "every half hour and whenever you leave the app, and none of them ever asks the " +
-                "Air for a fresh charge — the band answers one connection at a time, and " +
-                "taking it would stop Google Health syncing your steps and sleep.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.extras.disabled,
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
-        )
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            Text(
+                "This version of Android has no Edit on a widget's long-press menu, so " +
+                    "tapping one above is the only way to change it.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.extras.disabled,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            )
+        }
+        Box(Modifier.padding(bottom = 24.dp))
     }
 }
 
@@ -242,7 +220,7 @@ private fun PreviewGrid(
                         .clip(RoundedCornerShape(16.dp))
                         .then(
                             if (onPick != null && available) {
-                                Modifier.clickable { onPick(design) }
+                                Modifier.pressFeedback { onPick(design) }
                             } else {
                                 Modifier
                             },
@@ -261,6 +239,10 @@ private fun PreviewGrid(
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainer,
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant,
+                            ),
                             modifier = Modifier.fillMaxWidth().heightIn(min = 78.dp),
                         ) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
