@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material3.Icon
@@ -58,10 +60,36 @@ import com.srineere.airbridge.ui.theme.extras
  * opens on Health: the relay runs without being looked at, and the readings
  * are the half of this app anyone opens it to see.
  */
-private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
-    Health("health", "Health", Icons.Outlined.MonitorHeart),
-    Alerts("alerts", "Alerts", Icons.Outlined.Vibration),
-    Device("device", "Device", Icons.Outlined.Watch),
+/**
+ * The three tabs, each with the glyph for "you are not here" and the one
+ * for "you are".
+ *
+ * Filled-when-selected is Material 3's own navigation pattern and this bar
+ * did not have it: the only thing separating the current tab from the
+ * other two was a colour, which on a dark theme at 24dp is not much.
+ *
+ * The glyphs changed with it. MonitorHeart draws a heart inside a monitor
+ * frame, which at this size is a box with something in it; Vibration draws
+ * a phone, on the one tab that is about what reaches your wrist instead of
+ * your phone; and Watch drew a watch for a band with no face, which is the
+ * same mistake the Device tab was making about the hardware itself.
+ */
+private enum class Tab(
+    val route: String,
+    val label: String,
+    val icon: ImageVector,
+    val chosen: ImageVector,
+) {
+    Health("health", "Health", Icons.Outlined.FavoriteBorder, Icons.Filled.Favorite),
+    // One glyph both ways. GraphicEq is a row of bars that reads as
+    // something pulsing, which is nearer this tab's job than a bell: what
+    // is configured here is how the band moves, not whether a phone makes
+    // a sound. It has no outlined-versus-filled pair, so the indicator
+    // pill and the colour carry the selected state on their own.
+    Alerts("alerts", "Alerts", Icons.Outlined.GraphicEq, Icons.Outlined.GraphicEq),
+    // One glyph both ways: it is drawn here rather than taken from a set,
+    // and a second weight of it would be a second drawing to keep right.
+    Device("device", "Device", BandIcon, BandIcon),
 }
 
 @Composable
@@ -122,7 +150,7 @@ fun AirBridgeApp(openRoute: String? = null) {
                                     label = "tabIcon",
                                 )
                                 Icon(
-                                    tab.icon,
+                                    if (selected) tab.chosen else tab.icon,
                                     contentDescription = null,
                                     modifier = Modifier.graphicsLayer {
                                         scaleX = lift

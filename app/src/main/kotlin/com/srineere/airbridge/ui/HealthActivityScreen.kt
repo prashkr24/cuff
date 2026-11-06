@@ -312,11 +312,11 @@ private fun SessionRow(
                 .clip(RoundedCornerShape(11.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
-            Text(
-                session.exerciseName().take(1),
-                style = MaterialTheme.typography.titleMedium,
-                color = colour,
-                fontWeight = FontWeight.SemiBold,
+            Icon(
+                session.exerciseIcon(),
+                contentDescription = null,
+                tint = colour,
+                modifier = Modifier.size(21.dp),
             )
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {

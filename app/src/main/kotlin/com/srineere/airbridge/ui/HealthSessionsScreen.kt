@@ -143,11 +143,11 @@ private fun HistoryRow(
             modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
-            Text(
-                session.exerciseName().take(1),
-                style = MaterialTheme.typography.titleSmall,
-                color = colour,
-                fontWeight = FontWeight.SemiBold,
+            Icon(
+                session.exerciseIcon(),
+                contentDescription = null,
+                tint = colour,
+                modifier = Modifier.size(19.dp),
             )
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {

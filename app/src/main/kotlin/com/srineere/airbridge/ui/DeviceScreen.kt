@@ -125,6 +125,16 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
     }
 }
 
+/**
+ * What this card is about.
+ *
+ * Named once so the glyph beside it is chosen from the same string the
+ * heading shows. The icon was a watch while the heading said Air, and
+ * nothing in the code connected the two -- so there was no place where
+ * they could be seen to disagree.
+ */
+private const val BAND_NAME = "Fitbit Air"
+
 /** Where Buzz the band is in its one short round trip. */
 private enum class Buzz { Idle, Sending, Sent }
 
@@ -232,14 +242,17 @@ private fun BandCard() {
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             ) {
                 Icon(
-                    Icons.Outlined.Watch,
+                    // Read from whatever the band calls itself, so a
+                    // different wearable on the other end of this card
+                    // gets its own glyph rather than the Air's.
+                    deviceGlyph(BAND_NAME),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(26.dp),
                 )
             }
             Column(Modifier.weight(1f)) {
-                Text("Fitbit Air", style = MaterialTheme.typography.headlineSmall)
+                Text(BAND_NAME, style = MaterialTheme.typography.headlineSmall)
                 Row(
                     // A failure takes this line and can run to two, so the
                     // glyph sits on the first line rather than floating in
@@ -308,27 +321,50 @@ private fun BandCard() {
             )
         }
 
+        // Off while a sync is in flight. The band answers one connection
+        // at a time, so a buzz asked for mid-sync does not queue -- it
+        // comes back BUSY, which looked like the button being broken. It
+        // was the one control in the app that could be pressed into a
+        // guaranteed failure.
+        val reachable = !syncing
         OutlinedButton(
             onClick = { buzzBand() },
+            enabled = reachable && buzz == Buzz.Idle,
             modifier = Modifier.fillMaxWidth().padding(top = 18.dp),
         ) {
             when (buzz) {
-                Buzz.Sending -> CircularProgressIndicator(
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(17.dp),
+                // The glyph shakes instead of a spinner turning. A
+                // spinner says only that something is happening; this
+                // says what, and the band is doing the same thing at the
+                // other end of it.
+                Buzz.Sending -> Icon(
+                    Icons.Outlined.Vibration,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp).buzzing(),
                 )
-                Buzz.Sent -> Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                Buzz.Idle -> Icon(Icons.Outlined.Vibration, contentDescription = null, modifier = Modifier.size(18.dp))
+                Buzz.Sent -> Icon(
+                    Icons.Outlined.Check,
+                    contentDescription = null,
+                    // Lands rather than appears, on the spring the goal
+                    // tick uses: both are a thing that worked.
+                    modifier = Modifier.size(18.dp).springIn(),
+                )
+                Buzz.Idle -> Icon(
+                    Icons.Outlined.Vibration,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
             }
             Spacer(Modifier.width(9.dp))
-            Text(
-                when (buzz) {
-                    Buzz.Sending -> "Sending\u2026"
-                    Buzz.Sent -> "Sent"
-                    Buzz.Idle -> "Buzz the band"
-                }
-            )
+            AnimatedFigure(
+                when {
+                    buzz == Buzz.Sending -> "Sending\u2026"
+                    buzz == Buzz.Sent -> "Sent"
+                    !reachable -> "Syncing with the band\u2026"
+                    else -> "Buzz the band"
+                },
+                rising = false,
+            ) { Text(it) }
         }
 
         HorizontalDivider(

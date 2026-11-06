@@ -1,7 +1,13 @@
 package com.srineere.airbridge.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -284,3 +290,37 @@ fun Modifier.pressFeedback(
             onClick = onClick,
         )
 }
+
+/**
+ * Shakes, the way the thing at the other end is shaking.
+ *
+ * For the one control in this app that reaches the band and then waits.
+ * A spinner there said only that something was in flight; this says what,
+ * and it stops when the answer comes back.
+ *
+ * Rotation rather than translation, because the glyph sits inside a button
+ * next to its label: a translating icon pushes the text, and a rotating
+ * one stays in its box. Drawn on the layer, so the button does not lay
+ * itself out again sixty times a second.
+ */
+@Composable
+fun Modifier.buzzing(running: Boolean = true): Modifier {
+    if (!running) return this
+    val shake = rememberInfiniteTransition(label = "buzz")
+    val angle by shake.animateFloat(
+        initialValue = -BUZZ_DEGREES,
+        targetValue = BUZZ_DEGREES,
+        animationSpec = infiniteRepeatable(
+            animation = tween(BUZZ_MS, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "buzzAngle",
+    )
+    return this.graphicsLayer { rotationZ = angle }
+}
+
+/** How far it tips either way. Small: this is a buzz, not a wave. */
+private const val BUZZ_DEGREES = 9f
+
+/** And how long one way takes, which is about what a motor feels like. */
+private const val BUZZ_MS = 70
