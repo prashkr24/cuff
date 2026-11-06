@@ -402,6 +402,18 @@ above them came from one, so a day with two food apps showed rows that did
 not add up to their own heading. There is a comment at the log's read saying
 not to hand it the same set, because doing so would hide somebody's lunch.
 
+Workouts are the one list that *is* filtered, and they needed a third rule
+to be filtered safely. The seven-day tile and the full history used to
+disagree whenever two apps wrote the same run, which is the bug; but
+`resolveSources` under "Devices only" answers with the non-phone writers,
+and on a phone whose only workout writer is the phone that is the empty set
+— which `records` reads as "return nothing". Filtering the history naively
+would therefore have deleted somebody's workouts from the screen to avoid
+showing one of them twice. `SessionReader.workoutOrigins` folds the empty
+answer back into null, so the filter removes duplicates and never empties
+the page. **A sum that filters to nothing is honestly zero; a list that
+filters to nothing is a lie.**
+
 ## The device a record came off
 
 Also 6 November. Health Connect attaches a device to every record —

@@ -132,6 +132,13 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Fixed
 
+- **The workout list and the workout tile disagreed.** `SessionReader` read
+  exercise sessions unfiltered while the tab's own count filtered them, so two
+  apps writing the same run showed it once in the tile and twice in the
+  history. Both filter now — with the empty filter folded back into no filter,
+  because "Devices only" on a phone whose only workout writer is the phone
+  resolves to nothing, and a history that filters to nothing is somebody's
+  workouts gone rather than an honest zero. [6 Nov]
 - **The step check drifted through the night.** It ran on
   `handler.postDelayed`, which counts in `SystemClock.uptimeMillis` and stops
   while the phone is suspended, so a night in Doze pushed the daily goal and

@@ -109,7 +109,20 @@ class SessionReader {
         }
         val until = Instant.now()
         val from = until.minus(Duration.ofDays(days.toLong()))
-        return records(client, ExerciseSessionRecord::class, from, until)
+        // Through the same filter the tab's own workout count uses. Two apps
+        // writing the same run put it in this list twice, and a list that
+        // disagrees with the tile above it is worse than either answer on
+        // its own.
+        //
+        // An empty set is the one answer this read will not take. A sum that
+        // filters to nothing is honestly zero, but a *history* that filters
+        // to nothing is somebody's workouts gone -- and "Devices only" on a
+        // phone whose only workout writer is the phone resolves to exactly
+        // that. Falling back to unfiltered there keeps the duplicate this
+        // filter exists to remove out of the ordinary case, without ever
+        // emptying the list to make a point.
+        val origins = workoutOrigins(context)
+        return records(client, ExerciseSessionRecord::class, from, until, origins)
             .map {
                 Session(
                     it.startTime,
@@ -141,6 +154,9 @@ class SessionReader {
             ExerciseSessionRecord::class,
             at.minus(Duration.ofMinutes(1)),
             at.plus(Duration.ofDays(1)),
+            // The same filter the list used, for the same reason: a session
+            // opened from that list must still be found when it is reached.
+            workoutOrigins(context),
         )
             .firstOrNull { it.startTime.toEpochMilli() == startMillis }
             ?.let {
@@ -334,6 +350,19 @@ class SessionReader {
      * to stop before the read rather than inside it, which is why this has
      * a block body now and the guard starts one line lower.
      */
+    /**
+     * Who may have written the workouts this reader returns.
+     *
+     * [HealthReader.originsOf] answers with null for "do not filter" and a
+     * set for "only these". It can also answer with an *empty* set, which
+     * for a sum means nothing counts and for a list would mean nothing is
+     * shown -- so the empty answer is folded back into null here. A reader
+     * of history refuses to hide history; the filter is a preference about
+     * double-counting, not a reason to show somebody an empty page.
+     */
+    private suspend fun workoutOrigins(context: Context): Set<String>? =
+        HealthReader().originsOf(context, Written.Workouts)?.takeIf { it.isNotEmpty() }
+
     private suspend fun <T : Record> records(
         client: HealthConnectClient,
         type: KClass<T>,
