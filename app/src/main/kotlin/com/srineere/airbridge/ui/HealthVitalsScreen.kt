@@ -49,16 +49,23 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Vitals", subtitle = "Against your own last 30 nights", onBack = onBack)
 
+        // Every figure on this screen is taken while you are asleep, so
+        // all four wait together: a night that has not finished has not
+        // produced any of them.
+        val waiting = data.nightPending
         val rows = listOf(
-            VitalRow("Resting heart rate", data.restingTrend, "bpm", extras.heart, 0, route = "healthtrend"),
-            VitalRow("HRV", data.hrvTrend, "ms", extras.hrv, 0, route = "healthhrv"),
+            VitalRow(
+                "Resting heart rate", data.restingTrend, "bpm", extras.heart, 0,
+                pending = waiting, route = "healthtrend",
+            ),
+            VitalRow("HRV", data.hrvTrend, "ms", extras.hrv, 0, pending = waiting, route = "healthhrv"),
             VitalRow(
                 "Breathing rate", data.breathingTrend, "br/min", extras.activity, 1,
-                route = "healthbreathing",
+                pending = waiting, route = "healthbreathing",
             ),
             VitalRow(
                 "Skin temperature", data.skinTrend, "°C vs usual", extras.energy, 1,
-                signed = true, route = "healthskin",
+                signed = true, pending = waiting, route = "healthskin",
             ),
         )
 
@@ -124,6 +131,8 @@ internal data class VitalRow(
     val decimals: Int,
     /** Skin temperature is a change from your baseline, so it carries a sign. */
     val signed: Boolean = false,
+    /** True while the night these are measured across is still running. */
+    val pending: Boolean = false,
     /** Where the row goes, for the two that have a screen of their own. */
     val route: String? = null,
 )
@@ -150,6 +159,20 @@ private fun VitalLine(row: VitalRow, onOpen: (String) -> Unit) = Row(
         maxLines = 2,
         modifier = Modifier.width(92.dp),
     )
+
+    if (row.pending) {
+        // The night these come from has not finished. The newest reading
+        // in the series belongs to yesterday morning, and drawing it on a
+        // row headed by today would be the same quiet lie the sleep tile
+        // used to tell.
+        Text(
+            "measuring overnight",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.extras.disabled,
+            modifier = Modifier.weight(1f),
+        )
+        return@Row
+    }
 
     if (row.trend == null) {
         // A metric nothing writes says so, rather than showing a dash that

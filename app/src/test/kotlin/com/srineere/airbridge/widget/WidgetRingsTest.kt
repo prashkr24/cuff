@@ -29,7 +29,10 @@ class WidgetRingsTest {
     )
 
     private fun night(minutes: Long) = Night(
-        day = 0L,
+        // Today, because "last night" now means the night that ended this
+        // morning and these tests are about which rings appear, not about
+        // whether a night from 1970 still counts as last night.
+        day = java.time.LocalDate.now().toEpochDay(),
         start = Instant.EPOCH,
         end = Instant.EPOCH.plus(Duration.ofMinutes(minutes)),
         asleep = Duration.ofMinutes(minutes),

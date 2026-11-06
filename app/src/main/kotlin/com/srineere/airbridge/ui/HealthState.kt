@@ -33,6 +33,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.ZoneId
+import java.time.LocalDate
+import java.time.LocalTime
+import com.srineere.airbridge.health.MorningMoment
 
 /** Where the Health tab is between opening and having something to draw. */
 enum class HealthStage { Loading, NotConnected, NeedsUpdate, Granted }
@@ -81,7 +84,44 @@ data class HealthData(
             return eaten - burned
         }
 
-    val lastNight: Night? get() = nights.maxByOrNull { it.day }
+    /**
+     * The newest night there is, whenever it fell.
+     *
+     * For the screens that chart history, where a night three days ago is
+     * still the right thing to draw.
+     */
+    val newestNight: Night? get() = nights.maxByOrNull { it.day }
+
+    /**
+     * Last night, meaning the night that ended this morning -- and nothing
+     * otherwise.
+     *
+     * This used to be whatever night was newest, which is right for most of
+     * the day and wrong in the hours it matters. Health Connect files a
+     * sleep session under the day it ended, so at two in the morning the
+     * newest night is the one before, and every screen headed "last night"
+     * was showing it: a sleep score, a sleeping heart rate and a set of
+     * stages for a night you had already got up from, while the night you
+     * were actually in had not been written yet.
+     *
+     * Google Health does not do this, and it is the reason: a figure about
+     * last night is a figure about a night that has finished.
+     */
+    val lastNight: Night? get() = newestNight?.takeIf { it.day == LocalDate.now().toEpochDay() }
+
+    /**
+     * Whether the night is still out there rather than simply absent.
+     *
+     * Two different silences. Before the morning is over, no night means
+     * one is coming -- you are in it, or the band has not synced it yet.
+     * After that it means there isn't one, and saying "measuring" all
+     * afternoon would be an excuse rather than a fact.
+     *
+     * Shares [MorningMoment.LATEST_HOUR] with the morning report, so the
+     * hour the morning gives up has one definition.
+     */
+    val nightPending: Boolean
+        get() = lastNight == null && LocalTime.now().hour < MorningMoment.LATEST_HOUR
 
     /**
      * Your heart rate while you were actually asleep, as the tenth

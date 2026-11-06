@@ -480,6 +480,19 @@ private fun ColumnScope.ReadinessTile(size: TileSize, data: HealthData, colour: 
         TileEmpty("Nothing has written an HRV reading yet.", size)
         return
     }
+    // Readiness has always known which morning it describes -- the field
+    // and its comment have been there since it was built -- and nothing
+    // ever checked it. Under a heading that reads "this morning", a
+    // figure worked out from yesterday's HRV is wrong in exactly the way
+    // the comment warned about.
+    if (readiness.day != LocalDate.now().toEpochDay()) {
+        TileEmpty(
+            if (data.nightPending) "Measuring overnight."
+            else "Waiting for this morning's reading to sync.",
+            size,
+        )
+        return
+    }
     TileValue(readiness.score?.toString() ?: "—", null, size, dim = readiness.calibrating)
     if (size != TileSize.S) {
         TileSub(
@@ -553,7 +566,14 @@ private fun ColumnScope.StagesTile(
     TileHead(TileKind.Stages, colour, size, window = "last night")
     val night = data.lastNight
     if (night == null) {
-        TileEmpty("Google Health writes nights once your band syncs.", size)
+        // Two silences, told apart. In the small hours the night is one
+        // you are still in; by the afternoon it is one that was never
+        // written, and "measuring" then would be an excuse.
+        TileEmpty(
+            if (data.nightPending) "Measuring overnight."
+            else "Google Health writes nights once your band syncs.",
+            size,
+        )
         return
     }
     TileValue(night.asleep.asHoursMinutes(), null, size)
@@ -1012,7 +1032,11 @@ private fun ColumnScope.SleepTile(
         data.sleepTrend?.let { ChangeChip(it.change, "min", colour, size) }
     }
     if (last == null) {
-        TileEmpty("Google Health writes nights once your band syncs.", size)
+        TileEmpty(
+            if (data.nightPending) "Measuring overnight."
+            else "Google Health writes nights once your band syncs.",
+            size,
+        )
         return
     }
     val week = remember(data.nights) { data.nights.takeLast(7) }
