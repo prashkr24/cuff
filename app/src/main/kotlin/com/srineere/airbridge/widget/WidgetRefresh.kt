@@ -5,9 +5,12 @@ import android.content.ComponentName
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
 /**
@@ -33,6 +36,13 @@ class WidgetRefreshWorker(
             return Result.success()
         }
         WidgetStore.prune(applicationContext, placed)
+        // A poke knows that only this app's own facts moved, so it redraws
+        // without going back to Health Connect for a reading that has not.
+        if (inputData.getBoolean(WidgetRefresh.BAND_ONLY, false)) {
+            WidgetSnapshotCache.refreshBand(applicationContext)
+            refreshWidgets(applicationContext, reread = false)
+            return Result.success()
+        }
         refreshWidgets(applicationContext)
         // A read that fails is not a reason to stop the schedule: Health
         // Connect may simply have been updating. The next turn tries again.
@@ -42,6 +52,34 @@ class WidgetRefreshWorker(
 
 object WidgetRefresh {
     private const val NAME = "air-widgets"
+    private const val NOW = "air-widgets-now"
+    internal const val BAND_ONLY = "band_only"
+
+    /**
+     * Redraw soon, because something this app just did changed what a
+     * widget says.
+     *
+     * The half-hourly schedule is for Health Connect, which moves on its
+     * own and slowly. The band's facts move when the relay buzzes, and
+     * nothing told the widgets -- so "Last buzz" showed whatever was true
+     * at the last half-hourly turn, which read as the line being broken.
+     *
+     * Unique work with REPLACE and a few seconds' delay, so twenty messages
+     * in a burst are one redraw shortly after the last of them rather than
+     * twenty redraws during it.
+     */
+    fun poke(context: Context) {
+        runCatching {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                NOW,
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<WidgetRefreshWorker>()
+                    .setInitialDelay(4, TimeUnit.SECONDS)
+                    .setInputData(workDataOf(BAND_ONLY to true))
+                    .build(),
+            )
+        }
+    }
 
     fun schedule(context: Context) {
         val request = PeriodicWorkRequestBuilder<WidgetRefreshWorker>(30, TimeUnit.MINUTES)

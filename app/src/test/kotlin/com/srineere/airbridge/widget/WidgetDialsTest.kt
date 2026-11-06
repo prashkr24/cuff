@@ -1,6 +1,7 @@
 package com.srineere.airbridge.widget
 
 import com.srineere.airbridge.health.TileColour
+import com.srineere.airbridge.health.TileKind
 import com.srineere.airbridge.ui.sampleGoals
 import com.srineere.airbridge.ui.sampleHealthData
 import org.junit.Assert.assertEquals
@@ -103,7 +104,7 @@ class WidgetDialsTest {
 
     @Test
     fun `the dials family is no longer listed as unbuilt`() {
-        assertTrue(WidgetFamily.Dials !in WidgetCatalogue.notBuilt)
+        assertTrue(WidgetFamily.Arcs !in WidgetCatalogue.notBuilt)
     }
 
     @Test
@@ -158,9 +159,10 @@ class WidgetDialsTest {
     }
 
     @Test
-    fun `the burn face takes both sizes it is offered`() {
-        val burn = WidgetDesign.OfDials(DialFace.Burn)
-        assertTrue(burn.fits(WidgetSize.Wide))
-        assertTrue(burn.fits(WidgetSize.Tall))
+    fun `the burn dial is gone, and the tile it duplicated is not`() {
+        // Both drew ChartBitmap.pair from balanceToday with the same
+        // colours and the same ticks: one picture, listed twice.
+        assertTrue(WidgetCatalogue.all.none { it.title == "Burned against eaten" && it !is WidgetDesign.OfTile })
+        assertTrue(WidgetCatalogue.all.any { it == WidgetDesign.OfTile(TileKind.Balance) })
     }
 }

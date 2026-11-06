@@ -140,7 +140,6 @@ internal fun routeFor(design: WidgetDesign): String? {
         is WidgetDesign.OfRings -> null
         is WidgetDesign.OfDials -> when (design.face) {
             DialFace.Score -> SLEEP_ROUTE
-            DialFace.Burn -> TileKind.Balance.route
             else -> null
         }
         is WidgetDesign.OfType -> when (design.face) {
@@ -207,6 +206,22 @@ internal object WidgetSnapshotCache {
         val existing = held
         if (existing != null && System.currentTimeMillis() - existing.readAt < maxAge) return existing
         readWidgetSnapshot(context).also { held = it }
+    }
+
+    /**
+     * Re-reads the band's facts and leaves everything else alone.
+     *
+     * The band is the one part of this snapshot that changes because of
+     * something this app did -- a buzz delivered, a battery read -- rather
+     * than because Health Connect moved. Throwing the whole snapshot away
+     * to pick up a buzz would mean a Health Connect read per buzz, which a
+     * burst of messages turns into a read every few seconds.
+     */
+    suspend fun refreshBand(context: Context) = mutex.withLock {
+        val existing = held ?: return@withLock
+        held = existing.copy(
+            band = runCatching { BandStore.read(context) }.getOrDefault(existing.band),
+        )
     }
 
     /** Called when something the widgets draw has certainly changed. */

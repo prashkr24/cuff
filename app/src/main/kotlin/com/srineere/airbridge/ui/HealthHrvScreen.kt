@@ -145,16 +145,18 @@ internal fun HealthHrvScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
                 Row {
-                    Stat("Average", "${trend.average.roundToInt()} ms", Modifier.weight(1.1f))
+                    Stat("Average", "${trend.average.roundToInt()}", Modifier.weight(1f), unit = "ms")
                     Stat(
                         "Usual",
-                        "${trend.usual.low.roundToInt()}–${trend.usual.high.roundToInt()} ms",
-                        Modifier.weight(1.3f),
+                        "${trend.usual.low.roundToInt()}–${trend.usual.high.roundToInt()}",
+                        Modifier.weight(1.2f),
+                        unit = "ms",
                     )
                     Stat(
                         "Spread",
-                        "${trend.lowest.roundToInt()}–${trend.highest.roundToInt()} ms",
-                        Modifier.weight(1.3f),
+                        "${trend.lowest.roundToInt()}–${trend.highest.roundToInt()}",
+                        Modifier.weight(1.2f),
+                        unit = "ms",
                     )
                 }
             }

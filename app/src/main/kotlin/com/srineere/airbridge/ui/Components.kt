@@ -27,7 +27,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,6 +65,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.srineere.airbridge.ui.theme.extras
 import kotlinx.coroutines.delay
 
@@ -153,6 +158,8 @@ fun Stat(
     value: String?,
     modifier: Modifier = Modifier,
     tint: Color? = null,
+    /** What the figure is in. See [labelWithUnit]. */
+    unit: String? = null,
 ) = Column(modifier) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (tint != null) {
@@ -160,7 +167,7 @@ fun Stat(
             Spacer(Modifier.width(6.dp))
         }
         Text(
-            label.uppercase(),
+            labelWithUnit(label, unit),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             // Secondary content, which is read. See the note on the two
@@ -217,6 +224,43 @@ fun GoalMark(
         tint = MaterialTheme.colorScheme.surface,
         modifier = Modifier.size(size * 0.68f),
     )
+}
+
+/**
+ * A stat's label with its unit beside it, rather than after its figure.
+ *
+ * "1,842 kcal" makes that value longer than the ones either side of it and
+ * pushes a row of figures out of alignment; worse, the eye reading down a
+ * column of numbers has to step over a word to reach each one. The unit is
+ * not the reading -- it is what the reading is in -- so it belongs with the
+ * word that names it, and the figure is left as a figure.
+ *
+ * One annotated string rather than two Texts, so a narrow column truncates
+ * the pair together instead of dropping the unit off the end of a row that
+ * still had room for it. The unit keeps its own case: "kcal" and "bpm" are
+ * written that way, and KCAL reads as shouting.
+ *
+ * Shared with the one tinted variant on the session screen, so there is a
+ * single answer to how a unit is drawn.
+ */
+@Composable
+internal fun labelWithUnit(label: String, unit: String?): AnnotatedString = buildAnnotatedString {
+    append(label.uppercase())
+    if (unit != null) {
+        withStyle(
+            SpanStyle(
+                // Below the smallest step on the scale, and the only thing
+                // in the app that goes below it: an annotation on a label
+                // is not a label, and at 11sp it competed with the word it
+                // belongs to.
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.extras.disabled,
+            ),
+        ) {
+            append("  $unit")
+        }
+    }
 }
 
 @Composable

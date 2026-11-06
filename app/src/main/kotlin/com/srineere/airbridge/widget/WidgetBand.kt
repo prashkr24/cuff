@@ -144,7 +144,9 @@ private fun Everything(
                 Kicker("Last buzz", colours.faint, size = WidgetText.Caption)
                 Spacer(GlanceModifier.defaultWeight())
                 if (band.lastBuzzAt == 0L) {
-                    Sub("nothing today", colours.faint, size = WidgetText.Label)
+                    // "nothing today" was wrong: the reading behind it is
+                    // the newest verified buzz there has ever been.
+                    Sub("nothing yet", colours.faint, size = WidgetText.Label)
                 } else {
                     band.lastBuzzWho?.let {
                         Sub(it, colours.onBackground, size = WidgetText.Body)

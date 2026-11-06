@@ -218,11 +218,14 @@ private fun MacroRow(
 }
 
 /**
- * Fourteen days of split, each bar its own full height.
+ * A run of days of split, each bar as tall as that day's calories.
  *
  * Normalised on purpose: the question here is what the day was made of, not
  * how big it was. How big it was is the Energy screen's question, and
  * answering both in one chart answers neither.
+ *
+ * The window moves, because a chart that only ever ends today can answer
+ * "how am I doing" and nothing else.
  */
 @Composable
 private fun SplitSection(
@@ -232,9 +235,16 @@ private fun SplitSection(
     fat: Color,
     axes: Axes,
 ) {
-    val days = (snapshot.proteinDaily.map { it.day } + snapshot.carbsDaily.map { it.day } +
-        snapshot.fatDaily.map { it.day }).distinct().sorted().takeLast(14)
-    if (days.size < 3) return
+    val context = LocalContext.current
+    val state = LocalHealthState.current
+    val window = rememberChartWindow(14)
+    val all = (snapshot.proteinDaily.map { it.day } + snapshot.carbsDaily.map { it.day } +
+        snapshot.fatDaily.map { it.day }).distinct().sorted()
+    // The guard is on everything there is, not on what the window happens to
+    // hold: a window paged back onto an empty week should say so, not take
+    // the chart and its own arrows off the screen.
+    if (all.size < 3) return
+    val days = window.slice(all) { it }
     val byDay = { series: List<Reading> -> series.associate { it.day to it.value } }
     val p = byDay(snapshot.proteinDaily)
     val c = byDay(snapshot.carbsDaily)
@@ -244,6 +254,23 @@ private fun SplitSection(
 
     SectionHeader("What you ate")
     DetailCard {
+        WindowBar(
+            window = window,
+            options = listOf(7, 14, 30),
+            onChange = {
+                picked = null
+                state.widen(context, window.daysNeeded)
+            },
+        )
+        if (days.isEmpty()) {
+            Text(
+                "Nothing logged in these days.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 24.dp),
+            )
+            return@DetailCard
+        }
         // Each bar is as tall as that day's calories, and the stripes inside
         // it are where they came from. Drawn as equal-height bars the chart
         // said every day was the same size, which was the one thing it could
@@ -257,9 +284,13 @@ private fun SplitSection(
                 )
             },
             height = 150.dp,
-            modifier = Modifier.scrubbable(days.size, CHART_GUTTER) { picked = it },
+            modifier = Modifier.padding(top = 10.dp)
+                .scrubbable(days.size, CHART_GUTTER) { picked = it },
             axes = axes,
-            xTicks = listOf(0f to dayLabel(days.first()), 1f to "Today"),
+            xTicks = listOf(
+                0f to dayLabel(days.first()),
+                1f to if (window.isNow) "Today" else dayLabel(days.last()),
+            ),
             selected = picked,
         )
         val onDay = picked?.let { days.getOrNull(it) }
@@ -292,11 +323,15 @@ private fun SplitSection(
                 }
             }
         }
-        if (days.size - logged > 0) {
+        // Counted against the window rather than against the days that came
+        // back, because a day with no record at all is exactly the day this
+        // sentence is about.
+        val blank = (window.length - logged).coerceAtLeast(0)
+        if (blank > 0) {
             Text(
-                when (days.size - logged) {
-                    1 -> "One day in this fortnight has nothing logged."
-                    else -> "${days.size - logged} days in this fortnight have nothing logged."
+                when (blank) {
+                    1 -> "One day in this window has nothing logged."
+                    else -> "$blank days in this window have nothing logged."
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.extras.disabled,
@@ -317,13 +352,35 @@ private fun ProteinSection(
     goal: Int?,
     axes: Axes,
 ) {
-    val recent = series.takeLast(14).filter { it.value > 0 }
-    if (recent.size < 3) return
-    val average = recent.map { it.value }.average()
-    val days = series.takeLast(14)
+    val context = LocalContext.current
+    val state = LocalHealthState.current
+    val window = rememberChartWindow(14)
+    // Enough logged anywhere to be worth a chart. Whether this particular
+    // window has anything is a separate question, answered inside.
+    if (series.count { it.value > 0 } < 3) return
+    val days = window.slice(series) { it.day }
+    val recent = days.filter { it.value > 0 }
+    val average = recent.map { it.value }.average().takeIf { recent.isNotEmpty() }
     var pickedProtein by remember { mutableStateOf<Int?>(null) }
     SectionHeader("Protein")
     DetailCard {
+        WindowBar(
+            window = window,
+            options = listOf(7, 14, 30),
+            onChange = {
+                pickedProtein = null
+                state.widen(context, window.daysNeeded)
+            },
+        )
+        if (days.isEmpty() || average == null) {
+            Text(
+                "No protein logged in these days.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 24.dp),
+            )
+            return@DetailCard
+        }
         GoalBars(
             values = days.map { it.value },
             // Your own goal when you have set one, your own average when you
@@ -332,11 +389,18 @@ private fun ProteinSection(
             colour = colour,
             dim = colour.copy(alpha = 0.35f),
             height = 140.dp,
-            modifier = Modifier.scrubbable(days.size, CHART_GUTTER) { pickedProtein = it },
+            modifier = Modifier.padding(top = 10.dp)
+                .scrubbable(days.size, CHART_GUTTER) { pickedProtein = it },
             axes = axes,
-            xTicks = listOf(0f to dayLabel(days.first().day), 1f to "Today"),
+            xTicks = listOf(
+                0f to dayLabel(days.first().day),
+                1f to if (window.isNow) "Today" else dayLabel(days.last().day),
+            ),
             goalLabel = "${(goal ?: average.roundToInt()).toInt()}g",
             yLabel = { "${it.roundToInt()}g" },
+            // Only today's bar is "the latest"; a window paged back has no
+            // such bar, and lighting its last one would invent one.
+            highlightLast = window.isNow,
             selected = pickedProtein,
         )
         val at = pickedProtein?.let { days.getOrNull(it) }
@@ -353,11 +417,16 @@ private fun ProteinSection(
             modifier = Modifier.padding(vertical = 12.dp),
         )
         Row {
-            Stat("Average", "${average.roundToInt()} g", Modifier.weight(1f))
-            Stat("Best", "${recent.maxOf { it.value }.roundToInt()} g", Modifier.weight(1f))
+            Stat("Average", "${average.roundToInt()}", Modifier.weight(1f), unit = "g")
+            Stat(
+                "Best",
+                "${recent.maxOf { it.value }.roundToInt()}",
+                Modifier.weight(1f),
+                unit = "g",
+            )
             Stat(
                 if (goal == null) "Days logged" else "Goal met",
-                if (goal == null) "${recent.size} of 14"
+                if (goal == null) "${recent.size} of ${window.length}"
                 else "${recent.count { it.value >= goal }} of ${recent.size}",
                 Modifier.weight(1.2f),
             )

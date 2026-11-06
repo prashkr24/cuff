@@ -210,9 +210,9 @@ class TilesTest {
     fun `the add list is what is not already shown`() {
         val unused = unusedKinds(defaultTiles)
         assertTrue(TileKind.Weight in unused)
-        assertTrue(TileKind.Hrv in unused)
-        assertTrue(TileKind.Oxygen in unused)
-        assertFalse(TileKind.Heart in unused)
+        assertTrue(TileKind.Heart in unused)
+        assertTrue(TileKind.Skin in unused)
+        assertFalse(TileKind.Hrv in unused)
         assertFalse(TileKind.Zones in unused)
         assertTrue(unusedKinds(TileKind.entries.map { t(it, TileSize.S) }).isEmpty())
     }

@@ -10,7 +10,6 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.NutritionRecord
-import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.RespiratoryRateRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
@@ -120,7 +119,6 @@ data class HealthSnapshot(
     val hrv: List<Reading> = emptyList(),
     val respiratoryRate: List<Reading> = emptyList(),
     val skinTemperature: List<Reading> = emptyList(),
-    val oxygenSaturation: List<Reading> = emptyList(),
     val nights: List<Night> = emptyList(),
     val sessions: List<Session> = emptyList(),
     /** Today's heart rate samples, for the zones. */
@@ -251,15 +249,6 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             emptyList()
         }
 
-        val oxygen = if (allowed(OxygenSaturationRecord::class)) {
-            records(client, OxygenSaturationRecord::class, from, today)
-                .groupBy { it.time.atZone(zone).toLocalDate().toEpochDay() }
-                .map { (day, rows) -> Reading(day, rows.last().percentage.value) }
-                .sortedBy { it.day }
-        } else {
-            emptyList()
-        }
-
         val nights = if (allowed(SleepSessionRecord::class)) {
             records(client, SleepSessionRecord::class, from, today).map(::toNight)
         } else {
@@ -275,7 +264,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
                 .map { it.substringAfterLast('.') } +
                 " distanceAllowed=" + allowed(DistanceRecord::class) +
                 " counts: resting=${resting.size} hrv=${hrv.size}" +
-                " breathing=${breathing.size} skin=${skin.size} oxygen=${oxygen.size}",
+                " breathing=${breathing.size} skin=${skin.size}",
         )
 
         val sessions = if (allowed(ExerciseSessionRecord::class)) {
@@ -429,7 +418,6 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             hrv = hrv,
             respiratoryRate = breathing,
             skinTemperature = skin,
-            oxygenSaturation = oxygen,
             nights = nights,
             sessions = sessions,
             heartToday = heartToday,
@@ -452,6 +440,55 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
             writtenAt = newestWrite,
             missingPermissions = HealthConnect.readPermissions - granted,
         )
+    }
+
+    /**
+     * Steps inside one stretch of time.
+     *
+     * Filtered exactly as the daily figure is. A phone in a pocket and a
+     * band on a wrist both write steps, and a walk counted from both comes
+     * back at roughly double -- which is the same fault that used to fire
+     * the goal buzz early.
+     */
+    suspend fun stepsIn(context: Context, from: Instant, until: Instant): Long? {
+        val client = HealthConnect.clientOrNull(context) ?: return null
+        val granted = HealthConnect.granted(client)
+        if (HealthPermission.getReadPermission(StepsRecord::class) !in granted) return null
+        val origins = stepOrigins(context, client, granted)
+        if (origins.filtersToNothing()) return 0L
+        return guard("steps in a session") {
+            client.aggregate(
+                AggregateRequest(
+                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(from, until),
+                    dataOriginFilter = origins.toDataOrigins(),
+                ),
+            )[StepsRecord.COUNT_TOTAL]
+        }
+    }
+
+    /**
+     * One day's burn, hour by hour.
+     *
+     * The snapshot carries today's, because every screen that wants hourly
+     * burn wants today's. The balance chart is the one place that can be
+     * pointed at an older day, and reading its twenty-four buckets when it
+     * is asked for is cheaper than holding a month of them against the
+     * chance that somebody pages back.
+     *
+     * Null when Health Connect is absent or has not been given the
+     * permission, which the caller shows as a day with no burn rather than
+     * as a day of zero.
+     */
+    suspend fun burnedHourly(context: Context, day: LocalDate): List<Double>? {
+        val client = HealthConnect.clientOrNull(context) ?: return null
+        val granted = HealthConnect.granted(client)
+        if (HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class) !in granted) {
+            return null
+        }
+        return hourlyTotals(client, TotalCaloriesBurnedRecord.ENERGY_TOTAL, day) {
+            it.inKilocalories
+        }
     }
 
     /**

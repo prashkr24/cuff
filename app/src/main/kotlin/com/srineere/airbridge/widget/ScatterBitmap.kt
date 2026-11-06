@@ -7,8 +7,8 @@ import android.graphics.Paint
 /**
  * The tab's `MiniScatter`, drawn to a bitmap.
  *
- * Six tiles -- resting heart rate, HRV, breathing, skin temperature, blood
- * oxygen and weight -- say the same thing the same way: one dot a reading,
+ * Five tiles -- resting heart rate, HRV, breathing, skin temperature and
+ * weight -- say the same thing the same way: one dot a reading,
  * a shaded band behind them showing where half your readings land, and the
  * newest dot bigger and at full strength. The widgets drew bars instead,
  * which is a different claim: a bar says "this much", a dot says "here,

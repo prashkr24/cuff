@@ -135,22 +135,35 @@ internal fun HealthSessionScreen(startMillis: Long, onBack: () -> Unit) {
             Row {
                 Stat(
                     "Distance",
-                    found?.distanceKm?.let { "${formatOneDecimal(it)} km" } ?: "—",
+                    found?.distanceKm?.let { formatOneDecimal(it) } ?: "—",
+                    Modifier.weight(1f),
+                    unit = "km",
+                )
+                Stat(
+                    "Steps",
+                    found?.steps?.let { count(it) } ?: "—",
                     Modifier.weight(1f),
                 )
-                Stat("Pace", pace(found?.distanceKm, length), Modifier.weight(1.2f))
+                Stat("Pace", pace(found?.distanceKm, length), Modifier.weight(1.2f), unit = "/km")
                 Stat("Time", clockOf(length), Modifier.weight(1f))
             }
             val beats = summarise(found?.samples.orEmpty())
             Row(Modifier.padding(top = 14.dp)) {
                 Tinted(
                     "Burned",
-                    found?.kcal?.let { "${it.toInt()} kcal" },
+                    found?.kcal?.let { "${it.toInt()}" },
                     extras.energy,
                     Modifier.weight(1f),
+                    unit = "kcal",
                 )
-                Tinted("Avg bpm", beats?.average?.toString(), extras.heart, Modifier.weight(1f))
-                Tinted("Peak bpm", beats?.highest?.toString(), extras.zonePeak, Modifier.weight(1f))
+                Tinted("Avg", beats?.average?.toString(), extras.heart, Modifier.weight(1f), "bpm")
+                Tinted(
+                    "Peak",
+                    beats?.highest?.toString(),
+                    extras.zonePeak,
+                    Modifier.weight(1f),
+                    "bpm",
+                )
             }
 
             if (loading) {
@@ -268,10 +281,18 @@ internal fun HealthSessionScreen(startMillis: Long, onBack: () -> Unit) {
  * without reading the labels.
  */
 @Composable
-private fun Tinted(label: String, value: String?, colour: Color, modifier: Modifier) =
+private fun Tinted(
+    label: String,
+    value: String?,
+    colour: Color,
+    modifier: Modifier,
+    unit: String? = null,
+) =
     Column(modifier) {
         Text(
-            label.uppercase(),
+            // The same answer Stat gives, so one card does not hold two
+            // ideas about where a unit belongs.
+            labelWithUnit(label, unit),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.extras.disabled,
         )
@@ -395,9 +416,10 @@ private fun Zone.tint(extras: com.srineere.airbridge.ui.theme.AirExtraColors) = 
     Zone.Peak -> extras.zonePeak
 }
 
+/** The figure alone; [Stat] carries the unit on its label. */
 private fun pace(distanceKm: Double?, length: Duration): String {
     if (distanceKm == null || distanceKm <= 0.0) return "—"
-    return paceOf(length.seconds / distanceKm) + " /km"
+    return paceOf(length.seconds / distanceKm)
 }
 
 private fun paceOf(secondsPerKm: Double): String {

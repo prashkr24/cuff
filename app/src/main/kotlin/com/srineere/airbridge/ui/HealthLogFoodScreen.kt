@@ -100,9 +100,9 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val typed = number(kcal)
     val anything = typed != null || fromMacros != null
 
-    // Null is All, on the saved list only: a recent entry is sorted by when
-    // it was eaten, and filtering that by meal would be a second, worse copy
-    // of the food log.
+    // Null is All. Shared by both lists, so a filter set on one is still
+    // set when you step back and try the other -- picking "breakfast" is a
+    // statement about what you are logging, not about which list you are in.
     var pick by remember { mutableStateOf<Meal?>(null) }
 
     fun fill(food: SavedFood) {
@@ -155,7 +155,8 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
         if (step == Step.Recent || step == Step.Saved) {
             val onSaved = step == Step.Saved
-            if (onSaved && saved.isNotEmpty()) {
+            val anything = if (onSaved) saved.isNotEmpty() else data.snapshot.food.isNotEmpty()
+            if (anything) {
                 MealPills(
                     selected = pick,
                     onPick = { pick = it },
@@ -165,14 +166,23 @@ internal fun HealthLogFoodScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             }
             PickList(
                 foods = if (onSaved) saved.filter { pick == null || it.meal == pick }
+                // Filtered before the names are made distinct, not after.
+                // The other way round, a food eaten at lunch today and at
+                // breakfast last week keeps only its latest meal and then
+                // vanishes from the breakfast list it belongs on.
                 else data.snapshot.food.sortedByDescending { it.at }
-                    .distinctBy { (it.name ?: "").trim().lowercase() }
-                    .take(8)
-                    .map { it.asSavedFood() },
+                    .map { it.asSavedFood() }
+                    .filter { pick == null || it.meal == pick }
+                    .distinctBy { it.name.trim().lowercase() }
+                    .take(8),
                 forgettable = onSaved,
-                empty = if (!onSaved) "Nothing logged yet, so there is nothing to repeat."
-                else if (pick != null) "Nothing saved under ${pick?.label?.lowercase()} yet."
-                else "Nothing saved yet. Save a food from an entry and it waits here.",
+                empty = when {
+                    onSaved && pick != null ->
+                        "Nothing saved under ${pick?.label?.lowercase()} yet."
+                    onSaved -> "Nothing saved yet. Save a food from an entry and it waits here."
+                    pick != null -> "Nothing logged at ${pick?.label?.lowercase()} lately."
+                    else -> "Nothing logged yet, so there is nothing to repeat."
+                },
                 onPick = ::fill,
                 onForget = { food -> saved = SavedFoods.remove(context, food) },
             )

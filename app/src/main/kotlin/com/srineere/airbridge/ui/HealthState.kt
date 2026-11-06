@@ -52,7 +52,6 @@ data class HealthData(
     val hrvTrend: Trend? = null,
     val breathingTrend: Trend? = null,
     val skinTrend: Trend? = null,
-    val oxygenTrend: Trend? = null,
     val weightTrend: Trend? = null,
     val stepsTrend: Trend? = null,
     val sleepTrend: Trend? = null,
@@ -114,12 +113,11 @@ data class HealthData(
 
     /**
      * The vitals that actually have a trend behind them. A metric no app
-     * writes -- blood oxygen, on a phone where Google Health holds no
-     * write permission for it -- is left out of the count rather than
-     * counted as out of range.
+     * writes is left out of the count rather than counted as out of range:
+     * silence is not a reading in range.
      */
     val vitals: List<Trend>
-        get() = listOfNotNull(restingTrend, hrvTrend, breathingTrend, skinTrend, oxygenTrend)
+        get() = listOfNotNull(restingTrend, hrvTrend, breathingTrend, skinTrend)
 }
 
 /**
@@ -344,7 +342,6 @@ internal suspend fun loadHealthData(
         hrvTrend = trendOf(snapshot.hrv),
         breathingTrend = trendOf(snapshot.respiratoryRate),
         skinTrend = trendOf(snapshot.skinTemperature),
-        oxygenTrend = trendOf(snapshot.oxygenSaturation),
         weightTrend = trendOf(snapshot.weight),
         stepsTrend = trendOf(snapshot.steps),
         sleepTrend = trendOf(snapshot.nights.toSleepReadings()),

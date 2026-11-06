@@ -117,24 +117,6 @@ private fun dialsFace(face: DialFace, snapshot: WidgetSnapshot): Face? = when (f
     DialFace.Three -> dialsOf(snapshot.health, snapshot.goals).takeIf { it.isNotEmpty() }?.let {
         Face(kicker = "Today", figure = "", sub = "", chart = Chart.Dials(it))
     }
-    // Both lines, as the face draws them. Bars were wrong twice over: the
-    // widget draws lines, and a running total drawn as columns reads as
-    // twenty-four separate hours rather than one day adding up.
-    DialFace.Burn -> balanceToday(snapshot.health.snapshot)
-        .takeIf { it.anything && it.burned.size > 1 }?.let {
-            Face(
-                kicker = "Burned against eaten",
-                figure = signed(it.gap.roundToInt()),
-                sub = "",
-                chart = Chart.Climb(
-                    it.burned,
-                    it.eaten,
-                    TileColour.Activity,
-                    TileColour.Energy,
-                    it.hourTicks,
-                ),
-            )
-        }
 
     DialFace.Overview -> nightScores(snapshot.health).takeIf { it.isNotEmpty() }?.let {
         Face(

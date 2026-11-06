@@ -207,9 +207,15 @@ internal fun HealthFoodLogScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     }
 }
 
-/** Which day is being shown, and the two arrows that change it. */
+/**
+ * Which day is being shown, and the two arrows that change it.
+ *
+ * Shared with every other screen that is about one day rather than a run of
+ * them, so paging back through the food log and paging back through the
+ * balance chart are the same control in the same place.
+ */
 @Composable
-private fun DayBar(back: Int, oldest: Int, onPick: (Int) -> Unit) = Row(
+internal fun DayBar(back: Int, oldest: Int, onPick: (Int) -> Unit) = Row(
     verticalAlignment = Alignment.CenterVertically,
     modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
 ) {
@@ -491,7 +497,7 @@ private fun MealPill(
 
 /** Today and yesterday by name, anything older by date. */
 @Composable
-private fun dayName(back: Int): String = when (back) {
+internal fun dayName(back: Int): String = when (back) {
     0 -> "Today"
     1 -> "Yesterday"
     else -> {

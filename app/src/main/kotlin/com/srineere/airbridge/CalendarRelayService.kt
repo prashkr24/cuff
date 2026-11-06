@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import android.app.Notification
 import android.app.NotificationChannel
 import com.srineere.airbridge.widget.ROUTE_EXTRA
+import com.srineere.airbridge.widget.WidgetRefresh
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -465,7 +466,7 @@ class CalendarRelayService : Service() {
         ring = session
         Log.i(TAG, "ring start pkg=$packageName gap=${session.settings.gapMillis}ms max=${session.settings.maxSeconds}s mode=${session.startMode}")
         record(nextId(), packageName, session.startedAt, "ring_started", match = match,
-            callerId = callerId)
+            callerId = callerId, kind = kind)
         refreshNotification()
         // Nothing else buzzes during a ring, and a follow-up already scheduled
         // would have. It keeps waiting; stopRing picks it up when the call is
@@ -526,11 +527,11 @@ class CalendarRelayService : Service() {
         refreshDeadline()
         inFlight[id] = session.packageName to session.startedAt
         record(id, session.packageName, session.startedAt, "queued", match = session.match,
-            callerId = session.callerId)
+            callerId = session.callerId, kind = session.kind)
         fun finished(result: RelayWorkerResult) {
             inFlight.remove(id)
             record(id, session.packageName, session.startedAt, result.stage, result.errorCode,
-                session.match, session.callerId)
+                session.match, session.callerId, session.kind)
             Log.i(TAG, "ring result stage=${result.stage} code=${result.errorCode}")
             saveOutcome("Ring ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             end()
@@ -816,6 +817,10 @@ class CalendarRelayService : Service() {
                     preset = preset.id,
                 ),
             )
+            // This path writes its own entry rather than going through the
+            // service's record(), so it has to say so itself: a goal buzz
+            // is still the last buzz a widget should show.
+            if (stage == "verified") WidgetRefresh.poke(this)
         }
         begin()
         onAir { link ->
@@ -902,12 +907,12 @@ class CalendarRelayService : Service() {
         begin()
         refreshDeadline()
         inFlight[id] = sbnPackage to postedAt
-        record(id, sbnPackage, postedAt, "queued", match = match, callerId = callerId)
+        record(id, sbnPackage, postedAt, "queued", match = match, callerId = callerId, kind = kind)
         fun finished(result: RelayWorkerResult) {
             previewReplies.remove(id)?.invoke(result)
             choices.remove(id)
             inFlight.remove(id)
-            record(id, sbnPackage, postedAt, result.stage, result.errorCode, match, callerId)
+            record(id, sbnPackage, postedAt, result.stage, result.errorCode, match, callerId, kind)
             saveOutcome("Haptic ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             val now = System.currentTimeMillis()
             coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
@@ -981,10 +986,16 @@ class CalendarRelayService : Service() {
     private fun nextId() = "relay-${System.currentTimeMillis()}-${++sequence}"
 
     private fun record(id: String, sbnPackage: String?, postedAt: Long, stage: String, code: String? = null,
-                       match: RelayMatch? = null, callerId: String? = null) {
+                       match: RelayMatch? = null, callerId: String? = null,
+                       kind: RelayAlertKind = RelayAlertKind.MESSAGE) {
         val now = System.currentTimeMillis()
         RelayHistory.add(this, RelayActivity(id, sbnPackage, stage, now, maxOf(0, now - postedAt), code,
-            match?.preset?.id, callerId))
+            match?.preset?.id, callerId, kind == RelayAlertKind.CALL))
+        // The band widgets draw their last buzz out of this history, and
+        // nothing else was telling them it had moved. Only the stage the
+        // band acknowledged: the widgets count verified buzzes, so a queued
+        // or failed attempt changes nothing they show.
+        if (stage == "verified") WidgetRefresh.poke(this)
     }
 
     fun requestStop(reason: String) {

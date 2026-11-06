@@ -397,8 +397,9 @@ internal fun ColumnScope.TileBody(
             VitalTile(tile.size, tile.kind, data.breathingTrend, "br/min", colour, 1)
         TileKind.Skin ->
             VitalTile(tile.size, tile.kind, data.skinTrend, "°C", colour, 1, signed = true)
-        TileKind.Oxygen -> VitalTile(tile.size, tile.kind, data.oxygenTrend, "%", colour, 0)
         TileKind.Balance -> BalanceTile(tile.size, data, colour, axes)
+        TileKind.Stages -> StagesTile(tile.size, data, colour, axes)
+        TileKind.SleepBank -> SleepBankTile(tile.size, data, colour, goals, axes)
     }
 }
 
@@ -491,11 +492,131 @@ private fun hourTicksOf(hourNow: Int): List<Pair<Float, String>> {
 }
 
 /**
+ * Last night in the proportions it was made of.
+ *
+ * Not the Sleep tile with one night in it. That tile is about the week a
+ * night sits in, which is why its chart is seven bars and a goal line;
+ * this one is about the night, so it is one bar and the four stages are
+ * the whole point of it.
+ */
+@Composable
+private fun ColumnScope.StagesTile(
+    size: TileSize,
+    data: HealthData,
+    colour: Color,
+    axes: Axes,
+) {
+    val extras = MaterialTheme.extras
+    TileHead(TileKind.Stages, colour, size, window = "last night")
+    val night = data.lastNight
+    if (night == null) {
+        TileEmpty("Google Health writes nights once your band syncs.", size)
+        return
+    }
+    TileValue(night.asleep.asHoursMinutes(), null, size)
+    if (size != TileSize.S) {
+        TileSub(
+            if (night.hasStages) {
+                "deep ${night.deep.asHoursMinutes()} · rem ${night.rem.asHoursMinutes()}"
+            } else {
+                "written as one block, no stages"
+            },
+        )
+    }
+    Box(Modifier.weight(1f).padding(top = 6.dp)) {
+        StageBars(
+            nights = listOf(night.fourStages()),
+            deep = extras.sleepDeep,
+            light = extras.sleepLight,
+            rem = extras.sleepRem,
+            awake = extras.sleepAwake,
+            modifier = Modifier.fillMaxSize(),
+            fill = true,
+            axes = if (size == TileSize.S) null else axes,
+        )
+    }
+    // One bar of four colours says nothing without the key, and XL is the
+    // only size with a line to spare for it.
+    if (size == TileSize.XL) StageKey()
+}
+
+/**
+ * What a run of nights comes to, against the goal.
+ *
+ * The figure is the balance and the chart is the nights that made it, which
+ * is the same division the Sleep bank screen uses: bars are the working,
+ * the number is the answer.
+ */
+@Composable
+private fun ColumnScope.SleepBankTile(
+    size: TileSize,
+    data: HealthData,
+    colour: Color,
+    goals: Goals,
+    axes: Axes,
+) {
+    TileHead(TileKind.SleepBank, colour, size, window = "7 nights")
+    val week = remember(data.nights) { data.nights.takeLast(7) }
+    if (week.isEmpty() || goals.sleepMinutes <= 0) {
+        TileEmpty("No nights recorded yet, so there is nothing to add up.", size)
+        return
+    }
+    val balance = remember(week, goals.sleepMinutes) {
+        week.sumOf { it.asleep.toMinutes() - goals.sleepMinutes }.toDouble()
+    }
+    val minutes = remember(week) { week.map { it.asleep.toMinutes().toDouble() } }
+    TileValue(signedSpan(balance), null, size)
+    if (size != TileSize.S) {
+        TileSub(
+            "${week.size} nights · goal ${goals.sleepMinutes / 60}h " +
+                "${"%02d".format(goals.sleepMinutes % 60)}m",
+        )
+    }
+    Box(Modifier.weight(1f).padding(top = 6.dp)) {
+        GoalBars(
+            values = minutes,
+            target = goals.sleepMinutes.toDouble(),
+            colour = colour,
+            dim = colour.copy(alpha = 0.35f),
+            modifier = Modifier.fillMaxSize(),
+            fill = true,
+            axes = if (size == TileSize.S) null else axes,
+            // Seven finished nights are seven equals; nothing here is
+            // "today", so nothing is lit as though it were.
+            highlightLast = false,
+            yLabel = { "${(it / 60).roundToInt()}h" },
+        )
+    }
+    if (size == TileSize.XL) {
+        val over = week.count { it.asleep.toMinutes() >= goals.sleepMinutes }
+        Row(Modifier.padding(top = 10.dp)) {
+            Stat("Over", "$over", Modifier.weight(1f))
+            Stat("Under", "${week.size - over}", Modifier.weight(1f))
+            Stat(
+                "Longest",
+                week.maxOf { it.asleep.toMinutes() }.let { minutes ->
+                    "${minutes / 60}h ${"%02d".format(minutes % 60)}m"
+                },
+                Modifier.weight(1.4f),
+            )
+        }
+    }
+}
+
+/** A balance in hours and minutes, signed, as the Sleep bank screen writes it. */
+private fun signedSpan(minutes: Double): String {
+    val total = minutes.roundToInt()
+    val size = abs(total)
+    val span = if (size < 60) "${size}m" else "${size / 60}h ${"%02d".format(size % 60)}m"
+    return (if (total < 0) "−" else "+") + span
+}
+
+/**
  * One nightly reading, for the vitals that are a number and a band.
  *
- * Shared because breathing, skin temperature and blood oxygen differ only
- * in their units: three near-identical tiles would be three places for the
- * same layout to drift.
+ * Shared because breathing rate and skin temperature differ only in their
+ * units: two near-identical tiles would be two places for the same layout
+ * to drift.
  */
 @Composable
 private fun ColumnScope.VitalTile(
@@ -1195,14 +1316,13 @@ private fun ColumnScope.VitalsTile(size: TileSize, data: HealthData, colour: Col
         return
     }
     val inRange = vitals.count { it.latestIsUsual }
-    // Five rails, in the order the Vitals screen lists them, so a metric
+    // Four rails, in the order the Vitals screen lists them, so a metric
     // nothing writes keeps its empty place rather than shifting the rest up.
     val palette = listOf(
         data.restingTrend to extras.heart,
         data.hrvTrend to extras.hrv,
         data.breathingTrend to extras.activity,
         data.skinTrend to extras.energy,
-        data.oxygenTrend to MaterialTheme.colorScheme.onSurfaceVariant,
     )
     val railsOf = remember(palette) { palette.map { (trend, tint) -> trend?.rail(tint) } }
     val rails = @Composable { modifier: Modifier, rowHeight: Dp ->

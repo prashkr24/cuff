@@ -60,10 +60,6 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                 "Skin temperature", data.skinTrend, "°C vs usual", extras.energy, 1,
                 signed = true, route = "healthskin",
             ),
-            VitalRow(
-                "Blood oxygen", data.oxygenTrend, "%", extras.sleepRem, 0,
-                route = "healthoxygen",
-            ),
         )
 
         DetailCard {
@@ -74,6 +70,19 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                 }
             }
         }
+
+        // Asked often enough to be answered here rather than left as a gap
+        // somebody has to work out for themselves. Nothing at this end can
+        // fix it, so the note says where it stops.
+        Text(
+            "Blood oxygen is not on this screen. Your band measures it and Google " +
+                "Health reads it, but Google Health does not write it to Health " +
+                "Connect — oxygen saturation is read-only on its side — so there is " +
+                "nothing here to show.",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.extras.disabled,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+        )
 
         val movedNames = rows.filter { it.trend?.recentHasMoved == true }
             .map { it.name.lowercase() }
@@ -183,8 +192,8 @@ private fun VitalLine(row: VitalRow, onOpen: (String) -> Unit) = Row(
     )
 
     if (row.trend == null) {
-        // A metric nothing writes says so. Blood oxygen is the live example:
-        // Google Health reads it off the band but does not pass it on.
+        // A metric nothing writes says so, rather than showing a dash that
+        // could equally mean a quiet night.
         Text(
             "nothing written",
             style = MaterialTheme.typography.labelMedium,

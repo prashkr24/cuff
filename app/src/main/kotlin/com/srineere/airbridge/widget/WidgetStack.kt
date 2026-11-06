@@ -147,13 +147,21 @@ internal fun stackViews(context: Context, appWidgetId: Int): RemoteViews {
     // in one binder transaction, and this app's minimum is 28 regardless.
     views.setRemoteAdapter(R.id.stack_view, intent)
     views.setEmptyView(R.id.stack_view, R.id.stack_empty)
-    views.setPendingIntentTemplate(R.id.stack_view, openTemplate(context, appWidgetId))
     views.setOnClickPendingIntent(R.id.stack_previous, pageIntent(context, appWidgetId, false))
     views.setOnClickPendingIntent(R.id.stack_next, pageIntent(context, appWidgetId, true))
+    val page = StackPage.read(context, appWidgetId)
+    // The tap belongs to the frame over the flipper rather than to the
+    // card; openIntent says why the collection's own template never fires.
+    // The route is the showing card's, and this runs on every page turn.
+    val showing = WidgetStore.read(context, appWidgetId)?.designs?.getOrNull(page)
+    views.setOnClickPendingIntent(
+        R.id.stack_tap,
+        openIntent(context, appWidgetId, showing?.let { routeFor(it) }),
+    )
     // Last, and in every update rather than only when a page turns: the
     // host rebuilds this view whenever it likes, and without it the stack
     // would drop back to its first card each time it did.
-    views.setDisplayedChild(R.id.stack_view, StackPage.read(context, appWidgetId))
+    views.setDisplayedChild(R.id.stack_view, page)
     return views
 }
 
@@ -207,21 +215,34 @@ internal const val ACTION_NEXT = "com.srineere.airbridge.STACK_NEXT"
 internal const val ACTION_PREVIOUS = "com.srineere.airbridge.STACK_PREVIOUS"
 
 /**
- * The template every card's tap is filled in against.
+ * Opening the screen behind the card that is showing.
  *
- * Mutable deliberately, and it is the one place in this app that asks for a
- * mutable pending intent: a collection's children tap by filling in this
- * intent with their own extra, and an immutable template has nothing to
- * fill in. It names an explicit component in this package, so what the
- * fill-in can reach is one activity of our own.
+ * Not the collection's pending-intent template with a fill-in per card,
+ * which is the documented way and is the way that did nothing here. That
+ * mechanism fires from `AdapterView.performItemClick`, and
+ * `AdapterViewFlipper` never calls it: `AdapterViewAnimator` carries no
+ * item touch handling at all, which is the same reason this stack needs
+ * chevrons rather than a swipe. The template was set, the fill-ins were
+ * set, and a tap on a card went nowhere.
+ *
+ * So the tap is an ordinary click on a frame laid over the flipper, with
+ * the showing card's route baked into it. That works because the whole
+ * layout is rebuilt on every page turn regardless. It also means this app
+ * no longer asks for a mutable pending intent anywhere.
  */
-private fun openTemplate(context: Context, appWidgetId: Int): PendingIntent {
+private fun openIntent(context: Context, appWidgetId: Int, route: String?): PendingIntent {
     val intent = Intent(context, MainActivity::class.java).apply {
         action = Intent.ACTION_MAIN
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        route?.let { putExtra(ROUTE_EXTRA, it) }
+        // Extras are no part of a PendingIntent's identity and the request
+        // code is one per widget, so without something here every card of
+        // every stack would share one intent and open whichever route was
+        // stored last.
+        data = Uri.parse("airstack://$appWidgetId/open/" + (route ?: "none"))
     }
     var flags = PendingIntent.FLAG_UPDATE_CURRENT
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) flags = flags or PendingIntent.FLAG_MUTABLE
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) flags = flags or PendingIntent.FLAG_IMMUTABLE
     return PendingIntent.getActivity(context, appWidgetId, intent, flags)
 }
 
@@ -239,7 +260,6 @@ internal class StackFactory(
 ) : RemoteViewsService.RemoteViewsFactory {
 
     private var cards: List<RemoteViews> = emptyList()
-    private var routes: List<String?> = emptyList()
 
     override fun onCreate() = Unit
 
@@ -248,7 +268,6 @@ internal class StackFactory(
         val stack = WidgetStore.read(context, appWidgetId)?.designs.orEmpty()
         if (stack.isEmpty()) {
             cards = emptyList()
-            routes = emptyList()
             return
         }
         val size = cardSize(context, appWidgetId)
@@ -284,7 +303,6 @@ internal class StackFactory(
                 }
             }.getOrNull()
         }
-        routes = stack.map { routeFor(it) }
         Log.i(
             STACK_TAG,
             "stack $appWidgetId composed ${cards.size} cards at $size " +
@@ -304,21 +322,15 @@ internal class StackFactory(
      * steps chart into a sleep card's frame. Wrapped, every item is the
      * same layout and the differences are all inside it.
      *
-     * The tap is a fill-in against the stack's template rather than an
-     * action on the card, because a child of a collection cannot carry a
-     * pending intent of its own.
+     * No tap here. A child of a collection cannot carry a pending intent
+     * of its own, and the fill-in meant to stand in for one never fires
+     * from a flipper; the frame over the flipper carries it instead.
      */
     override fun getViewAt(position: Int): RemoteViews {
         val item = RemoteViews(context.packageName, R.layout.widget_stack_item)
         val card = cards.getOrNull(position) ?: return item
         item.removeAllViews(R.id.stack_item)
         item.addView(R.id.stack_item, card)
-        item.setOnClickFillInIntent(
-            R.id.stack_item,
-            Intent().apply {
-                routes.getOrNull(position)?.let { putExtra(ROUTE_EXTRA, it) }
-            },
-        )
         return item
     }
 
@@ -333,7 +345,6 @@ internal class StackFactory(
 
     override fun onDestroy() {
         cards = emptyList()
-        routes = emptyList()
     }
 }
 

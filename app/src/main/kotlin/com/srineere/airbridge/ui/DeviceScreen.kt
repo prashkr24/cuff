@@ -66,6 +66,7 @@ import com.srineere.airbridge.ui.theme.Accent
 import com.srineere.airbridge.ui.theme.ThemeMode
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.widget.BandStore
+import com.srineere.airbridge.widget.WidgetRefresh
 import com.srineere.airbridge.ui.theme.isAvailable
 import dev.airpulse.fitbit_air.airResult
 import java.util.concurrent.TimeUnit
@@ -81,30 +82,31 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
 
         BandCard()
 
-        // Appearance outgrew a section: it now carries two grounds, an
-        // accent, a custom colour and the edge weight, which is a screen.
-        SectionHeader("Appearance")
+        // No headings. Four rows under a card do not need two of them, and
+        // "Appearance" over a single row was a label for a label. They run
+        // in the order they are actually opened in instead.
+        Box(Modifier.padding(top = 8.dp))
+        SettingsRow(
+            title = "Home screen widgets",
+            // First, because it is the only one here that changes something
+            // you look at every day. The old subtitle described the band
+            // widget alone, which is one family of six.
+            subtitle = "What the home screen shows, and how it looks",
+            icon = Icons.Outlined.Widgets,
+            onClick = { onOpen("widgets") },
+        )
         SettingsRow(
             title = "Theme",
             subtitle = appearanceSummary(appearance),
             icon = Icons.Outlined.Palette,
             onClick = { onOpen("appearance") },
         )
-
-        SectionHeader("Band")
         SettingsRow(
             title = "Permissions",
             subtitle = permissionsSummary(),
             icon = Icons.Outlined.Lock,
             onClick = { onOpen("permissions") },
         )
-        SettingsRow(
-            title = "Home screen widgets",
-            subtitle = "Band battery and last buzz",
-            icon = Icons.Outlined.Widgets,
-            onClick = { onOpen("widgets") },
-        )
-
         SettingsRow(
             title = "About",
             subtitle = "Your band, this app, and how they talk",
@@ -153,7 +155,12 @@ private fun BandCard() {
                 // time and Google Health holds that session whenever it syncs,
                 // so a widget polling for a fresh charge would quietly cost a
                 // day of steps and sleep. The widgets draw this, dated.
-                battery?.let { BandStore.rememberBattery(context, it, batteryAt) }
+                battery?.let { percent ->
+                    BandStore.rememberBattery(context, percent, batteryAt)
+                    // The other band fact a widget draws, and the other one
+                    // nothing used to pass on.
+                    WidgetRefresh.poke(context)
+                }
                 Band.readSignal(context, airResult(
                     onSuccess = { reading ->
                         syncing = false

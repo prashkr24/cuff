@@ -20,8 +20,16 @@
      square targets rather than strips down the full height, so they rest
      under a card's chart instead of across its figures.
 
-     A tap between the chevrons reaches the card underneath, which opens
-     the screen behind the reading.
+     A tap between the chevrons opens the screen behind the card, and it
+     is stack_tap that carries it rather than the flipper. The usual way
+     for a collection is setPendingIntentTemplate on the adapter view plus
+     a fill in per row, and that mechanism fires from
+     AdapterView.performItemClick. AdapterViewFlipper never calls it: it
+     inherits no touch handling worth the name, which is why it has two
+     chevrons in the first place. So the tap is an ordinary click on a
+     frame laid over the flipper, carrying the showing card's route, and
+     this whole layout is rebuilt on every page turn anyway. The frame is
+     declared before the chevrons so they stay on top of it.
 
      The two animations are animators, under res/animator, and that is not
      a detail: AdapterViewAnimator loads them with AnimatorInflater and
@@ -47,6 +55,11 @@
         android:loopViews="true"
         android:inAnimation="@animator/stack_page_in"
         android:outAnimation="@animator/stack_page_out" />
+
+    <FrameLayout
+        android:id="@+id/stack_tap"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <ImageView
         android:id="@+id/stack_previous"

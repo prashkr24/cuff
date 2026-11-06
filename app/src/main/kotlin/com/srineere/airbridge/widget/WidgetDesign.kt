@@ -54,8 +54,11 @@ enum class WidgetSize(
 enum class WidgetFamily(val label: String, val note: String) {
     Tiles("Your tiles", "The same cards as the Health tab"),
     Band("The band", "What no health app can show"),
-    Rings("Rings", "Three arcs that close"),
-    Dials("Dials", "Big scores on black"),
+    // Rings and Dials were two sections of the same idea: a reading drawn
+    // round. Three thin arcs that close and one thick arc with a figure in
+    // it are two hands, not two families, and splitting them put four
+    // widgets under two headings nobody needed to choose between.
+    Arcs("Drawn round", "Arcs that close, and dials with the figure inside"),
     Type("Type alone", "No card, straight on the wallpaper"),
 }
 
@@ -99,7 +102,7 @@ sealed interface WidgetDesign {
         override val id: String get() = "$RINGS_PREFIX${face.name}"
         override val title: String get() = face.title
         override val summary: String get() = face.summary
-        override val family: WidgetFamily get() = WidgetFamily.Rings
+        override val family: WidgetFamily get() = WidgetFamily.Arcs
         override val sizes: Set<WidgetSize> get() = face.sizes
     }
 
@@ -108,7 +111,7 @@ sealed interface WidgetDesign {
         override val id: String get() = "$DIALS_PREFIX${face.name}"
         override val title: String get() = face.title
         override val summary: String get() = face.summary
-        override val family: WidgetFamily get() = WidgetFamily.Dials
+        override val family: WidgetFamily get() = WidgetFamily.Arcs
         override val sizes: Set<WidgetSize> get() = face.sizes
     }
 
@@ -169,17 +172,18 @@ private fun tileSummary(kind: TileKind): String = when (kind) {
     TileKind.Heart -> "Where it settled overnight, against your fortnight"
     TileKind.Zones -> "Today's beats, by the hour"
     TileKind.Sleep -> "Last night and the week behind it"
+    TileKind.Stages -> "What last night was made of, in proportion"
+    TileKind.SleepBank -> "What a week of nights comes to, against your goal"
     TileKind.Steps -> "Today against your goal, and the week"
     TileKind.Energy -> "In against out, today"
     TileKind.Activity -> "Minutes that counted, and what they were"
-    TileKind.Vitals -> "Breathing, skin temperature and blood oxygen"
+    TileKind.Vitals -> "Resting heart rate, HRV, breathing and skin temperature"
     TileKind.Hrv -> "One figure a night, against its usual band"
     TileKind.Nutrition -> "What you logged, split three ways"
     TileKind.Balance -> "Today's burn and today's food, climbing against each other"
     TileKind.Weight -> "A fortnight of readings, and the drift"
     TileKind.Breathing -> "Breaths a minute while you slept"
     TileKind.Skin -> "How far last night sat from your baseline"
-    TileKind.Oxygen -> "Overnight saturation"
 }
 
 /**

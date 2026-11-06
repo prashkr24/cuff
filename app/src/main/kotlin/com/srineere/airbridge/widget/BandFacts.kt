@@ -121,7 +121,10 @@ object BandStore {
             // is looked up from the rules when the widget is drawn, exactly
             // as the screens do it, so nothing stored here is a person.
             lastBuzzWho = last?.callerId?.let { config.callers[it]?.label },
-            lastBuzzWasCall = last?.preset?.startsWith("ring") == true,
+            // Stored on the entry now. Reading it off the preset called a
+            // silenced caller's double buzz a message, and an app whose
+            // messages are set to Ring a call.
+            lastBuzzWasCall = last?.wasCall == true,
             buzzesToday = delivered.count { it.atMillis >= midnight },
         )
     }

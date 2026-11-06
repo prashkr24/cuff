@@ -67,7 +67,7 @@ import kotlin.math.roundToInt
  * asleep over time in bed, with no weighting to argue about.
  */
 @Composable
-internal fun HealthSleepScreen(onBack: () -> Unit) {
+internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val data by healthData(context)
     val state = LocalHealthState.current
@@ -254,6 +254,12 @@ internal fun HealthSleepScreen(onBack: () -> Unit) {
             StageRow("REM", night.rem, total, extras.sleepRem)
             StageRow("Awake", night.awake, total, extras.sleepAwake)
         }
+
+        SettingsRow(
+            title = "Sleep bank",
+            subtitle = "What these nights add up to, against your goal",
+            onClick = { onOpen("healthsleepbank") },
+        )
 
         Text(
             "Stages come from Google Health through Health Connect. A night the band " +

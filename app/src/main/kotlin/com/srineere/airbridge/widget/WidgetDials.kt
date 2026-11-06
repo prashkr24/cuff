@@ -58,11 +58,6 @@ enum class DialFace(
         "Sleep, steps and burn, each with its figure",
         setOf(WidgetSize.Wide, WidgetSize.Tall),
     ),
-    Burn(
-        "Burned against eaten",
-        "Today's burn and today's food, with the gap between them shaded",
-        setOf(WidgetSize.Wide, WidgetSize.Tall),
-    ),
     Overview(
         "The overview",
         "Three dials, the week under them, and a sentence",
@@ -184,7 +179,6 @@ internal fun DialsWidget(
     when (face) {
         DialFace.Score -> ScoreFace(size, snapshot, colours, onClick)
         DialFace.Three -> ThreeFace(size, snapshot, colours, onClick)
-        DialFace.Burn -> BurnFace(size, snapshot, colours, onClick)
         DialFace.Overview -> OverviewFace(snapshot, colours, onClick)
     }
 }
@@ -253,109 +247,6 @@ private fun ThreeFace(
     }
 }
 
-/**
- * Burned against eaten, the way the screen of that name draws it.
- *
- * Today's climb against yesterday's pace was the old face here, and the
- * comparison was this app's own invention: a straight line drawn to a
- * total from a day that is finished, laid over a day that is not. The
- * screen behind the Energy tile sets today's burn against today's food --
- * both real, both still running -- and the distance between the two lines
- * at any hour is the figure at the top of the card.
- *
- * So this is that screen at widget size: the same two series, the same
- * shaded gap, the same stepped food line, and the key underneath saying
- * which line is which.
- */
-@Composable
-private fun BurnFace(
-    size: WidgetSize,
-    snapshot: WidgetSnapshot,
-    colours: WidgetColours,
-    onClick: Action?,
-) {
-    val day = balanceToday(snapshot.health.snapshot)
-    if (!day.anything || day.burned.size < 2) {
-        Empty(
-            colours,
-            "Burned against eaten",
-            "Nothing burned or eaten has been read for today yet",
-            onClick,
-        )
-        return
-    }
-    val padding = 12.dp
-    val tall = size == WidgetSize.Tall
-    val burnInk = colours.tile(TileColour.Activity)
-    val foodInk = colours.tile(TileColour.Energy)
-    val context = LocalContext.current
-    val dark = colours.isDark(context)
-    val density = context.resources.displayMetrics.density
-    // The heading, the figure and the key under the chart. Over-estimated
-    // on purpose: the chart is followed by a Grow, so guessing high costs
-    // the chart a few pixels while guessing low clips the key off the card.
-    val above = if (tall) 118f else 92f
-    val chartHeight = (innerHeight(padding).value - above).coerceIn(44f, 200f)
-    val widthPx = (innerWidth(padding).value * density).toInt()
-    val heightPx = (chartHeight * density).toInt()
-    val scale = Scale(
-        ink = colours.faintArgb(dark),
-        line = colours.trackArgb(dark),
-        xTicks = day.hourTicks,
-        yLabel = { shortFigure(it.toDouble()) },
-    )
-    val burnArgb = colours.tileArgb(TileColour.Activity, dark)
-    val foodArgb = colours.tileArgb(TileColour.Energy, dark)
-    val bitmap = remember(widthPx, heightPx, day.burned, day.eaten, dark) {
-        ChartBitmap.pair(
-            widthPx, heightPx, day.burned, day.eaten, burnArgb, foodArgb, density, scale,
-        )
-    }
-    val gap = day.gap
-    WidgetCard(colours, onClick, padding) {
-        Kicker("Burned against eaten", foodInk, size = WidgetText.Label)
-        Gap(if (tall) 7.dp else 5.dp)
-        Row(verticalAlignment = Alignment.Bottom) {
-            Figure(
-                signed(gap.roundToInt()),
-                if (tall) WidgetText.FigureXL else WidgetText.FigureL,
-                colours.onBackground,
-                weight = FontWeight.Bold,
-            )
-            Spacer(GlanceModifier.width(6.dp))
-            // "kcal behind, so far today" -- the screen's own line, which
-            // carries the unit so the numeral above it does not have to.
-            Sub(
-                "kcal " + (if (gap < 0) "behind" else "ahead") + ", so far today",
-                colours.faint,
-                size = WidgetText.Label,
-            )
-        }
-        Gap(8.dp)
-        Image(
-            provider = ImageProvider(bitmap),
-            contentDescription = null,
-            contentScale = ContentScale.FillBounds,
-            modifier = GlanceModifier.fillMaxWidth().height(chartHeight.dp),
-        )
-        Grow()
-        Gap(8.dp)
-        // The key, because two unlabelled lines are a picture rather than a
-        // reading. Three Rows and not eleven children: a container here
-        // keeps ten and drops the rest without saying so.
-        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Key("Burned", day.lastBurned, burnInk, colours)
-            Spacer(GlanceModifier.defaultWeight())
-            Key("Eaten", day.lastEaten, foodInk, colours)
-            if (tall) {
-                Spacer(GlanceModifier.defaultWeight())
-                Key("Entries", day.entries, colours.faint, colours, plain = true)
-            }
-        }
-    }
-}
-
-/** One line of the key: its colour, its name, and where it has got to. */
 @Composable
 private fun Key(
     label: String,

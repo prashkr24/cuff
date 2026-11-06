@@ -59,7 +59,6 @@ internal enum class TrendMetric(
     Hrv("HRV", "ms", "healthhrv", 2.0, 0),
     Breathing("Breathing rate", "br/min", "healthbreathing", 0.5, 1),
     Skin("Skin temperature", "°C", "healthskin", 0.1, 1),
-    Oxygen("Blood oxygen", "%", "healthoxygen", 1.0, 0),
     Weight("Weight", "kg", "healthweight", 0.5, 1),
     ;
 
@@ -91,14 +90,13 @@ internal fun HealthTrendScreen(
         TrendMetric.Hrv -> MaterialTheme.extras.hrv
         TrendMetric.Breathing -> MaterialTheme.extras.activity
         TrendMetric.Skin -> MaterialTheme.extras.energy
-        TrendMetric.Oxygen, TrendMetric.Weight -> MaterialTheme.colorScheme.onSurfaceVariant
+        TrendMetric.Weight -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val all = when (metric) {
         TrendMetric.Resting -> data.snapshot.restingHeartRate
         TrendMetric.Hrv -> data.snapshot.hrv
         TrendMetric.Breathing -> data.snapshot.respiratoryRate
         TrendMetric.Skin -> data.snapshot.skinTemperature
-        TrendMetric.Oxygen -> data.snapshot.oxygenSaturation
         TrendMetric.Weight -> data.snapshot.weight
     }
     val axes = rememberAxes()
@@ -206,18 +204,21 @@ internal fun HealthTrendScreen(
                 Row {
                     Stat(
                         "Average",
-                        "${metric.format(trend.average)} ${metric.unit}",
-                        Modifier.weight(1.2f),
+                        metric.format(trend.average),
+                        Modifier.weight(1f),
+                        unit = metric.unit,
                     )
                     Stat(
                         "Usual",
-                        metric.range(trend.usual.low, trend.usual.high) + " " + metric.unit,
-                        Modifier.weight(1.6f),
+                        metric.range(trend.usual.low, trend.usual.high),
+                        Modifier.weight(1.4f),
+                        unit = metric.unit,
                     )
                     Stat(
                         "Spread",
-                        metric.range(trend.lowest, trend.highest) + " " + metric.unit,
-                        Modifier.weight(1.6f),
+                        metric.range(trend.lowest, trend.highest),
+                        Modifier.weight(1.4f),
+                        unit = metric.unit,
                     )
                 }
             }

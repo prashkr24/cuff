@@ -190,7 +190,12 @@ fun AirBridgeApp(openRoute: String? = null) {
                 pushed("healthenergy") {
                     HealthEnergyScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
                 }
-                pushed("healthsleep") { HealthSleepScreen(onBack = nav::popBackStack) }
+                pushed("healthsleep") {
+                    HealthSleepScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
+                }
+                pushed("healthsleepbank") {
+                    HealthSleepBankScreen(onBack = nav::popBackStack)
+                }
                 pushed("healthsteps") {
                     HealthStepsScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
                 }
@@ -242,9 +247,6 @@ fun AirBridgeApp(openRoute: String? = null) {
                 }
                 pushed("healthskin") {
                     HealthTrendScreen(TrendMetric.Skin, onBack = nav::popBackStack)
-                }
-                pushed("healthoxygen") {
-                    HealthTrendScreen(TrendMetric.Oxygen, onBack = nav::popBackStack)
                 }
                 pushed("widgets") { WidgetsScreen(onBack = nav::popBackStack) }
                 pushed("permissions") { PermissionsScreen(onBack = nav::popBackStack) }

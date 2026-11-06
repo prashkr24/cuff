@@ -178,8 +178,8 @@ class WidgetRingsTest {
 
     @Test
     fun `the rings family is no longer listed as unbuilt`() {
-        assertTrue(WidgetFamily.Rings !in WidgetCatalogue.notBuilt)
-        assertTrue(WidgetCatalogue.families().any { it.first == WidgetFamily.Rings })
+        assertTrue(WidgetFamily.Arcs !in WidgetCatalogue.notBuilt)
+        assertTrue(WidgetCatalogue.families().any { it.first == WidgetFamily.Arcs })
     }
 
     /**

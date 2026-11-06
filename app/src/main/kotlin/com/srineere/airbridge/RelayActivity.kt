@@ -25,6 +25,16 @@ internal data class RelayActivity(
     val errorCode: String? = null,
     val preset: String? = null,
     val callerId: String? = null,
+    /**
+     * Whether a call raised this, which the vibration cannot answer.
+     *
+     * It was being inferred from [preset] starting with "ring", and that is
+     * two mistakes in one: a caller with their own pulse rings as a double
+     * buzz and read as a message, while an app whose messages are set to
+     * Ring read as a call. What something was and how it felt are different
+     * facts, so the one that cannot be derived is stored.
+     */
+    val wasCall: Boolean = false,
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "commandId" to commandId, "sourcePackage" to sourcePackage,
@@ -33,8 +43,15 @@ internal data class RelayActivity(
         "preset" to preset,
     )
 
-    /** What the on-device history file holds, which is one field more. */
-    fun toStored(): Map<String, Any?> = toMap() + ("callerId" to callerId)
+    /**
+     * What the on-device history file holds, which is two fields more.
+     *
+     * [wasCall] stays out of [toMap] with [callerId]. Nothing outside needs
+     * it, and a row saying "a call, at this minute" is a thinner fact than
+     * a name but still a fact about who you talk to and when.
+     */
+    fun toStored(): Map<String, Any?> =
+        toMap() + ("callerId" to callerId) + ("wasCall" to wasCall)
 }
 
 internal class RelayActivityBuffer(initial: List<RelayActivity> = emptyList()) {
@@ -117,7 +134,10 @@ internal object RelayHistory {
                 if (value.isNull("errorCode")) null else value.getString("errorCode"),
                 // Entries saved before these fields existed have neither key.
                 if (value.isNull("preset")) null else value.getString("preset"),
-                if (value.isNull("callerId")) null else value.getString("callerId"))
+                if (value.isNull("callerId")) null else value.getString("callerId"),
+                // An entry written before calls were marked is not a call
+                // as far as anything can now tell.
+                value.optBoolean("wasCall", false))
         }
 }
 

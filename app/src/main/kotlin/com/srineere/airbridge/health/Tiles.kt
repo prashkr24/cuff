@@ -92,10 +92,26 @@ enum class TileKind(
         "Weight", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L),
         "healthweight", TileColour.Slate, optional = true,
     ),
-    // The other three vitals. Each has a screen of its own, so each can be
-    // a tile; blood oxygen can be chosen even on a phone where nothing
-    // writes it, because the tile is then the clearest place to find out
-    // why not.
+    // Two more readings of the night the Sleep tile does not make: it is
+    // about the week a night sits in, and these are about the night itself
+    // and about what a run of them comes to.
+    // Both take XL, and both have something to put in it rather than the
+    // same card stretched: the stages get their key, and the bank gets the
+    // count of nights that went each way.
+    Stages(
+        "Last night by stage",
+        setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L, TileSize.XL),
+        "healthsleep", TileColour.Sleep, optional = true,
+    ),
+    SleepBank(
+        "Sleep bank",
+        setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L, TileSize.XL),
+        "healthsleepbank", TileColour.Sleep, optional = true,
+    ),
+    // The other two vitals. Each has a screen of its own, so each can be a
+    // tile. Blood oxygen was a third until it was taken out: the band
+    // measures it and Google Health will not pass it on, so the tile could
+    // only ever have been empty.
     Breathing(
         "Breathing rate", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L),
         "healthbreathing", TileColour.Activity, optional = true,
@@ -103,10 +119,6 @@ enum class TileKind(
     Skin(
         "Skin temperature", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L),
         "healthskin", TileColour.Energy, optional = true,
-    ),
-    Oxygen(
-        "Blood oxygen", setOf(TileSize.S, TileSize.M, TileSize.W, TileSize.L),
-        "healthoxygen", TileColour.Sleep, optional = true,
     ),
     // Two running totals climbing against each other through the day --
     // the one reading here that is a shape rather than a figure, which is
@@ -121,15 +133,16 @@ enum class TileKind(
     /**
      * The name at S, where the full one does not fit.
      *
-     * Chopping at the first space gave "Blood" for blood oxygen and "Skin"
-     * for skin temperature, which name an organ rather than a reading. The
-     * ones that break get written out.
+     * Chopping at the first space gave "Skin" for skin temperature, which
+     * names an organ rather than a reading. The ones that break get written
+     * out.
      */
     val short: String
         get() = when (this) {
+            Stages -> "Stages"
+            SleepBank -> "Bank"
             Zones -> "Heart"
             Skin -> "Skin temp"
-            Oxygen -> "SpO₂"
             Breathing -> "Breathing"
             Nutrition -> "Food"
             Balance -> "Balance"
@@ -163,17 +176,25 @@ data class TileRow(val tiles: List<Tile>)
  * alone. No gaps to explain on the first run, and every size in use, which
  * is also the quickest way to learn that the sizes exist.
  *
+ * Lifted from a tab somebody had actually arranged and then lived with,
+ * rather than guessed at. Three things moved: steps take the full height,
+ * because the ring and the week together are what anyone opens that tile
+ * for; burned against eaten and HRV join the foot of the tab; and resting
+ * heart rate comes out, because the Vitals strip above it already carries
+ * that figure and a default should not say the same thing twice.
+ *
  * No colours are set, so each tile teaches its own.
  */
 val defaultTiles: List<Tile> = listOf(
     Tile(TileKind.Zones, TileSize.XL),
-    Tile(TileKind.Steps, TileSize.L),
+    Tile(TileKind.Steps, TileSize.XL),
     Tile(TileKind.Energy, TileSize.M),
     Tile(TileKind.Nutrition, TileSize.M),
     Tile(TileKind.Sleep, TileSize.XL),
     Tile(TileKind.Vitals, TileSize.W),
     Tile(TileKind.Activity, TileSize.S),
-    Tile(TileKind.Heart, TileSize.L),
+    Tile(TileKind.Balance, TileSize.L),
+    Tile(TileKind.Hrv, TileSize.L),
 )
 
 /**

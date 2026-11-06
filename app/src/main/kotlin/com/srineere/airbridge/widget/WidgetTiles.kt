@@ -787,6 +787,54 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
             )
         }
 
+        TileKind.Stages -> health.lastNight?.let { night ->
+            Face(
+                kicker = "",
+                window = "last night",
+                figure = night.asleep.asHoursMinutes(),
+                sub = if (night.hasStages) {
+                    "deep ${night.deep.asHoursMinutes()} · rem ${night.rem.asHoursMinutes()}"
+                } else {
+                    "written as one block, no stages"
+                },
+                // The line a 4 x 4 has room for, and the one a strip does
+                // not: the card drops it rather than the card being resized.
+                detail = night.efficiency
+                    ?.let { "${(it * 100).roundToInt()}% of the time in bed" },
+                // The night itself, not the week it sits in: that is the
+                // Sleep tile's picture and this one would be a worse copy.
+                chart = night.stageChart(),
+            )
+        }
+
+        TileKind.SleepBank -> {
+            val goal = snapshot.goals.sleepMinutes
+            val week = health.nights.takeLast(7)
+            if (week.isEmpty() || goal <= 0) null else {
+                val balance = week.sumOf { it.asleep.toMinutes() - goal }
+                Face(
+                    kicker = "",
+                    window = "${week.size} nights",
+                    figure = signedSpan(balance),
+                    sub = "against ${goal / 60}h ${"%02d".format(goal % 60)}m a night",
+                    detail = week.count { it.asleep.toMinutes() >= goal }
+                        .let { "$it of ${week.size} nights met it" },
+                    // The nights that made the balance. Drawn as hours
+                    // against the goal rather than as the running total,
+                    // because a running total crosses zero and these bars
+                    // all stand on it.
+                    chart = Chart.Bars(
+                        values = week.map { it.asleep.toMinutes().toFloat() },
+                        goal = goal.toFloat(),
+                        goalLabel = "${goal / 60}h",
+                        xTicks = weekdayTicks(week.map { it.epochDay() }),
+                        yLabel = { "${(it / 60).roundToInt()}h" },
+                        highlightLast = false,
+                    ),
+                )
+            }
+        }
+
         TileKind.Steps -> {
             val goal = snapshot.goals.steps
             val percent = if (goal > 0) (health.stepProgress(goal) * 100).roundToInt() else 0
@@ -894,7 +942,6 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 health.hrvTrend to TileColour.Hrv,
                 health.breathingTrend to TileColour.Activity,
                 health.skinTrend to TileColour.Energy,
-                health.oxygenTrend to TileColour.Slate,
             )
             if (rows.none { it.first != null }) return null
             val inRange = health.vitals.count { it.latestIsUsual }
@@ -1007,18 +1054,6 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 sub = usualBand(trend, 1, signed = true),
                 chart = scatterOf(trend, 14),
                 chip = chipOf(trend, "", decimals = 1),
-            )
-        }
-
-        TileKind.Oxygen -> health.oxygenTrend?.let { trend ->
-            Face(
-                kicker = "",
-                window = "30 nights",
-                figure = trend.latest.roundToInt().toString(),
-                unit = "%",
-                sub = usualBand(trend, 0),
-                chart = scatterOf(trend, 14),
-                chip = chipOf(trend, "", decimals = 0),
             )
         }
     }
@@ -1242,6 +1277,13 @@ private fun List<com.srineere.airbridge.health.HeartSample>.byHour(): List<Float
  * invented breakdown -- the tab's rule, kept here so a week of widget bars
  * and a week of tile bars are the same week.
  */
+/** A balance in hours and minutes, signed, as the Sleep bank screen writes it. */
+private fun signedSpan(minutes: Long): String {
+    val size = abs(minutes)
+    val span = if (size < 60) "${size}m" else "${size / 60}h ${"%02d".format(size % 60)}m"
+    return (if (minutes < 0) "−" else "+") + span
+}
+
 private fun Night.stageParts(): List<Pair<Float, SleepStage>> {
     if (!hasStages) {
         return listOf(asleep.toMinutes().toFloat() to SleepStage.Light).filter { it.first > 0f }

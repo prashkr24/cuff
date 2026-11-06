@@ -40,7 +40,6 @@ fun sampleHealthData(): HealthData {
         hrv = days(today, HRV),
         respiratoryRate = days(today, BREATHING),
         skinTemperature = days(today, SKIN),
-        oxygenSaturation = days(today, OXYGEN),
         nights = nights(today),
         sessions = sessions(),
         heartToday = heartToday(),
@@ -68,7 +67,6 @@ fun sampleHealthData(): HealthData {
         hrvTrend = trendOf(snapshot.hrv),
         breathingTrend = trendOf(snapshot.respiratoryRate),
         skinTrend = trendOf(snapshot.skinTemperature),
-        oxygenTrend = trendOf(snapshot.oxygenSaturation),
         weightTrend = trendOf(snapshot.weight),
         stepsTrend = trendOf(snapshot.steps),
         sleepTrend = trendOf(snapshot.nights.map { Reading(it.day, it.asleep.toMinutes().toDouble()) }),
@@ -172,9 +170,6 @@ private val BREATHING = doubleArrayOf(
 /** A delta against your own baseline, which is how a band reports skin temperature. */
 private val SKIN = doubleArrayOf(
     -0.2, 0.1, -0.4, 0.3, 0.0, -0.1, 0.2, 0.4, -0.3, 0.1, 0.0, 0.3, -0.1, 0.2,
-)
-private val OXYGEN = doubleArrayOf(
-    96.0, 97.0, 95.0, 97.0, 98.0, 96.0, 97.0, 96.0, 98.0, 97.0, 96.0, 97.0, 97.0, 98.0,
 )
 private val ASLEEP = doubleArrayOf(
     412.0, 455.0, 388.0, 471.0, 436.0, 402.0, 448.0,

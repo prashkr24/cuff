@@ -148,8 +148,8 @@ class WidgetCatalogueTest {
 
     @Test
     fun `a design decoded by id is the one it was encoded from`() {
-        val design = WidgetDesign.OfTile(TileKind.Oxygen)
+        val design = WidgetDesign.OfTile(TileKind.Skin)
         assertNotNull(WidgetCatalogue.byId(design.id))
-        assertEquals(TileKind.Oxygen, (WidgetCatalogue.byId(design.id) as WidgetDesign.OfTile).kind)
+        assertEquals(TileKind.Skin, (WidgetCatalogue.byId(design.id) as WidgetDesign.OfTile).kind)
     }
 }

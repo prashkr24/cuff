@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
@@ -429,6 +430,109 @@ internal fun DivergingBars(
             )
         }
         if (target != null) drawGoal(plot, target, below, axes, goalLabel)
+    }
+}
+
+/**
+ * Each night against a goal, and what those nights add up to.
+ *
+ * Two readings in one frame deliberately. The bars are what happened and
+ * the line is what it came to, and "how am I two hours down" is answered by
+ * seeing which nights did it -- which is one picture, not two.
+ *
+ * One scale for both, which flatters neither. A night three quarters of an
+ * hour short is genuinely small beside a balance of two hours, and giving
+ * each its own scale would say otherwise.
+ *
+ * A null night leaves a gap in the bars and leaves the line level. Nothing
+ * was recorded, and a zero there would be a claim that nothing was slept.
+ */
+@Composable
+internal fun BankChart(
+    nightly: List<Double?>,
+    running: List<Double>,
+    short: Color,
+    over: Color,
+    axis: Color,
+    modifier: Modifier = Modifier,
+    height: Dp = 150.dp,
+    axes: Axes? = null,
+    xTicks: List<Pair<Float, String>> = emptyList(),
+    label: (Double) -> String = { shortNumber(it) },
+    selected: Int? = null,
+) {
+    ChartCanvas(modifier, height, false) {
+        if (nightly.isEmpty()) return@ChartCanvas
+        val reach = maxOf(
+            nightly.filterNotNull().maxOfOrNull { abs(it) } ?: 0.0,
+            running.maxOfOrNull { abs(it) } ?: 0.0,
+        ).takeIf { it > 0.0 } ?: 1.0
+        val plot = if (axes == null) {
+            Plot(0f, 0f, size.width, size.height, -reach * 1.12, reach * 1.12)
+        } else {
+            with(axes) {
+                frame(
+                    low = -reach * 1.12,
+                    high = reach * 1.12,
+                    yTicks = listOf(-reach, 0.0, reach),
+                    xTicks = xTicks,
+                    yLabel = label,
+                    baseline = false,
+                )
+            }
+        }
+
+        val middle = plot.y(0.0)
+        val gap = (plot.width / nightly.size * 0.26f).coerceIn(1.5.dp.toPx(), 4.dp.toPx())
+        val barWidth = ((plot.width - gap * (nightly.size - 1)) / nightly.size).coerceAtLeast(1f)
+        val radius = CornerRadius(1.5.dp.toPx())
+        fun centre(index: Int) = plot.left + index * (barWidth + gap) + barWidth / 2f
+
+        // Dashed, because it is the goal met exactly rather than a reading.
+        drawLine(
+            color = axis,
+            start = Offset(plot.left, middle),
+            end = Offset(plot.right, middle),
+            strokeWidth = 1.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())),
+        )
+        selected?.takeIf { it in nightly.indices }?.let { drawMarker(plot, centre(it), short) }
+        nightly.forEachIndexed { index, value ->
+            if (value == null) return@forEachIndexed
+            val y = plot.y(value)
+            drawRoundRect(
+                // Behind the line, so the bars read as the working and the
+                // line as the answer.
+                color = (if (value < 0) short else over).copy(alpha = 0.45f),
+                topLeft = Offset(plot.left + index * (barWidth + gap), minOf(y, middle)),
+                size = Size(barWidth, abs(y - middle).coerceAtLeast(1f)),
+                cornerRadius = radius,
+            )
+        }
+        if (running.size >= 2) {
+            val path = Path()
+            running.forEachIndexed { index, value ->
+                val x = centre(index)
+                val y = plot.y(value)
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path,
+                color = short,
+                style = Stroke(
+                    width = 2.4.dp.toPx(),
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round,
+                ),
+            )
+            // Where it stands now: the figure at the top of the screen,
+            // which ought to be findable on the chart under it.
+            drawCircle(
+                color = short,
+                radius = 4.dp.toPx(),
+                center = Offset(centre(running.lastIndex), plot.y(running.last())),
+            )
+        }
     }
 }
 

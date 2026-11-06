@@ -207,7 +207,12 @@ internal fun HealthEnergyScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                 val whole = series.dropLastWhile { it.day >= LocalDate.now().toEpochDay() }
                     .ifEmpty { series }
                 val average = whole.map { it.value }.average()
-                val weekly = average * 7 / Goals.KCAL_PER_KG
+                // The pace of the days that finished, carried across the
+                // window the chart is showing. It used to be a week
+                // whatever the chart said, so asking a thirty-day question
+                // got a seven-day answer.
+                val span = window.length
+                val periodKg = average * span / Goals.KCAL_PER_KG
                 // Three figures, each a different question. "Days logged"
                 // was a fourth that only said how much of the chart above
                 // was real, which the chart already shows by having gaps.
@@ -215,13 +220,15 @@ internal fun HealthEnergyScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     Stat(
                         "Average",
                         (if (average < 0) "−" else "+") +
-                            count(abs(average).roundToInt().toLong()) + " kcal",
-                        Modifier.weight(1.4f),
+                            count(abs(average).roundToInt().toLong()),
+                        Modifier.weight(1.2f),
+                        unit = "kcal",
                     )
                     Stat(
-                        "A week",
-                        (if (weekly < 0) "−" else "+") + "%.1f kg".format(abs(weekly)),
-                        Modifier.weight(1.1f),
+                        if (span == 7) "A week" else "$span days",
+                        (if (periodKg < 0) "−" else "+") + "%.1f".format(abs(periodKg)),
+                        Modifier.weight(1f),
+                        unit = "kg",
                     )
                     Stat(
                         "In deficit",

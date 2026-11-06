@@ -76,6 +76,7 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
     // They are fetched once, off the main thread, and the rows draw dashes
     // until each one lands rather than holding the whole list back.
     var pickedDay by remember { mutableStateOf<Int?>(null) }
+    val window = rememberChartWindow(7)
     val details = remember { mutableStateMapOf<Long, SessionSummary>() }
 
     // Health Connect owns the permission sheet, and coming back from it is
@@ -112,20 +113,25 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
             return@Column
         }
 
-        val total = sessions.fold(Duration.ZERO) { sum, session -> sum + session.length }
-        val longest = sessions.maxByOrNull { it.length.seconds }
         val zone = java.time.ZoneId.systemDefault()
-        val today = LocalDate.now(zone).toEpochDay()
-        val days = (6L downTo 0L).map { today - it }
-        val byDay = sessions.groupBy { it.start.atZone(zone).toLocalDate().toEpochDay() }
+        val shown = window.slice(sessions) { it.start.atZone(zone).toLocalDate().toEpochDay() }
+        val total = shown.fold(Duration.ZERO) { sum, session -> sum + session.length }
+        val longest = shown.maxByOrNull { it.length.seconds }
+        // Every day of the window, not only the days with a session in
+        // them: a week with two workouts is a week with five rest days,
+        // and the chart has to show both.
+        val days = (0 until window.length).map { window.from + it }
+        val byDay = shown.groupBy { it.start.atZone(zone).toLocalDate().toEpochDay() }
             .mapValues { (_, rows) -> rows.sumOf { it.length.toMinutes() }.toDouble() }
 
         // One card: the week's total, the days it came from, and the goal it
         // is measured against. They were three cards saying one thing.
         DetailCard {
-            // A week's goal, so the mark is for the week and the line says
-            // so. Nothing here is about today on its own.
-            val weekMet = goals.activeMinutes > 0 && total.toMinutes() >= goals.activeMinutes
+            // The goal is a week's worth, so a window of another length is
+            // measured against the same pace over its own days rather than
+            // against a figure that was never about it.
+            val expected = goals.activeMinutes * window.length / 7.0
+            val weekMet = goals.activeMinutes > 0 && total.toMinutes() >= expected
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -140,8 +146,16 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
                         }
                     }
                     Text(
-                        if (weekMet) "minutes · goal ${goals.activeMinutes} met this week"
-                        else "minutes in the last 7 days · goal ${goals.activeMinutes}",
+                        when {
+                            weekMet && window.length == 7 ->
+                                "minutes · goal ${goals.activeMinutes} met"
+                            weekMet -> "minutes · goal pace met over ${window.length} days"
+                            window.isNow && window.length == 7 ->
+                                "minutes in the last 7 days · goal ${goals.activeMinutes}"
+                            else ->
+                                "minutes over these ${window.length} days · " +
+                                    "goal ${goals.activeMinutes} a week"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (weekMet) activity else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -153,6 +167,16 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
                 )
             }
 
+            WindowBar(
+                window = window,
+                options = listOf(7, 14, 30),
+                onChange = {
+                    pickedDay = null
+                    state.widen(context, window.daysNeeded)
+                },
+                modifier = Modifier.padding(top = 10.dp),
+            )
+
             GoalBars(
                 values = days.map { byDay[it] ?: 0.0 },
                 // A weekly goal spread evenly over seven days: the line is
@@ -161,10 +185,13 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
                 colour = activity,
                 dim = activity.copy(alpha = 0.45f),
                 height = 140.dp,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier.padding(top = 10.dp)
                     .scrubbable(days.size, CHART_GUTTER) { pickedDay = it },
                 axes = axes,
                 xTicks = weekdayTicks(days),
+                // Nothing is "the latest" in a window that does not end
+                // today, so nothing in one is lit as though it were.
+                highlightLast = window.isNow,
                 selected = pickedDay,
                 goalLabel = "${(goals.activeMinutes / 7.0).roundToInt()}m",
                 yLabel = { "${it.roundToInt()}m" },
@@ -174,7 +201,7 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
                 day = onDay,
                 value = onDay?.let { "${(byDay[it] ?: 0.0).roundToInt()} min" },
                 detail = onDay?.let { day ->
-                    val count = sessions.count {
+                    val count = shown.count {
                         it.start.atZone(zone).toLocalDate().toEpochDay() == day
                     }
                     when (count) {
@@ -189,31 +216,34 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
-            val summaries = sessions.mapNotNull { details[it.start.toEpochMilli()] }
+            val summaries = shown.mapNotNull { details[it.start.toEpochMilli()] }
             val burned = summaries.sumOf { it.kcal ?: 0.0 }
             val averages = summaries.mapNotNull { it.averageBpm }
             Row {
-                Stat("Sessions", "${sessions.size}", Modifier.weight(1f))
+                Stat("Sessions", "${shown.size}", Modifier.weight(1f))
                 Stat(
                     "Burned",
-                    if (burned > 0) count(burned.roundToInt().toLong()) + " kcal" else "—",
-                    Modifier.weight(1.4f),
+                    if (burned > 0) count(burned.roundToInt().toLong()) else "—",
+                    Modifier.weight(1.1f),
+                    unit = "kcal",
                 )
                 Stat(
-                    "Avg bpm",
+                    "Avg",
                     averages.takeIf { it.isNotEmpty() }?.average()?.roundToInt()?.toString()
                         ?: "—",
                     Modifier.weight(0.9f),
+                    unit = "bpm",
                 )
                 Stat(
-                    "Peak bpm",
+                    "Peak",
                     summaries.mapNotNull { it.peakBpm }.maxOrNull()?.toString() ?: "—",
                     Modifier.weight(0.9f),
+                    unit = "bpm",
                 )
             }
             Text(
                 "Longest ${longest?.length?.asHoursMinutes() ?: "—"} · " +
-                    "${days.count { (byDay[it] ?: 0.0) > 0 }} of 7 days active",
+                    "${days.count { (byDay[it] ?: 0.0) > 0 }} of ${window.length} days active",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.extras.disabled,
                 modifier = Modifier.padding(top = 10.dp),
@@ -235,11 +265,20 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
         // only ever held seven days -- so it promised everything and gave
         // you the same week. It opens the history instead.
         SectionHeader(
-            text = "Last 7 days",
+            text = if (window.isNow && window.length == 7) "Last 7 days"
+            else "${dayLabel(window.from)} to ${dayLabel(window.until)}",
             action = "Show all",
             onAction = { onOpen("healthsessions") },
         )
-        sessions.take(5).forEach { session ->
+        if (shown.isEmpty()) {
+            Text(
+                "No sessions in these days.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+            )
+        }
+        shown.take(5).forEach { session ->
             SessionRow(session, details[session.start.toEpochMilli()], activity) {
                 onOpen("healthsession/${session.start.toEpochMilli()}")
             }
@@ -300,10 +339,16 @@ private fun SessionRow(
         )
     }
 
-    // The four figures worth seeing without opening the session, each in
-    // its own metric's colour, and the session's shape beside them. A walk
-    // the band recorded without heart data keeps its shape and says what is
+    // The figures worth seeing without opening the session, each in its
+    // own metric's colour, and the session's shape beside them. A walk the
+    // band recorded without heart data keeps its shape and says what is
     // missing rather than printing a plausible zero.
+    //
+    // Four of them, not five: peak was the one nobody reads at a glance,
+    // and it is on the session's own screen where the zones explain it.
+    // Steps are short-formed here and written out there too -- four
+    // figures beside a sparkline leave about fifty-five points each, and
+    // "3.4k" fits where "3,412" is clipped.
     val extras = MaterialTheme.extras
     Row(
         verticalAlignment = Alignment.Bottom,
@@ -319,8 +364,13 @@ private fun SessionRow(
                 Modifier.weight(1f),
                 tint = extras.energy,
             )
+            Stat(
+                "steps",
+                detail?.steps?.let { shortNumber(it.toDouble()) },
+                Modifier.weight(1f),
+                tint = extras.steps,
+            )
             Stat("avg", detail?.averageBpm?.toString(), Modifier.weight(1f), tint = extras.heart)
-            Stat("peak", detail?.peakBpm?.toString(), Modifier.weight(1f), tint = extras.zonePeak)
         }
         if (detail != null && detail.trace.size >= 2) {
             SparkLine(

@@ -32,7 +32,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.health.HealthSettings
+import android.appwidget.AppWidgetManager
+import android.content.Intent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material3.Icon
 import com.srineere.airbridge.widget.WidgetCatalogue
+import com.srineere.airbridge.widget.WidgetConfigActivity
 import com.srineere.airbridge.widget.WidgetConfig
 import com.srineere.airbridge.widget.WidgetDesign
 import com.srineere.airbridge.widget.WidgetFamily
@@ -66,7 +72,11 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
     // Reconciled against the launcher rather than trusted: a widget removed
     // while this app was not running leaves its row behind, and a list of
     // widgets that are not there is worse than no list.
-    val placed by produceState(initialValue = emptyList<Pair<Int, WidgetConfig>>(), context) {
+    // Re-read when the screen comes back, because editing one of these
+    // leaves and returns: without it a row would still be drawn as the
+    // widget was before you changed it.
+    val returned = resumeTicks()
+    val placed by produceState(initialValue = emptyList<Pair<Int, WidgetConfig>>(), context, returned) {
         val live = liveIds(context)
         WidgetStore.prune(context, live)
         value = WidgetStore.placed(context).filter { it.first in live }
@@ -95,7 +105,20 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
 
         if (placed.isNotEmpty()) {
             SectionHeader("On your home screen")
-            placed.forEach { (_, config) -> PlacedRow(config, snapshot, now) }
+            placed.forEach { (id, config) ->
+                PlacedRow(config, snapshot, now) {
+                    // The widget's own configuration activity, which is the
+                    // same screen the launcher opens when a widget is
+                    // dropped. It needs nothing but the id: it reads the
+                    // cell and the current choice from there, and writes
+                    // and redraws on the way out.
+                    context.startActivity(
+                        Intent(context, WidgetConfigActivity::class.java)
+                            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
         }
 
         WidgetGallery(snapshot, now, inks)
@@ -115,7 +138,8 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
 
         Text(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                "To change a widget you have already placed, long-press it and choose Edit."
+                "Tap one above to change what it shows. Long-pressing it on the home " +
+                    "screen and choosing Edit opens the same thing."
             } else {
                 "This version of Android has no Edit on a widget's long-press menu, so changing " +
                     "one means taking it off and putting it back."
@@ -342,12 +366,18 @@ private fun ComingRow(family: WidgetFamily) {
 }
 
 @Composable
-private fun PlacedRow(config: WidgetConfig, snapshot: WidgetSnapshot, now: Long) {
+private fun PlacedRow(
+    config: WidgetConfig,
+    snapshot: WidgetSnapshot,
+    now: Long,
+    onEdit: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onEdit)
             .padding(horizontal = 20.dp, vertical = 6.dp)
             .heightIn(min = 44.dp),
     ) {
@@ -374,6 +404,11 @@ private fun PlacedRow(config: WidgetConfig, snapshot: WidgetSnapshot, now: Long)
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Icon(
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

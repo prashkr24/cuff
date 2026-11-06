@@ -36,6 +36,8 @@ data class SessionDetail(
     val kcal: Double? = null,
     val samples: List<HeartSample> = emptyList(),
     val splits: List<Split> = emptyList(),
+    /** Steps taken during it, from whichever source the tab counts. */
+    val steps: Long? = null,
 )
 
 
@@ -50,6 +52,8 @@ data class SessionDetail(
 data class SessionSummary(
     val distanceKm: Double? = null,
     val kcal: Double? = null,
+    /** Steps taken during it, from whichever source the tab counts. */
+    val steps: Long? = null,
     val averageBpm: Int? = null,
     val peakBpm: Int? = null,
     /**
@@ -148,7 +152,11 @@ class SessionReader {
                 add(HeartRateRecord.BPM_MAX)
             }
         }
-        if (metrics.isEmpty()) return SessionSummary()
+        // Its own call, because steps are the one figure here that has to
+        // be filtered by who wrote them, and that filter lives with the
+        // reader that owns it rather than being copied to a second place.
+        val steps = HealthReader().stepsIn(context, from, until)?.takeIf { it > 0 }
+        if (metrics.isEmpty()) return SessionSummary(steps = steps)
         val result = guard("summarise session") {
             client.aggregate(
                 AggregateRequest(
@@ -156,10 +164,11 @@ class SessionReader {
                     timeRangeFilter = TimeRangeFilter.between(from, until),
                 ),
             )
-        } ?: return SessionSummary()
+        } ?: return SessionSummary(steps = steps)
         return SessionSummary(
             distanceKm = result[DistanceRecord.DISTANCE_TOTAL]?.inKilometers?.takeIf { it > 0.0 },
             kcal = result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories,
+            steps = steps,
             averageBpm = result[HeartRateRecord.BPM_AVG]?.toInt(),
             peakBpm = result[HeartRateRecord.BPM_MAX]?.toInt(),
             trace = if (allowed(granted, HeartRateRecord::class)) trace(client, from, until)
@@ -236,6 +245,9 @@ class SessionReader {
             kcal = kcal,
             samples = samples,
             splits = splitsOf(distanceRecords, from),
+            // Through the reader that owns the source filter, so a session
+            // counts the same steps the day around it counts.
+            steps = HealthReader().stepsIn(context, from, until)?.takeIf { it > 0 },
         )
     }
 
