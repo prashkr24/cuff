@@ -83,6 +83,17 @@ data class Readiness(
          * a readiness nobody can use.
          */
         const val POINTS_PER_SD = 15.0
+
+        /**
+         * How far back the screen asks the tab to read.
+         *
+         * [NEEDED] counts readings, not days, and the tab reads thirty days
+         * by default -- so a screen that did not widen the window could
+         * never get past thirty of sixty however long somebody had been
+         * wearing the band. Twice the gate leaves room for the nights HRV
+         * does not land, without reading a year to draw one figure.
+         */
+        const val WINDOW_DAYS = 120
     }
 }
 

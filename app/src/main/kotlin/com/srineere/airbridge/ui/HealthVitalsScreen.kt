@@ -87,15 +87,10 @@ internal fun HealthVitalsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
         val movedNames = rows.filter { it.trend?.recentHasMoved == true }
             .map { it.name.lowercase() }
 
-        Readiness(data.hrvTrend ?: data.restingTrend, extras.hrv, movedNames)
+        Readiness(data.hrvTrend ?: data.restingTrend, extras.hrv, movedNames) {
+            onOpen("readiness")
+        }
 
-        // The card above says whether anything moved; the screen behind
-        // this says by how much, and what the figure stands on.
-        SettingsRow(
-            title = "Readiness",
-            subtitle = "This morning against your own mornings, as a figure",
-            onClick = { onOpen("readiness") },
-        )
         SettingsRow(
             title = "Fitness age",
             subtitle = "Your VO₂ max, expressed in years",
@@ -139,15 +134,23 @@ internal data class VitalRow(
  * claim, so the band is what is drawn and the sentence says what it means.
  */
 @Composable
-private fun Readiness(trend: Trend?, colour: Color, moved: List<String>) {
+private fun Readiness(
+    trend: Trend?,
+    colour: Color,
+    moved: List<String>,
+    onOpen: () -> Unit,
+) {
     if (trend == null || trend.readings.size < 14) return
     val swc = trend.smallestWorthwhileChange
     val baseline = trend.average
     val recent = trend.recent
     val inside = kotlin.math.abs(recent - baseline) <= swc
 
+    // The card is the way in rather than a row repeating its own title
+    // underneath it: this says whether anything moved, and the screen
+    // behind it says by how much and what the figure stands on.
     SectionHeader("Readiness")
-    DetailCard {
+    DetailCard(onClick = onOpen) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (inside) "Normal variation" else "Something has moved",

@@ -20,6 +20,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -54,9 +55,14 @@ import kotlin.math.roundToInt
 internal fun ReadinessScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val data by healthData(context)
+    val state = LocalHealthState.current
     val extras = MaterialTheme.extras
     val ink = LocalTileColour.current ?: extras.hrv
 
+    // Without this the figure is stuck: the tab reads thirty days, the gate
+    // counts sixty readings, and nothing else on this screen would ever ask
+    // for more. Widening is one way and costs one read.
+    LaunchedEffect(Unit) { state.widen(context, Readiness.WINDOW_DAYS) }
     val readiness = remember(data.snapshot) { readinessOf(data.snapshot) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -151,9 +157,16 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
                     )
                 }
                 Text(
-                    "Until there are ${Readiness.NEEDED} nights behind it there is no band " +
-                        "to be inside, so the figure is withheld rather than guessed. The " +
-                        "parts above are shown throughout — they are measurements either way.",
+                    if (readiness.days == 0) {
+                        "Nothing has written an HRV reading, which is the one part this " +
+                            "cannot be worked out without. Check that it is allowed in " +
+                            "Health Connect."
+                    } else {
+                        "Until there are ${Readiness.NEEDED} nights behind it there is no " +
+                            "band to be inside, so the figure is withheld rather than " +
+                            "guessed. The parts above are shown throughout — they are " +
+                            "measurements either way."
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 10.dp),

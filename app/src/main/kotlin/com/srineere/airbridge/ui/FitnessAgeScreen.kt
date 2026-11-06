@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.health.FitnessProfileStore
+import com.srineere.airbridge.health.Readiness
 import com.srineere.airbridge.health.Sex
 import com.srineere.airbridge.health.fitnessAgeOf
 import com.srineere.airbridge.ui.theme.extras
@@ -51,9 +53,13 @@ import kotlin.math.roundToInt
 internal fun FitnessAgeScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val data by healthData(context)
+    val state = LocalHealthState.current
     val extras = MaterialTheme.extras
     val ink = LocalTileColour.current ?: extras.activity
 
+    // VO2 max arrives every week or two, so thirty days is two or three
+    // readings and often none at all. Same window as readiness, same reason.
+    LaunchedEffect(Unit) { state.widen(context, Readiness.WINDOW_DAYS) }
     var profile by remember { mutableStateOf(FitnessProfileStore.read(context)) }
     val fitness = remember(data.snapshot, profile) { fitnessAgeOf(data.snapshot, profile) }
 
