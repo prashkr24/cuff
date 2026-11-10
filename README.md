@@ -35,14 +35,18 @@ where the Air writes them.
 
 ## Screenshots
 
-<!-- Images are pending: see docs/screenshots/README.md for what is wanted and how to capture it. -->
-
 | | |
 | --- | --- |
 | ![The Health tab](docs/screenshots/health-tiles.png)<br>**Health** — a grid you arrange | ![Sleep](docs/screenshots/sleep-detail.png)<br>**Sleep** — a score built from your own nights |
-| ![Apps](docs/screenshots/alerts-apps.png)<br>**Apps** — a vibration each | ![A person](docs/screenshots/person-rule.png)<br>**People** — one caller, across apps |
-| ![Device](docs/screenshots/device-live-heart.png)<br>**Device** — live heart rate off the band | ![Widgets](docs/screenshots/widgets-home.png)<br>**Widgets** — thirty-one designs, five cell sizes |
+| ![Apps](docs/screenshots/alerts-apps.png)<br>**Apps** — a vibration each | ![Device](docs/screenshots/device.png)<br>**Device** — the band, and what it is doing |
+| ![Widgets](docs/screenshots/widgets-home.png)<br>**Widgets** — thirty-one designs, five cell sizes | ![Readiness](docs/screenshots/readiness.png)<br>**Readiness** — settled each morning |
 | ![Morning report](docs/screenshots/morning-report.png)<br>**Morning** — the night, once it has been written | |
+
+Taken on a Pixel-class phone at 1080×2412, dark theme, from a real install
+with real readings. Two of the shots the folder asks for are not here: a
+person's rules, which cannot be shown without showing somebody's name and
+number, and a live heart rate, which has to be started by hand and holds the
+band's one session while it runs.
 
 ## Features
 

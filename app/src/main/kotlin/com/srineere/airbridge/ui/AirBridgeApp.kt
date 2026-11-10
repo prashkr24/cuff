@@ -119,11 +119,32 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
     // different back stacks is a tab that behaves differently depending on
     // how you got there, and that is not something anybody can hold in
     // their head.
+    // No saveState, and no restoreState. They are the reason the Health tab
+    // could stop working, and the reason is worth keeping written down.
+    //
+    // The Material recipe for a bottom bar is
+    // `popUpTo(startDestination) { saveState = true }` with
+    // `restoreState = true`, and it assumes each tab is a *nested graph* with
+    // a back stack of its own. This graph is flat: `apps`, `healthsleep`,
+    // `people` and the rest are all siblings of the three tabs, not children
+    // of them. So "save whatever sits above the start destination, and put it
+    // back when you return" does not mean "restore this tab" here -- it means
+    // "restore the last pushed screen anybody was looking at", whichever tab
+    // they tapped.
+    //
+    // Which is exactly what it did. Open Apps, go to Device, tap Health, and
+    // the saved stack came back: Apps again, under a Health tab that now
+    // looked selected and would not move however many times it was tapped,
+    // because every tap restored the same screen. It is also why it was
+    // intermittent -- it needs a pushed screen to have been saved first, so
+    // it never happened on a fresh start.
+    //
+    // Without them a tab goes to its own root, which is what a tab is for.
+    // The cost is a scroll position; the thing bought is a bar that answers.
     val goToTab: (String) -> Unit = { route ->
         nav.navigate(route) {
-            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            popUpTo(nav.graph.findStartDestination().id)
             launchSingleTop = true
-            restoreState = true
         }
     }
 

@@ -35,8 +35,8 @@ android {
         applicationId = "com.srineere.cuff"
         minSdk = 28
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.3.0"
+        versionCode = 25
+        versionName = "0.3.1"
 
         // The transport ships prebuilt .so files for three ABIs and is only
         // tested on arm64 -- upstream says so and so does our README. Packing
