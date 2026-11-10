@@ -13,8 +13,15 @@ plugins {
 val releaseKey = Properties().apply {
     rootProject.file("key.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
 }
+// Blank counts as absent, and that distinction is the whole of a CI failure.
+// A workflow that decides whether to sign cannot leave an environment
+// variable out of a step -- it sets it to "" instead. That is not null, so a
+// plain `?:` chain hands "" on as if it were a path, and the build dies on
+// `Cannot convert '' to File` at assembleRelease, after the tests and the
+// lint have passed. Locally the variable is simply unset and none of this
+// shows up, which is the worst kind of difference between two machines.
 fun releaseSetting(name: String, env: String): String? =
-    releaseKey.getProperty(name) ?: System.getenv(env)
+    (releaseKey.getProperty(name) ?: System.getenv(env))?.takeIf { it.isNotBlank() }
 
 android {
     namespace = "com.srineere.airbridge"
