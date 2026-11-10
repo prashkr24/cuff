@@ -1385,8 +1385,27 @@ class CalendarRelayService : Service() {
  * worth sending, and once more inside [CalendarRelayService.dispatch] -- and
  * because [followUpAt] has to reason about it against a number chosen for an
  * entirely different reason.
+ *
+ * **Ninety seconds, and the figure is argued rather than inherited.** It was
+ * thirty, which arrived whole with the Flutter port carrying no comment, no
+ * test and no mention in the handover -- and thirty is shorter than one slow
+ * band operation, which made it the sharp edge in the arithmetic above.
+ * `AirLink` waits out forty-five seconds before it calls an operation timed
+ * out, and the coalescer adds its fifteen on top, so sixty is the worst a
+ * burst can honestly be made to wait by a band that is merely struggling.
+ * Ninety clears that with room, and nothing the band can do on its own now
+ * outlives the window.
+ *
+ * The ceiling is not technical but human: this is how late a buzz may be and
+ * still be worth feeling. Past a minute and a half the wrist is answering a
+ * message you have already read on the phone in your hand, which is noise
+ * rather than news. If it ever wants raising again, that is the argument to
+ * have, not the timeout arithmetic.
+ *
+ * Not to be confused with [CalendarAlertFilter]'s own staleness gate, which
+ * is a different window that happened to share this number. See it.
  */
-internal const val ALERT_LIFETIME_MILLIS = 30_000L
+internal const val ALERT_LIFETIME_MILLIS = 90_000L
 
 /**
  * How much of that window the follow-up keeps in hand.

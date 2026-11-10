@@ -670,8 +670,19 @@ adb logcat -s AirBridge
   idle phone is exactly when Google Health takes the Air's single session
   and a write gets slow, which is why it read as "missed when locked".
   `followUpAt` now schedules at the earlier of the cooldown and the oldest
-  waiting alert's expiry. Change any one of the three numbers and do this
-  arithmetic again.
+  waiting alert's expiry, and the lifetime has been raised to ninety so that
+  sixty — a full `AirLink` timeout plus the cooldown — fits inside it with
+  room. Change any one of the three numbers and do this arithmetic again.
+- **There is a fourth thirty seconds, and it is not the same window.**
+  `CalendarAlertFilter`'s `ARRIVAL_STALENESS_MILLIS` asks how old a
+  notification already was *when it reached us*, which in the ordinary case
+  is milliseconds and refuses nothing; it exists for the listener reconnect,
+  where every notification on the phone is handed back with its original
+  `postTime`. `ALERT_LIFETIME_MILLIS` asks how long an alert the relay has
+  already accepted may wait and still be worth sending. They were both
+  thirty for a while and that was a coincidence, not a rule. Raising the
+  door to match the queue would replay a minute and a half of old
+  notifications onto a wrist every time the listener reconnects.
 - **`setIntent` makes a widget's tap permanent.** The activity is singleTop,
   so `onNewIntent` calls `setIntent` and `getIntent()` answers with that
   widget's intent for as long as the instance lives. A configuration change
@@ -1445,12 +1456,16 @@ afternoon rediscovering one.
    old service destroys itself with nothing left to bring it back. The revive
    check asks whether a service *object* exists; it should ask whether one is
    still relaying.
-3. **`ALERT_LIFETIME_MILLIS` is thirty seconds and has never been justified.**
-   It arrived whole with the Flutter port and has no comment, no test and no
-   mention here in its history. It is shorter than one slow band operation,
-   which is the whole trap above. Sixty to ninety seconds would cover a full
-   `AirLink` timeout. It is one line, and it is a question about how late a
-   buzz is still worth feeling, which is not a question the code can answer.
+3. ~~`ALERT_LIFETIME_MILLIS` is thirty seconds and has never been
+   justified.~~ **Settled: it is ninety.** Thirty arrived whole with the
+   Flutter port, carrying no comment, no test and no mention here, and was
+   shorter than one slow band operation — which is what made the arithmetic
+   above sharp. `AirLink` gives up at forty-five seconds and the coalescer
+   adds fifteen, so sixty is the worst a merely struggling band can impose;
+   ninety clears it, and nothing the band can do on its own now outlives the
+   window. The ceiling is a human one rather than a technical one and is
+   written at the constant: past a minute and a half the wrist is answering
+   a message already read on the phone in your hand.
 
 Also pre-existing and unchanged: the readiness **widget** face has no
 `day != today` guard, unlike `ReadinessTile` on the tab, so it can draw

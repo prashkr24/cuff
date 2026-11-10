@@ -18,6 +18,9 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Added
 
+- **The sleep score on the sleep stages widget**, at 4x4, in the trailing
+  slot the Sleep card already uses and from the same reading, so the two
+  sleep widgets cannot disagree. [10 Nov]
 - **Spoken descriptions on every chart worth hearing.** A screen reader landed
   on a Canvas, found nothing, and said nothing; the readout under it fills
   from a scrub, which is not available to someone using a reader. Each chart
@@ -132,6 +135,35 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Fixed
 
+- **A burst of notifications behind one slow band write disappeared.** The
+  coalescer's cooldown is measured from the end of the previous command and
+  the alert lifetime from when the notification was posted, so a held burst
+  waited `write + 15s` against a budget of 30s and any write over about
+  thirteen seconds killed every alert behind the first. A locked, idle phone
+  is when Google Health takes the Air's one session and writes get slow,
+  which is why it read as notifications going missing while the phone was
+  away. The follow-up is now scheduled against the oldest waiting alert's
+  expiry, and the lifetime is 90s so a full 45s band timeout plus the
+  cooldown fits inside it. [10 Nov]
+- **Expired alerts left no trace.** `expired` was not shown in the activity
+  list, so the one failure with nowhere to be seen was the one holding the
+  burst. It is shown, and every failure now reads "Failed" before it reads
+  why, with twelve error codes traced to their raise sites and given a
+  sentence each. [10 Nov]
+- **Readiness was only ever computed by the screen showing it.** Opening it
+  forced a 120-day read and said "Calibrating" until that landed; no
+  background pass ever did the work, because the morning worker read 30 days
+  and was cancelled outright when the morning report was off, which is the
+  default. It now rides that worker and keeps the series, keyed by the
+  morning it describes. [10 Nov]
+- **The band widget called every app notification "Message"**, including the
+  app's own step goal and hourly nudge, because the only name it would
+  accept was a saved caller's. It resolves the app at draw time now, the way
+  the Alerts list does. [10 Nov]
+- **Opening the app from a widget could strand the Health tab.** The route
+  extra was never consumed, so a configuration change replayed it; a widget
+  asking for Health never navigated at all; and the bar treated a tap on an
+  already-selected tab as a no-op. [10 Nov]
 - **The workout list and the workout tile disagreed.** `SessionReader` read
   exercise sessions unfiltered while the tab's own count filtered them, so two
   apps writing the same run showed it once in the tile and twice in the

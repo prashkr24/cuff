@@ -34,15 +34,15 @@ class RelayFollowUpTest {
 
     @Test fun `a slow write no longer takes the burst down with it`() {
         // Around fifteen seconds is the figure the handover gives for a read
-        // while something else holds the band's session, and this is the case
-        // the clamp exists for: the write itself leaves the alert inside its
-        // lifetime, and the cooldown on top of it is what pushed it out.
+        // while something else holds the band's session. Under the old
+        // thirty-second lifetime this write plus the cooldown put the burst
+        // past its expiry and the clamp was the only thing saving it; at
+        // ninety it is comfortably inside, and the cooldown simply stands.
+        // Both halves of the fix are in that sentence, which is why the
+        // assertion is that nothing had to be brought forward.
         val ends = cooldownEndsAfterAWriteOf(20_000)
-        assertTrue(ends > posted + ALERT_LIFETIME_MILLIS)
-        assertEquals(
-            posted + ALERT_LIFETIME_MILLIS - FOLLOW_UP_MARGIN_MILLIS,
-            followUpAt(ends, posted),
-        )
+        assertTrue(ends < posted + ALERT_LIFETIME_MILLIS)
+        assertEquals(ends, followUpAt(ends, posted))
     }
 
     @Test fun `what is sent is still fresh when dispatch tests it again`() {
@@ -53,15 +53,31 @@ class RelayFollowUpTest {
         assertTrue(at < posted + ALERT_LIFETIME_MILLIS)
     }
 
-    @Test fun `a write longer than the lifetime is past saving, and says so`() {
-        // AirLink waits out forty-five seconds before it calls an operation
-        // timed out. The alert was already too old before that write
-        // returned, so the deadline lands in the past: the caller turns it
-        // into a delay of zero and sendFollowUp drops it. Nothing here can
-        // change that -- only the lifetime can.
-        val at = followUpAt(cooldownEndsAfterAWriteOf(45_000), posted)
-        assertEquals(posted + ALERT_LIFETIME_MILLIS - FOLLOW_UP_MARGIN_MILLIS, at)
-        assertTrue(at < posted + 45_000)
+    @Test fun `even a write that runs to AirLink's timeout is now saved`() {
+        // The case the lifetime was raised for. AirLink waits out forty-five
+        // seconds before it calls an operation timed out, and the coalescer
+        // adds fifteen: sixty, which under the old thirty-second lifetime
+        // meant the whole burst was already dead when the write came back,
+        // and nothing in this function could have helped it. At ninety the
+        // burst outlives the worst the band can do on its own, and the
+        // cooldown stands untouched.
+        val ends = cooldownEndsAfterAWriteOf(45_000)
+        assertTrue(ends < posted + ALERT_LIFETIME_MILLIS)
+        assertEquals(ends, followUpAt(ends, posted))
+    }
+
+    @Test fun `the clamp still bites when something holds the band far longer`() {
+        // The clamp has not been made dead code by the raise -- it is now
+        // reached by a band held past anything AirLink would wait for, which
+        // is contention rather than a timeout. Eighty seconds plus the
+        // cooldown is past ninety, so the follow-up is pulled back to the
+        // oldest alert's expiry less the margin.
+        val ends = cooldownEndsAfterAWriteOf(80_000)
+        assertTrue(ends > posted + ALERT_LIFETIME_MILLIS)
+        assertEquals(
+            posted + ALERT_LIFETIME_MILLIS - FOLLOW_UP_MARGIN_MILLIS,
+            followUpAt(ends, posted),
+        )
     }
 
     @Test fun `nothing waiting means the cooldown stands`() {
@@ -72,10 +88,13 @@ class RelayFollowUpTest {
         // sendFollowUp judges each member separately, so a burst dies one
         // alert at a time: the deadline has to be the first one to go, not
         // the last.
+        // The write has to be long enough to reach the clamp at all -- past
+        // ninety seconds once the cooldown is added -- or this asserts
+        // nothing about which alert was chosen, only that the cooldown stood.
         val oldest = minOf(posted, posted + 4_000, posted + 9_000)
         assertEquals(
             posted + ALERT_LIFETIME_MILLIS - FOLLOW_UP_MARGIN_MILLIS,
-            followUpAt(cooldownEndsAfterAWriteOf(25_000), oldest),
+            followUpAt(cooldownEndsAfterAWriteOf(80_000), oldest),
         )
     }
 }
