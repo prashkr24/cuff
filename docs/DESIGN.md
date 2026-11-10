@@ -1,4 +1,4 @@
-# Air Bridge — technical design
+# Cuff — technical design
 
 Written 6 November 2026, against branch `native`. This document is for an
 Android engineer who has never seen the repository and wants to understand how
@@ -128,8 +128,8 @@ air-bridge/
 
 ### `:app`
 
-`com.srineere.airbridge`, `applicationId` `com.srineere.airbridge`, with debug
-installing as `com.srineere.airbridge.dev` so it sits beside a release build
+Namespace `com.srineere.airbridge`, `applicationId` `com.srineere.cuff`, with
+debug installing as `com.srineere.cuff.dev` so it sits beside a release build
 rather than over it. Source lives under `app/src/main/kotlin/com/srineere/airbridge/`
 in four groups:
 
@@ -1388,7 +1388,7 @@ fatal on somebody else's.
 ```
 
 Two things about it are worth knowing before touching it. The run installs
-`com.srineere.airbridge` **clean**, so it starts with no Health Connect grants
+`com.srineere.cuff` **clean**, so it starts with no Health Connect grants
 and the tab draws its "Allow Health Connect" card — a profile recorded that way
 is a profile of the empty state, and it looks like a *tidier* profile rather
 than a broken one (`HealthChartsKt` went from 72 rules to none, and the file

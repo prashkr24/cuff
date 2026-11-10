@@ -26,8 +26,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Air Bridge version
-      description: Device → About → Air Bridge.
+      label: Cuff version
+      description: Device → About → Cuff.
       placeholder: "0.3.0"
     validations:
       required: true

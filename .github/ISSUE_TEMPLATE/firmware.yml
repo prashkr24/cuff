@@ -1,5 +1,5 @@
 name: New Air firmware
-description: Tell us whether Air Bridge works on a firmware version it hasn't been tested with.
+description: Tell us whether Cuff works on a firmware version it hasn't been tested with.
 labels: [firmware]
 body:
   - type: markdown
@@ -40,8 +40,8 @@ body:
   - type: input
     id: phone
     attributes:
-      label: Phone, Android version and Air Bridge version
-      placeholder: Pixel 7 Pro, Android 16, Air Bridge 0.3.0
+      label: Phone, Android version and Cuff version
+      placeholder: Pixel 7 Pro, Android 16, Cuff 0.3.0
     validations:
       required: true
   - type: textarea

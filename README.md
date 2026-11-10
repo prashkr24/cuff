@@ -1,4 +1,4 @@
-# Air Bridge
+# Cuff
 
 **Calls and notifications on a Fitbit Air, plus a Health tab worth opening.**
 
@@ -111,7 +111,7 @@ Device tab, the alerts and the live heart rate reading.
   neither can reach your wrist while it is off.
 - **A food log — the only thing this app writes.** Entries go to Health Connect
   as nutrition records, and deleting one there is done from the log. Saved
-  foods live in Air Bridge, because Health Connect records what you ate and
+  foods live in Cuff, because Health Connect records what you ate and
   keeps no list of foods to pick from.
 - **Export.** A zip of four CSVs — days, nights, workouts, food — written
   wherever the file picker is pointed.
@@ -140,7 +140,7 @@ There is no Play listing. Installing means sideloading an APK, and the app then
 needs four grants that no installer can make for you.
 
 **1. Pair the Air in Google Health first.** This app does not own the pairing
-and cannot create one. Leave it paired; Air Bridge borrows the connection
+and cannot create one. Leave it paired; Cuff borrows the connection
 rather than replacing it.
 
 **2. Allow installing from your browser or file manager.** On Android 9–11 this
@@ -167,10 +167,10 @@ nothing to relay.
 some phones this matters more than anything in the code: without it Android
 stops background work once the screen has been off a while.
 
-**7. For the Health tab, install Health Connect and allow Air Bridge in it.**
+**7. For the Health tab, install Health Connect and allow Cuff in it.**
 On Android 14 and up Health Connect is part of the system. On Android 13 and
 below it is a separate app from the Play Store, and the Health tab will say so
-rather than showing an empty grid. Air Bridge asks for thirteen read
+rather than showing an empty grid. Cuff asks for thirteen read
 permissions and one write — nutrition, which is what logging food saves — plus
 two optional extras: reading further back than thirty days, and reading while
 the app is off screen for the goal buzz and the widgets. Refusing either costs
@@ -205,7 +205,7 @@ Install a debug build with:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Debug installs as `com.srineere.airbridge.dev`, beside a release build rather
+Debug installs as `com.srineere.cuff.dev`, beside a release build rather
 than over it. Do not run both at once — the band grants one secure session at a
 time and two builds fighting over it turns a two-second read into fifteen.
 
@@ -233,9 +233,14 @@ Tagged `v<versionName>`, matching `versionName` in
 `versionCode` 24. The scheme is semantic in shape and pre-1.0 in meaning: the
 minor number moves when a tab, a screen or the stored config's schema changes,
 the patch number for fixes, and nothing is promised to be stable until 1.0.
-`versionCode` increments monotonically and is never reused. `applicationId` is
-final — `com.srineere.airbridge` — and can never change, because a GitHub
-release and any future listing have to install over each other.
+`versionCode` increments monotonically and is never reused.
+
+`applicationId` is `com.srineere.cuff`. It changed once, when the app was
+renamed from Air Bridge, and that was a deliberate break rather than an
+upgrade: a new id installs *beside* the old app rather than over it, so
+anybody carrying the earlier build keeps it until they remove it themselves.
+It does not change again — a GitHub release and any future listing have to
+install over each other.
 
 Pushing a tag that matches `v*` runs
 [`.github/workflows/release.yml`](.github/workflows/release.yml): it assembles

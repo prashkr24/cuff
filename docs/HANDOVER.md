@@ -1,4 +1,4 @@
-# Air Bridge — handover
+# Cuff — handover
 
 Written 3 November 2026, updated 4, 5 and 6 November, on branch `native`. A
 commit hash is deliberately not named here: it went stale within the day,
@@ -20,8 +20,8 @@ about this codebase — see **Traps**.
 
 `master` holds the original Flutter proof of concept. `native` is a ground-up
 Kotlin + Compose rewrite, decided on 3 November 2026, and is where all work
-happens. The two have **separate application ids** (`com.srineere.airbridge`
-and `com.srineere.airbridge.dev`) and must not run at once.
+happens. The two have **separate application ids** (`com.srineere.cuff`
+and `com.srineere.cuff.dev`) and must not run at once.
 
 ## Shape of the app
 
@@ -379,7 +379,7 @@ steps     phone + com.fitbit.FitbitMobile
 sleep     com.fitbit.FitbitMobile
 workouts  com.fitbit.FitbitMobile
 calories  com.fitbit.FitbitMobile
-food      com.fitbit.FitbitMobile, com.srineere.airbridge.dev
+food      com.fitbit.FitbitMobile, com.srineere.cuff.dev
 ```
 
 Food is the one worth looking at twice: this app is a writer there, and under
@@ -623,8 +623,8 @@ Inspecting state on the phone, which is how most bugs here have actually been
 found:
 
 ```bash
-adb shell "run-as com.srineere.airbridge.dev cat shared_prefs/relay_rules.xml"
-adb shell "run-as com.srineere.airbridge.dev cat shared_prefs/calendar_relay.xml"
+adb shell "run-as com.srineere.cuff.dev cat shared_prefs/relay_rules.xml"
+adb shell "run-as com.srineere.cuff.dev cat shared_prefs/calendar_relay.xml"
 adb logcat -s AirBridge
 ```
 
@@ -717,7 +717,7 @@ adb logcat -s AirBridge
   one.** Regenerating produced a *smaller* file — 2,828 rules removed, 112
   added, 15% down — which reads as tightening and was the opposite:
   `HealthChartsKt` went from 72 rules to **none** and `HealthScreenKt` from
-  196 to 16. The profile records against `com.srineere.airbridge`, a
+  196 to 16. The profile records against `com.srineere.cuff`, a
   different install from the `.dev` build on the phone, and the tooling
   installs it clean for every run, so it starts with no Health Connect grants
   and the recording describes the "Allow Health Connect" card. Nothing warned;
@@ -1108,7 +1108,7 @@ two tabbed lists and a five-field form all at once, and nothing on it said
 which part you were meant to begin with. Nothing is written from a list: the
 figures pass through the form, where they can still be corrected.
 
-Saved foods are Air Bridge's own, in `SavedFoods`. They can be edited and
+Saved foods are Cuff's own, in `SavedFoods`. They can be edited and
 deleted on their own screen; renaming one is a remove and a save, because
 saving under the new name alone would leave the old one behind. They have to be: Health
 Connect has one food record, `NutritionRecord`, which is a thing eaten at a

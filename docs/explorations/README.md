@@ -4,6 +4,17 @@ Four questions asked in one sitting, answered in parallel. Each report stands
 alone; this page is the index and the part that only shows up when you read
 all four together.
 
+> **These are dated reports, left as they were written.** Two things have
+> changed under them since and they have deliberately not been edited to
+> match, because a research note quietly updated is a research note you can
+> no longer date. The app was called **Air Bridge** on 4 November and is
+> called **Cuff** now — every mention of the old name in these four files
+> means this app. And the finding below about `DataOrigin` was true when it
+> was written and is not any more: per-reading source filtering landed on
+> 6 November, and `health/Written.kt` is now the list and the reasoning.
+> `docs/HANDOVER.md` is the living document; these are the thinking that
+> went into it.
+
 | Report | Question | Verdict |
 |---|---|---|
 | [ios-support.md](ios-support.md) | Can this run on iOS? | Health half yes. Alerts half **only in the EU**, on an API that shipped after the README's claim was written. |
