@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.RelayActivity
 import com.srineere.airbridge.RelayPreset
+import com.srineere.airbridge.describeRelayFailure
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.ui.theme.isDark
 import java.text.SimpleDateFormat
@@ -241,8 +242,11 @@ private fun describeActivity(stage: String, errorCode: String?, preset: String?)
         "verified" -> shape ?: "Buzzed"
         "ring_started" -> "Started ringing"
         "ring_stopped" -> "Ring ended"
-        else -> errorCode?.lowercase()?.replace('_', ' ')?.replaceFirstChar { it.uppercase() }
-            ?: "Did not reach the band"
+        // Says "Failed" first, then why, where the code has a traced
+        // meaning. A row that reads only "Handshake timeout" tells somebody
+        // what the band said; it does not tell them the buzz never arrived,
+        // which is the thing they opened this list to find out.
+        else -> describeRelayFailure(stage, errorCode)
     }
 }
 

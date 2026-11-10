@@ -63,7 +63,19 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
     // counts sixty readings, and nothing else on this screen would ever ask
     // for more. Widening is one way and costs one read.
     LaunchedEffect(Unit) { state.widen(context, Readiness.WINDOW_DAYS) }
+    // Opens on the morning's figure if one has been worked out, which is
+    // what [readinessToday] is now for: the figure, the band and the count
+    // of nights come from what was kept, and the four rows underneath fill
+    // in when the read above lands. Before that was kept, this screen spent
+    // the whole of a hundred-and-twenty-day read saying "calibrating" at
+    // somebody who had opened it to see a number settled hours earlier.
     val readiness = remember(data.snapshot) { readinessToday(context, data.snapshot) }
+    // An unread window and an empty one look identical -- the trap every
+    // chart on this tab already checks `loading` for. "Calibrating, not
+    // enough nights behind it yet" is a verdict, and printing it over a
+    // read that has not come back is the screen answering a question it
+    // has not asked yet.
+    val reading = state.loading && readiness.days == 0
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         val today = java.time.LocalDate.now().toEpochDay()
@@ -90,8 +102,11 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.padding(bottom = 4.dp)) {
                     Text(
-                        if (readiness.calibrating) "Calibrating"
-                        else readiness.word.replaceFirstChar { it.uppercase() },
+                        when {
+                            reading -> "Reading"
+                            readiness.calibrating -> "Calibrating"
+                            else -> readiness.word.replaceFirstChar { it.uppercase() }
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -100,7 +115,11 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
                         readiness.trend?.let { trend ->
                             "your own ${readiness.days} nights · usual is " +
                                 "${trend.usual.low.roundToInt()}–${trend.usual.high.roundToInt()}"
-                        } ?: "not enough nights behind it yet",
+                        } ?: if (reading) {
+                            "reading your last ${Readiness.WINDOW_DAYS} days"
+                        } else {
+                            "not enough nights behind it yet"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = extras.disabled,
                     )
@@ -194,7 +213,10 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
             }
         }
 
-        if (readiness.calibrating) {
+        // Held back while the read is in flight for the same reason: this
+        // card explains why there is no figure, and "nothing has written an
+        // HRV reading" is a finding, not a loading state.
+        if (readiness.calibrating && !reading) {
             SectionHeader("Before it can say anything")
             DetailCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {

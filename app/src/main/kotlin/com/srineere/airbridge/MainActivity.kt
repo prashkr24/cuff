@@ -47,6 +47,17 @@ class MainActivity : ComponentActivity() {
 
     private fun asked(intent: Intent?) {
         val route = intent?.getStringExtra(ROUTE_EXTRA) ?: return
+        // Read once, then taken off the intent.
+        //
+        // onNewIntent calls setIntent, so getIntent() goes on answering with
+        // the widget's intent for as long as this instance lives -- and a
+        // configuration change outside the list this activity handles
+        // (screenLayout, keyboard, a few others) recreates it and runs
+        // onCreate against that same retained intent. Without this line the
+        // app would navigate to the widget's screen again, having been told
+        // to once, which is how somebody who has walked somewhere else gets
+        // pulled back to a screen they left.
+        intent.removeExtra(ROUTE_EXTRA)
         openRoute = route to ++opened
     }
 

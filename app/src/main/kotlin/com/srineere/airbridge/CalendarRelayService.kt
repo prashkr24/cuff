@@ -509,9 +509,7 @@ class CalendarRelayService : Service() {
         // and pick up anything that was waiting while it ran. Dropping this
         // answer left those alerts waiting for a follow-up nobody scheduled.
         val now = System.currentTimeMillis()
-        coalescer.onFinished(now)?.let {
-            if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now))
-        }
+        coalescer.onFinished(now)?.let { scheduleFollowUp(it, now) }
         refreshNotification()
     }
 
@@ -584,13 +582,13 @@ class CalendarRelayService : Service() {
         val now = System.currentTimeMillis()
         when (val decision = coalescer.onAlert(id, now)) {
             RelayCoalescer.Decision.DispatchNow ->
-                dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match, callerId, kind)
+                dispatch(id, sbnPackage, postedAt, postedAt + ALERT_LIFETIME_MILLIS, match, callerId, kind)
             is RelayCoalescer.Decision.Merged -> {
                 if (kind == RelayAlertKind.CALL) followUpHasCall = true
                 if (!holdingFollowUp) { holdingFollowUp = true; begin() }
                 inFlight[id] = sbnPackage to postedAt
                 record(id, sbnPackage, postedAt, "merged", match = match, callerId = callerId)
-                decision.scheduleAtMillis?.let { handler.postDelayed(followUp, maxOf(0, it - now)) }
+                decision.scheduleAtMillis?.let { scheduleFollowUp(it, now) }
             }
         }
     }
@@ -606,6 +604,31 @@ class CalendarRelayService : Service() {
         if (holdingFollowUp) { holdingFollowUp = false; end() }
     }
 
+    /**
+     * Posts the follow-up for a burst, no later than the oldest alert in it
+     * can survive. [cooldownEndsAt] is the coalescer's answer; [followUpAt]
+     * says why that answer is not always the one to use.
+     */
+    private fun scheduleFollowUp(cooldownEndsAt: Long, now: Long) {
+        if (stopping) return
+        val at = followUpAt(cooldownEndsAt, oldestWaitingPostedAt())
+        handler.postDelayed(followUp, maxOf(0, at - now))
+    }
+
+    /**
+     * When the oldest alert now waiting out the cooldown was posted, or null
+     * when nothing is waiting.
+     *
+     * Read from the two maps together rather than from either alone, because
+     * neither holds the burst by itself: [choices] holds every alert that has
+     * not finished, and [inFlight] the moment each one was posted. A command
+     * that has just finished is out of both by the time this is asked, and a
+     * ring is in [inFlight] and never in [choices], so what is in both is
+     * exactly the alerts the follow-up is holding.
+     */
+    private fun oldestWaitingPostedAt(): Long? =
+        choices.keys.mapNotNull { inFlight[it]?.second }.minOrNull()
+
     private fun sendFollowUp() {
         if (stopping || !coalescer.hasFollowUp) return
         // A ring started after this was scheduled. It keeps its hold and its
@@ -620,7 +643,9 @@ class CalendarRelayService : Service() {
             val choice = choices.remove(id)
             if (source == null || choice == null) null else Triple(id, source, choice)
         }
-        val fresh = members.filter { now >= it.second.second && now - it.second.second < 30_000 }
+        val fresh = members.filter {
+            now >= it.second.second && now - it.second.second < ALERT_LIFETIME_MILLIS
+        }
         members.filterNot { it in fresh }.forEach {
             record(it.first, it.second.first, it.second.second, "expired")
             previewReplies.remove(it.first)?.invoke(RelayWorkerResult("failed", "EXPIRED"))
@@ -631,7 +656,8 @@ class CalendarRelayService : Service() {
             val id = nextId()
             val replies = fresh.mapNotNull { previewReplies.remove(it.first) }
             if (replies.isNotEmpty()) previewReplies[id] = { result -> replies.forEach { it(result) } }
-            dispatch(id, winner.second.first, winner.second.second, winner.second.second + 30_000,
+            dispatch(id, winner.second.first, winner.second.second,
+                winner.second.second + ALERT_LIFETIME_MILLIS,
                 winner.third.match, kind = winner.third.kind)
         } else coalescer.onFinished(now)
         holdingFollowUp = false
@@ -1066,7 +1092,7 @@ class CalendarRelayService : Service() {
             record(id, sbnPackage, postedAt, result.stage, result.errorCode, match, callerId, kind)
             saveOutcome("Haptic ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             val now = System.currentTimeMillis()
-            coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
+            coalescer.onFinished(now)?.let { scheduleFollowUp(it, now) }
             end()
         }
         val silence = RelayRuleStore.read(this).silence
@@ -1349,6 +1375,75 @@ class CalendarRelayService : Service() {
 
     }
 }
+
+/**
+ * How old an alert may be, counted from the moment the notification was
+ * posted, and still be worth sending to the wrist.
+ *
+ * Named rather than repeated, because it is one window measured in three
+ * places -- when a burst is held, when the follow-up decides what is still
+ * worth sending, and once more inside [CalendarRelayService.dispatch] -- and
+ * because [followUpAt] has to reason about it against a number chosen for an
+ * entirely different reason.
+ */
+internal const val ALERT_LIFETIME_MILLIS = 30_000L
+
+/**
+ * How much of that window the follow-up keeps in hand.
+ *
+ * `dispatch` tests the same deadline again when it is handed the winner, on
+ * a clock read a looper turn or two later, so a follow-up aimed at the exact
+ * moment of expiry would hand over an alert that is then thrown away by the
+ * line it was woken for.
+ */
+internal const val FOLLOW_UP_MARGIN_MILLIS = 2_000L
+
+/**
+ * When a burst that is waiting out the cooldown must actually be sent.
+ *
+ * Two numbers decide this and they were chosen for different reasons.
+ * [RelayCoalescer] measures its cooldown from the moment the last command
+ * *finished*, so that Google Health gets a quiet window to resync the
+ * tracker channel in; an alert is thrown away once it is
+ * [ALERT_LIFETIME_MILLIS] old, counted from the moment it was posted. While
+ * the band answers quickly the two never meet -- a two-second tap and
+ * fifteen seconds of cooldown leave half the window spare.
+ *
+ * A slow band is what puts them in each other's way, and a locked phone is
+ * where a slow band comes from: the Air holds one secure session, Google
+ * Health takes it whenever it syncs, and `AirLink` waits out a full
+ * forty-five seconds before it gives up on an operation. Every alert that
+ * arrived during such a write was already past its lifetime by the time the
+ * cooldown ended, so the follow-up found nothing fresh, recorded the lot as
+ * `expired` and sent nothing at all. The burst came out as one late buzz for
+ * the first message and silence for every one after it -- which is exactly
+ * what "some notifications are missed when the phone has been locked a
+ * while" feels like from the wrist.
+ *
+ * The cooldown is a courtesy to somebody else's sync; the alert is the thing
+ * this app exists for. So when the two disagree the alert wins and the
+ * follow-up goes early. A deadline already in the past is left in the past
+ * rather than clamped: the caller turns it into a delay of zero, and sending
+ * at once is what lets the fresher alerts behind the stale one through.
+ *
+ * This reaches exactly as far as the cooldown and no further, which is worth
+ * being plain about. It saves a burst held behind a write that took anything
+ * up to [ALERT_LIFETIME_MILLIS] -- the fifteen-second reads the handover
+ * describes, where the cooldown is the straw that breaks it. It cannot save
+ * one held behind a write that took longer than the lifetime itself, because
+ * by the time that write returns the alert is already older than this app
+ * will buzz for. That case is the lifetime's own to answer and is left to a
+ * decision about the lifetime, not taken here.
+ *
+ * [oldestPostedAt] null means nothing is waiting, and the cooldown stands.
+ */
+internal fun followUpAt(
+    cooldownEndsAt: Long,
+    oldestPostedAt: Long?,
+    lifetimeMillis: Long = ALERT_LIFETIME_MILLIS,
+    marginMillis: Long = FOLLOW_UP_MARGIN_MILLIS,
+): Long = if (oldestPostedAt == null) cooldownEndsAt
+    else minOf(cooldownEndsAt, oldestPostedAt + lifetimeMillis - marginMillis)
 
 /**
  * Whether `setExactAndAllowWhileIdle` may be called at all.

@@ -1,6 +1,8 @@
 package com.srineere.airbridge.health
 
 import android.content.Context
+import java.time.LocalDate
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -251,40 +253,267 @@ private fun loadRatios(steps: List<Reading>): List<Reading> {
  * or arrives late would quietly move a figure somebody has already seen
  * and had sent to them in the morning report.
  *
+ * What is kept is the whole series rather than the single figure, and that
+ * is the change that made the screen quick. The figure alone was enough to
+ * stop it drifting and no use at all for drawing it: a screen still had to
+ * read a hundred and twenty days of Health Connect and do every day's
+ * arithmetic before it could find out that the answer was already known.
+ * That read is the several seconds somebody spent looking at "calibrating"
+ * each time they opened Readiness, on a morning whose figure had been
+ * settled since six.
+ *
  * Only a figure that exists is kept. Asked before HRV has synced there is
  * nothing to remember, so nothing is written and the real figure is picked
  * up whenever it turns up. Keyed by the morning it describes rather than
  * by today, which is the same thing on most days and the honest answer on
  * the rest.
  *
- * Everything but the score is worked out fresh: the parts and the band are
- * measurements, and a measurement that has been corrected should say so.
+ * Everything but the series is worked out fresh: the four parts under the
+ * figure are measurements, and a measurement that has been corrected
+ * should say so.
  */
 fun readinessToday(context: Context, snapshot: HealthSnapshot): Readiness {
+    val today = LocalDate.now().toEpochDay()
     val worked = readinessOf(snapshot)
-    val day = worked.day ?: return worked
-    ReadinessStore.remembered(context, day)?.let { return worked.copy(score = it) }
-    worked.score?.let { ReadinessStore.remember(context, day, it) }
-    return worked
+    val fresh = worked.asKept()
+    // A store that cannot be read is not a reason to show nothing: the
+    // figure can always be worked out again, which is what this is for.
+    val kept = runCatching { ReadinessStore.read(context, today) }.getOrNull()
+    if (fresh != null && supersedes(fresh, kept, today)) {
+        runCatching { ReadinessStore.write(context, fresh) }
+        return worked
+    }
+    return kept?.let { worked.restoredFrom(it) } ?: worked
+}
+
+/**
+ * Works this morning's figure out in the background, once the readings it
+ * stands on are there, and says whether anything is still to come.
+ *
+ * Health Connect fills up whenever the Fitbit app syncs, which this app
+ * neither controls nor can ask for. So this is written to be *called
+ * again* rather than to be called at the right moment: it looks, settles
+ * the morning if it can, and tells the caller whether to come back.
+ *
+ * [snapshot] is the cheap thirty-day read the caller already has, and the
+ * cost control is that it is enough to answer "has anything arrived yet".
+ * The hundred and twenty days the figure is counted against are read here
+ * and only here, on the pass that can actually finish the job -- so a
+ * morning the band never syncs costs the short read it was already
+ * costing, and the long one is paid once.
+ */
+internal suspend fun settleReadiness(
+    context: Context,
+    snapshot: HealthSnapshot,
+    today: Long = LocalDate.now().toEpochDay(),
+    reader: HealthReader = HealthReader(),
+): Boolean {
+    // Until both halves are written, whatever could be worked out now is
+    // provisional, and keeping it would be keeping the wrong answer: a
+    // figure that sleep had no say in is a figure three quarters made.
+    if (!readinessInputsLanded(snapshot, today)) return false
+    val kept = runCatching { ReadinessStore.read(context, today) }.getOrNull()
+    // Already worked out this morning, on everything this morning has to
+    // stand on. Counted from the short read rather than remembered as a
+    // flag, because the question is not "did it run" but "could it do any
+    // better now" -- and somebody whose phone has never written a step has
+    // no recent load part to wait for and should not be waited on for one.
+    val available = readinessOf(snapshot).standing.size
+    if (kept != null && kept.day == today && kept.standing >= available) return true
+
+    val wide = runCatching { reader.read(context, Readiness.WINDOW_DAYS) }.getOrNull()
+        ?: return false
+    // Through the same door every screen uses, so there is one place a
+    // figure is worked out and one place it is kept.
+    return readinessToday(context, wide).day == today
+}
+
+/**
+ * Whether this morning's readings have landed: the sleep, and the vitals.
+ *
+ * The owner's own two, in their own order. HRV stands for the vitals
+ * because it is the one of the four readiness cannot be computed at all
+ * without, and it arrives on the same sync as the resting rate; the night
+ * stands for itself. Both are asked of **today**, because last night is
+ * the night that ended this morning and Health Connect files it under the
+ * day it ended.
+ */
+internal fun readinessInputsLanded(snapshot: HealthSnapshot, today: Long): Boolean =
+    snapshot.hrv.any { it.day == today } && snapshot.nights.any { it.day == today }
+
+/**
+ * One morning's readiness, as the series it was worked out from.
+ *
+ * The series rather than the figure, because the figure is only the last
+ * point of it: the band the screen draws, the rail the figure sits on and
+ * the count of nights behind it are the rest, and each of them costs the
+ * same hundred and twenty days to rebuild.
+ */
+data class KeptReadiness(
+    /** The morning it is about, which is not always today. */
+    val day: Long,
+    /** Readiness a day at a time, oldest first. */
+    val series: List<Reading>,
+    /**
+     * How many of the four parts stood behind it when it was worked out.
+     *
+     * The one thing that makes a kept figure *wrong* rather than merely
+     * old, and so the thing it has to be invalidated on. HRV lands when
+     * the band syncs and the night is often a moment behind it, so a pass
+     * at twenty past six can produce a real figure for today that sleep
+     * had no say in -- and keyed by the day alone, that figure would be
+     * served until midnight.
+     */
+    val standing: Int,
+) {
+    /**
+     * Derived rather than stored. The figure is the newest point of the
+     * series by the same rule [readinessOf] uses, and a second field
+     * holding it would be a second answer waiting to disagree.
+     */
+    val score: Int?
+        get() = if (series.size >= Readiness.NEEDED) {
+            series.maxByOrNull { it.day }?.value?.roundToInt()
+        } else {
+            null
+        }
+}
+
+/** This figure, in the shape the store keeps, or null if there is nothing to keep. */
+internal fun Readiness.asKept(): KeptReadiness? {
+    val day = day ?: return null
+    // The series is the trend's readings: below three there is no trend,
+    // and two points are not a thing worth remembering.
+    val series = trend?.readings?.takeIf { it.isNotEmpty() } ?: return null
+    return KeptReadiness(day, series, standing.size)
+}
+
+/**
+ * The kept figure, drawn over this morning's parts.
+ *
+ * Everything the long read decided -- the figure, the band it sits in, the
+ * nights behind it -- comes from what was kept. The four rows underneath
+ * are whatever has just been read, which is the rule this file already
+ * followed when only the score was remembered.
+ */
+internal fun Readiness.restoredFrom(kept: KeptReadiness): Readiness = copy(
+    score = kept.score,
+    trend = trendOf(kept.series),
+    days = kept.series.size,
+    day = kept.day,
+)
+
+/**
+ * Whether a kept morning is still one that this morning could be about.
+ *
+ * Today or yesterday, and nothing else. A figure dated today is the one
+ * being waited for; a figure dated yesterday is the honest answer until
+ * the band syncs, which is the same pair of silences `nightPending` tells
+ * apart. Older than that and it is not late, it is somebody else's
+ * morning -- and showing it for the second before the real one lands is
+ * how a screen comes to print a number nobody can place.
+ *
+ * A day in the future is not current either. It cannot be a morning that
+ * has happened, and a phone carried west produces one.
+ */
+internal fun isCurrent(day: Long, today: Long): Boolean = day == today || day == today - 1
+
+/**
+ * Whether a figure just worked out should replace the one being kept.
+ *
+ * Three rules, and each of them exists because something otherwise serves
+ * the wrong number for a day:
+ *
+ * - A morning older than yesterday is not kept at all. See [isCurrent].
+ * - A **later** morning wins, but not by being worse. The widgets read
+ *   thirty days unless a readiness card is on the home screen, and a
+ *   thirty-day read is bound to come back calibrating: without the second
+ *   half of this rule, the half-hourly widget turn would replace this
+ *   morning's real figure with no figure, and the screen would go blank
+ *   until something widened again.
+ * - The **same** morning is replaced only by a better-founded figure: one
+ *   standing on more of its four parts, which is what a late night
+ *   changes, or built from more readings, which is what the long read
+ *   buys. A part that has gone away leaves the kept figure alone; it is
+ *   still the best answer anything had about that morning.
+ */
+internal fun supersedes(fresh: KeptReadiness?, kept: KeptReadiness?, today: Long): Boolean {
+    if (fresh == null || !isCurrent(fresh.day, today)) return false
+    if (kept == null) return true
+    if (fresh.day != kept.day) {
+        return fresh.day > kept.day && (fresh.score != null || kept.score == null)
+    }
+    return fresh.standing > kept.standing || fresh.series.size > kept.series.size
+}
+
+/**
+ * The series as one line of text, because this is a preferences file and
+ * not a database.
+ *
+ * A hundred and twenty days comes to about a kilobyte, which is nothing
+ * beside the tile layout already in here. Written to one decimal: the
+ * figure is drawn whole and its band to the nearest point, so anything
+ * finer is precision nobody can see. [Locale.ROOT], because half of Europe
+ * would otherwise write "48,3" and read back nothing.
+ */
+internal fun encodeSeries(series: List<Reading>): String =
+    series.joinToString(";") { "${it.day}:${"%.1f".format(Locale.ROOT, it.value)}" }
+
+/**
+ * Fail closed: a line that does not parse decodes to nothing at all, never
+ * to the half of it that did. A short series is not a corrupt series -- it
+ * is a person with fewer nights -- so a silently truncated one would read
+ * as somebody still calibrating rather than as a store to throw away.
+ */
+internal fun decodeSeries(stored: String): List<Reading> {
+    if (stored.isEmpty()) return emptyList()
+    return stored.split(";").map { part ->
+        val bits = part.split(":")
+        val day = bits.getOrNull(0)?.toLongOrNull()
+        val value = bits.getOrNull(1)?.toDoubleOrNull()
+        if (bits.size != 2 || day == null || value == null) return emptyList()
+        Reading(day, value)
+    }
 }
 
 /** One morning's figure, in the preferences everything else on this tab uses. */
 object ReadinessStore {
     private const val PREFS = "air_health"
     private const val KEY_DAY = "readiness_day"
+    private const val KEY_SERIES = "readiness_series"
+    private const val KEY_STANDING = "readiness_standing"
+
+    /**
+     * Written by the version that kept the figure alone, and read by
+     * nothing now. Removed on the next write rather than migrated: it is
+     * one morning's arithmetic, and a migration for it would be more code
+     * than the thing it saves.
+     */
     private const val KEY_SCORE = "readiness_score"
 
-    fun remembered(context: Context, day: Long): Int? {
+    /**
+     * What is kept, when it is still about a morning worth showing.
+     *
+     * Null rather than an old entry, so every caller gets the same answer
+     * to "is there a figure for this morning" without each of them having
+     * to know what a morning is.
+     */
+    fun read(context: Context, today: Long = LocalDate.now().toEpochDay()): KeptReadiness? {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (p.getLong(KEY_DAY, -1) != day) return null
-        return p.getInt(KEY_SCORE, -1).takeIf { it >= 0 }
+        val day = p.getLong(KEY_DAY, Long.MIN_VALUE)
+        if (!isCurrent(day, today)) return null
+        val series = decodeSeries(p.getString(KEY_SERIES, null) ?: return null)
+        if (series.isEmpty()) return null
+        return KeptReadiness(day, series, p.getInt(KEY_STANDING, 0))
     }
 
     /** One morning at a time: yesterday's is replaced, not kept beside it. */
-    fun remember(context: Context, day: Long, score: Int) {
+    fun write(context: Context, kept: KeptReadiness) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putLong(KEY_DAY, day)
-            .putInt(KEY_SCORE, score)
+            .putLong(KEY_DAY, kept.day)
+            .putString(KEY_SERIES, encodeSeries(kept.series))
+            .putInt(KEY_STANDING, kept.standing)
+            .remove(KEY_SCORE)
             .apply()
     }
 }

@@ -148,13 +148,27 @@ private fun Everything(
                     // the newest verified buzz there has ever been.
                     Sub("nothing yet", colours.faint, size = WidgetText.Label)
                 } else {
+                    // Who, in the card's own ink, and what it was beside it
+                    // in the muted one. The name is always there now:
+                    // [buzzWho] falls through a caller to the app that
+                    // carried the alert and then to the app's own word for
+                    // its own buzzes, so this card no longer answers "who
+                    // buzzed" with "Message".
                     band.lastBuzzWho?.let {
                         Sub(it, colours.onBackground, size = WidgetText.Body)
                         Spacer(GlanceModifier.width(7.dp))
                     }
                     Sub(
-                        (if (band.lastBuzzWasCall) "Call" else "Message") +
-                            " · " + ago(band.lastBuzzAt, now),
+                        // A goal crossed is neither a call nor a message,
+                        // and the name beside it has already said what it
+                        // was, so the kind word goes rather than being
+                        // wrong. For anything relayed it stays: how an
+                        // alert arrived is the half this app knows.
+                        listOfNotNull(
+                            if (band.lastBuzzWasOwn) null
+                            else if (band.lastBuzzWasCall) "Call" else "Message",
+                            ago(band.lastBuzzAt, now),
+                        ).joinToString(" · "),
                         colours.muted,
                         size = WidgetText.Label,
                     )

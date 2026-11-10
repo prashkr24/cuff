@@ -27,9 +27,26 @@ data class BandFacts(
     val quietStartMinute: Int = 1320,
     val quietEndMinute: Int = 420,
     val lastBuzzAt: Long = 0,
-    /** The caller's saved label, or null when nothing named them. */
+    /**
+     * Who or what raised it, worked out by [buzzWho] when this is read.
+     *
+     * Null only when there has been no buzz at all. It used to be null
+     * whenever the entry had no saved caller behind it, which is every
+     * ordinary app notification -- so the card fell through to the word
+     * "Message" and the one thing anybody wanted off it, which app, was
+     * the one thing it would not say.
+     */
     val lastBuzzWho: String? = null,
     val lastBuzzWasCall: Boolean = false,
+    /**
+     * Whether the app raised this one itself, rather than relaying it.
+     *
+     * A step goal and an hourly nudge are neither a call nor a message, and
+     * [lastBuzzWho] already names them: the card drops the kind word for
+     * these rather than filing a goal crossed at ten in the morning under
+     * "Message".
+     */
+    val lastBuzzWasOwn: Boolean = false,
     val buzzesToday: Int = 0,
 ) {
     fun pausedAt(now: Long): Boolean = pauseUntil == PAUSED_INDEFINITELY || pauseUntil > now
@@ -117,17 +134,90 @@ object BandStore {
             quietStartMinute = silence.startMinute,
             quietEndMinute = silence.endMinute,
             lastBuzzAt = last?.atMillis ?: 0L,
-            // The history holds a one-way caller id, never a name. The name
-            // is looked up from the rules when the widget is drawn, exactly
-            // as the screens do it, so nothing stored here is a person.
-            lastBuzzWho = last?.callerId?.let { config.callers[it]?.label },
+            // The history holds a one-way caller id, never a name, and a
+            // package name, never an app's. Both are resolved here, when
+            // the widget is drawn -- the person from the rules, the app
+            // from the package manager -- exactly as the screens do it, so
+            // nothing stored anywhere is a person or an app's own name.
+            lastBuzzWho = last?.let { entry ->
+                buzzWho(
+                    callerLabel = entry.callerId?.let { config.callers[it]?.label },
+                    sourcePackage = entry.sourcePackage,
+                    commandId = entry.commandId,
+                    appLabel = { appLabelOf(context, it) },
+                )
+            },
             // Stored on the entry now. Reading it off the preset called a
             // silenced caller's double buzz a message, and an app whose
             // messages are set to Ring a call.
             lastBuzzWasCall = last?.wasCall == true,
+            // No package behind it is what the app's own three buzzes look
+            // like: nothing relayed them, so neither word applies.
+            lastBuzzWasOwn = last != null && last.sourcePackage == null,
             buzzesToday = delivered.count { it.atMillis >= midnight },
         )
     }
 
     private const val VERIFIED = "verified"
 }
+
+/**
+ * Who or what raised a buzz, in the order `ActivityRow` decides it.
+ *
+ * The caller first, because a name is the most specific thing known about a
+ * buzz; then the app that carried it; and then, for the three the app
+ * raises itself, what it was. Nothing here is ever null: a widget that
+ * cannot name a buzz still has to say something, and the package's last
+ * dot-segment is a word where a blank is a bug.
+ *
+ * **This is written twice on purpose, and the two copies have to agree.**
+ * `RelayState.label(entry)` in `ui/` is the same decision for the Alerts
+ * screen, and it cannot be shared: that class is built around a config and
+ * an installed-app list the screens hold open, and a widget redraw has
+ * neither. A widget and a screen naming the same buzz differently is a bug
+ * nobody reports, because each of them looks right on its own -- so if the
+ * prefixes or the words below change, they change in both places.
+ *
+ * [appLabel] is passed in rather than looked up here so that the decision
+ * stays a pure function: see [appLabelOf] for what the widget hands it.
+ */
+internal fun buzzWho(
+    callerLabel: String?,
+    sourcePackage: String?,
+    commandId: String,
+    appLabel: (String) -> String,
+): String = when {
+    callerLabel != null -> callerLabel
+    sourcePackage != null -> appLabel(sourcePackage)
+    // The two the app raises on its own schedule. `CalendarRelayService`
+    // builds these ids as "$reason-$at", and `ActivityScreen` badges them
+    // off the same two prefixes.
+    commandId.startsWith(GOAL_PREFIX) -> "Step goal"
+    commandId.startsWith(NUDGE_PREFIX) -> "Hourly nudge"
+    // What is left is the Buzz button, whose ids begin "band-".
+    else -> "Test vibration"
+}
+
+private const val GOAL_PREFIX = "goal-"
+private const val NUDGE_PREFIX = "nudge-"
+
+/**
+ * One app's name, from the package manager and nothing else.
+ *
+ * `InstalledApps` in `ui/` answers the same question and is the wrong tool
+ * here twice over: it builds every launchable app on the phone and
+ * rasterises an icon for each, which is a hundred binder calls to put one
+ * word on a card, and it is empty until this app has been opened -- which
+ * a phone whose widget is redrawing at four in the morning has not been.
+ *
+ * Called from [BandStore.read], which the snapshot runs off the main
+ * thread; a widget face must not do this itself. A package that has been
+ * uninstalled, or that the manifest's `<queries>` does not let this app
+ * see, falls back to its last dot-segment, which is the same answer
+ * `RelayState.label` gives for an app it cannot find.
+ */
+@Suppress("DEPRECATION")
+internal fun appLabelOf(context: Context, packageName: String): String = runCatching {
+    val manager = context.packageManager
+    manager.getApplicationInfo(packageName, 0).loadLabel(manager).toString()
+}.getOrNull()?.takeIf { it.isNotBlank() } ?: packageName.substringAfterLast('.')

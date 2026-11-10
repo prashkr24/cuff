@@ -837,6 +837,12 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
         }
 
         TileKind.Stages -> health.lastNight?.let { night ->
+            // The same figure the Sleep tile carries, from the same place:
+            // `HealthData.sleepScore` scores `lastNight` against the nights
+            // the snapshot was read with, so two sleep widgets on one home
+            // screen cannot disagree about last night and neither of them
+            // scores it twice over in composition.
+            val score = health.sleepScore?.total
             Face(
                 kicker = "",
                 window = "last night",
@@ -846,6 +852,13 @@ private fun bodyFor(kind: TileKind, snapshot: WidgetSnapshot): Face? {
                 } else {
                     "written as one block, no stages"
                 },
+                // The score at the far end of the hours it scores, exactly
+                // as the Sleep tile puts it -- and absent, with its name,
+                // on a night too lonely to score: there is no personal
+                // normal behind the first five nights, and a dash or a
+                // nought there would both be readings nobody took.
+                trailingFigure = score?.toString(),
+                trailingLabel = if (score != null) "score" else null,
                 // The line a 4 x 4 has room for, and the one a strip does
                 // not: the card drops it rather than the card being resized.
                 detail = night.efficiency

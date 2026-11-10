@@ -61,14 +61,71 @@ class MorningWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val settings = HealthSettings.morning(applicationContext)
-        if (!settings.on) return Result.success()
         // Tomorrow's is booked before today's is sent, so a failure to read
         // or to notify costs one morning rather than every morning after it.
+        //
+        // Booked whether or not the report is switched on, which it was not
+        // before. Readiness rides this moment now, and readiness belongs to
+        // anybody with the tile on their tab rather than only to the people
+        // who asked for a notification about it.
         MorningMoment.schedule(applicationContext)
 
+        val settings = HealthSettings.morning(applicationContext)
         val zone = ZoneId.systemDefault()
         val clock = LocalTime.now(zone)
+        val today = LocalDate.now(zone).toEpochDay()
+
+        // One read for both halves of this moment, and deliberately the
+        // short one. Thirty days is what the report draws, and it is also
+        // all it takes to find out whether the night and the morning's
+        // readings have arrived; the hundred and twenty days readiness is
+        // counted against are read inside settleReadiness, on the one pass
+        // that can finish it.
+        val snapshot = runCatching { HealthReader().read(applicationContext, 30) }.getOrNull()
+
+        // Readiness first, and whatever the report setting says: this is the
+        // half the Readiness screen is waiting on, and somebody who has
+        // never wanted a notification still opens the tab.
+        val settled = snapshot != null && settleReadiness(applicationContext, snapshot, today)
+        val nightWritten = snapshot?.nights?.maxByOrNull { it.day }?.day == today
+        if (snapshot != null) sendReport(settings, snapshot, zone, clock, today, nightWritten)
+
+        // Last in the method, and it has to be. Looking again replaces a
+        // unique work whose name this very run may be carrying -- a retry
+        // re-booking itself -- and replacing running work stops it where it
+        // stands. Anything written after this line is not guaranteed to
+        // happen at all.
+        //
+        // One decision with two reasons behind it: the night is what the
+        // report waits for and the morning's readings are what readiness
+        // waits for. Both arrive when the band syncs, which is not a thing
+        // this app can hurry, so it comes back and asks again.
+        //
+        // Nothing read in thirty days is not a morning running late, it is
+        // a phone nothing writes to, and coming back every twenty minutes
+        // until eleven would be fifteen wakeups to re-ask a question that
+        // has no answer in it. A read that *threw* is different and is
+        // worth another look: Health Connect may simply have been updating.
+        val worthWaitingFor = snapshot == null || snapshot.hrv.isNotEmpty() ||
+            snapshot.nights.isNotEmpty() || snapshot.steps.isNotEmpty()
+        if (worthWaitingFor && (!settled || !nightWritten)) {
+            Log.i(TAG, "morning: waiting, readiness=$settled night=$nightWritten")
+            MorningMoment.lookAgainBefore(applicationContext, clock)
+        }
+        return Result.success()
+    }
+
+    /** The notification half, which is only for people who asked for it. */
+    private fun sendReport(
+        settings: MorningSettings,
+        snapshot: HealthSnapshot,
+        zone: ZoneId,
+        clock: LocalTime,
+        today: Long,
+        nightWritten: Boolean,
+    ) {
+        if (!settings.on) return
+
         // Quiet hours are a promise about this phone, not only about the
         // band: somebody who has said "nothing between 22:00 and 07:00"
         // has not carved out an exception for good news.
@@ -77,48 +134,47 @@ class MorningWorker(
         }.getOrNull()
         if (silence != null) {
             Log.i(TAG, "morning: skipped by $silence")
-            return Result.success()
+            return
         }
 
-        val already = HealthSettings.morningSentDay(applicationContext)
-        val today = LocalDate.now(zone).toEpochDay()
         // One a day. A reschedule after a reboot can land twice in the same
         // morning, and two identical reports is one too many.
-        if (already == today) {
+        if (HealthSettings.morningSentDay(applicationContext) == today) {
             Log.i(TAG, "morning: already sent today")
-            return Result.success()
+            return
         }
 
-        val snapshot = runCatching { HealthReader().read(applicationContext, 30) }.getOrNull()
-            ?: return Result.success()
-        val report = morningReport(
-            snapshot,
-            HealthGoals.read(applicationContext),
-            readinessToday(applicationContext, snapshot),
-            zone,
-        )
-
         // Waiting for the night rather than for the clock. Google Health
-        // writes it when the band syncs, so the check comes back and asks
-        // again rather than sending a report with the hole in it.
-        if (settings.afterWaking && report.night?.day != today) {
+        // writes it when the band syncs, so the check holds the report
+        // rather than sending one with the hole in it; the next look is
+        // booked by the caller once this has returned.
+        if (settings.afterWaking && !nightWritten) {
             if (clock.hour < MorningMoment.LATEST_HOUR) {
-                MorningMoment.lookAgain(applicationContext)
-                Log.i(TAG, "morning: no night written yet, looking again shortly")
-                return Result.success()
+                Log.i(TAG, "morning: no night written yet, holding the report")
+                return
             }
             // Late enough that waiting longer is waiting for nothing. What
             // there is goes out, if there is anything at all.
             Log.i(TAG, "morning: no night by ${MorningMoment.LATEST_HOUR}:00, sending without it")
         }
 
+        val report = morningReport(
+            snapshot,
+            HealthGoals.read(applicationContext),
+            // Reads the figure settled above rather than working out a
+            // second one. This snapshot is thirty days and sixty readings
+            // is the gate, so a report left to compute its own could only
+            // ever say "calibrating" -- which it did, every morning, until
+            // the settled figure was there to be read.
+            readinessToday(applicationContext, snapshot),
+            zone,
+        )
         if (!report.worthSending) {
             Log.i(TAG, "morning: nothing read, so nothing sent")
-            return Result.success()
+            return
         }
         MorningMoment.notify(applicationContext, report)
         HealthSettings.morningSent(applicationContext, today)
-        return Result.success()
     }
 
     private companion object {
@@ -152,36 +208,50 @@ object MorningMoment {
      *
      * Called when the setting changes and again from each run, so there is
      * exactly one booking at any moment whatever has happened to the phone.
+     *
+     * **It no longer cancels when the report is switched off.** The report
+     * used to be the only thing this moment carried, and turning it off
+     * meant nothing happened in the morning at all -- which is why
+     * readiness was only ever worked out by whoever opened the screen and
+     * waited. Two things want the moment now, and only one of them is a
+     * notification somebody opted into. The cost is one wakeup a morning
+     * on a phone that wanted no report; the alternative was a fourth
+     * scheduled job doing the same look a few minutes apart.
      */
     fun schedule(context: Context) {
         val settings = HealthSettings.morning(context)
-        val manager = WorkManager.getInstance(context)
-        if (!settings.on) {
-            manager.cancelUniqueWork(NAME)
-            return
-        }
         // In waking mode the booking is for the first look rather than for
         // the report: what time it actually goes out is decided by when the
-        // night turns up.
-        val delay = untilNext(if (settings.afterWaking) EARLIEST_MINUTE else settings.minute)
-        manager.enqueueUniqueWork(
+        // night turns up. With the report off there is no clock to honour,
+        // so the look is the only thing being booked and it goes early.
+        val delay = untilNext(
+            if (settings.on && !settings.afterWaking) settings.minute else EARLIEST_MINUTE,
+        )
+        WorkManager.getInstance(context).enqueueUniqueWork(
             NAME,
             ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<MorningWorker>()
                 .setInitialDelay(delay, TimeUnit.MINUTES)
                 .build(),
         )
-        Log.i("AirBridge", "morning: next in $delay min, at ${settings.clock}")
+        Log.i("AirBridge", "morning: next in $delay min, report on=${settings.on}")
     }
 
     /**
-     * Comes back in twenty minutes, because the night was not there yet.
+     * Comes back in twenty minutes, because what it was waiting for was
+     * not there yet -- and stops asking once the morning is over.
+     *
+     * The hour is checked here rather than at each call site now that two
+     * things wait on this moment: a retry booked by one of them past
+     * [LATEST_HOUR] would be the other one still being asked long after it
+     * had given up.
      *
      * Separate work from the daily booking, and deliberately so: the daily
      * one is already booked for tomorrow by the time this is enqueued, and
      * sharing a name would have the retry cancel it.
      */
-    fun lookAgain(context: Context) {
+    fun lookAgainBefore(context: Context, clock: LocalTime = LocalTime.now()) {
+        if (clock.hour >= LATEST_HOUR) return
         WorkManager.getInstance(context).enqueueUniqueWork(
             "$NAME-again",
             ExistingWorkPolicy.REPLACE,

@@ -141,6 +141,62 @@ internal object RelayHistory {
         }
 }
 
+/**
+ * How a buzz that never reached the band is worded in the activity list.
+ *
+ * The word first, because it is the one thing every one of these rows has in
+ * common and the one thing the list never said: a failed entry showed only
+ * its code, humanised, so "Handshake timeout" sat in the same column as "One
+ * pulse · strong" and read like a kind of vibration.
+ *
+ * Then why, because the codes do not mean remotely the same thing to the
+ * person reading them. A band that was busy is worth trying again in a
+ * minute; a band nobody has paired is not; a pattern that played half way
+ * did reach the wrist. Only codes traced to the line that raises them are
+ * given a sentence -- everything else keeps the humanised code it has always
+ * shown, because inventing a meaning for a code nobody has read is how a
+ * list of facts starts lying.
+ *
+ * [stage] is the entry's own stage, for the one failure that carries no code
+ * at all. Call it for the stages that are not a success; "verified",
+ * "ring_started" and "ring_stopped" have their own words.
+ */
+internal fun describeRelayFailure(stage: String, errorCode: String?): String {
+    val why = when (stage) {
+        // Recorded with no code, because nothing was ever sent: the burst sat
+        // out its cooldown and was older than the relay will buzz for by the
+        // time the band was free. See followUpAt.
+        "expired" -> "it was already too old to send"
+        else -> errorCode?.let { code ->
+            FAILURE_NOTES[code] ?: code.lowercase().replace('_', ' ')
+        }
+    }
+    return if (why == null) "Failed" else "Failed · $why"
+}
+
+/**
+ * The failure codes that have been read back to where they are raised.
+ *
+ * The first four are this app's own, from [CalendarRelayService]; the rest
+ * are `AirLink`'s, and each sentence says what the line that throws it says,
+ * in the register the rest of the app uses.
+ */
+private val FAILURE_NOTES = mapOf(
+    "WORKER_UNAVAILABLE" to "the relay had no link to the band",
+    "SERVICE_STOPPED" to "the relay stopped before it finished",
+    "PARTIAL" to "only part of the pattern played",
+    "WORKER_ERROR" to "the band gave no reason we could read",
+    "TIMEOUT" to "the band did not answer",
+    "HANDSHAKE_TIMEOUT" to "no secure session; Google Health may have had the band",
+    "BUSY" to "the band was busy with something else",
+    "AIR_NOT_FOUND" to "no Air is paired in Google Health",
+    "BLUETOOTH_PERMISSION" to "nearby devices is not allowed",
+    "HAPTIC_TAP_FAILED" to "the band refused the buzz",
+    "HAPTIC_PULSE_FAILED" to "the band refused the buzz",
+    "HAPTIC_FAILED" to "the band refused the buzz",
+    "RING_FAILED" to "the band refused the ring",
+)
+
 internal data class RelayWorkerResult(val stage: String, val errorCode: String?) {
     companion object {
         fun decode(result: Any?): RelayWorkerResult {

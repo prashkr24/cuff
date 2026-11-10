@@ -660,6 +660,26 @@ adb logcat -s AirBridge
   it. The step alarm goes to `StepCheckReceiver` and into the live instance
   instead, which is why it is a broadcast and not the simpler
   `PendingIntent.getService`.
+- **Three timeouts in three files that have to be read together.** The
+  coalescer's cooldown is 15 s *from the end of the previous command*;
+  `sendFollowUp` drops a merged alert older than `ALERT_LIFETIME_MILLIS`
+  (30 s) *from when it was posted*; `AirLink`'s operation deadline is 45 s.
+  So a burst held behind a slow write waited `write + 15 s` against a budget
+  of 30 s, and any write over about thirteen seconds killed the whole burst
+  — one late buzz for the first message and silence for the rest. A locked,
+  idle phone is exactly when Google Health takes the Air's single session
+  and a write gets slow, which is why it read as "missed when locked".
+  `followUpAt` now schedules at the earlier of the cooldown and the oldest
+  waiting alert's expiry. Change any one of the three numbers and do this
+  arithmetic again.
+- **`setIntent` makes a widget's tap permanent.** The activity is singleTop,
+  so `onNewIntent` calls `setIntent` and `getIntent()` answers with that
+  widget's intent for as long as the instance lives. A configuration change
+  outside the list `MainActivity` handles — `screenLayout` and `keyboard` are
+  not in it — recreates the activity, runs `onCreate` against that retained
+  intent, and navigates to the widget's screen a second time, pulling
+  somebody back to a screen they had deliberately left. Read the route once
+  and `removeExtra` it; an intent is a message, not a setting.
 - **A day is not twenty-four hours twice a year.** `hourlyTotals` used
   `start.plus(Duration.ofDays(1))` and indexed by *elapsed* hours, so after a
   spring-forward every bucket sat one slot low and an autumn day's last hour
@@ -1360,6 +1380,81 @@ Left on plain `remember` on purpose: anything tied to an in-flight write, a
 transient refusal line, something re-read from disk, and the two dialogs that
 hold a `FoodEntry` or a `SavedFood` — neither is a Bundle-able kind, and
 making them saveable throws.
+
+## Readiness is settled in the morning, not when you open the screen
+
+Readiness used to be computed by the only thing that ever asked for it: the
+screen. Opening it forced a 120-day Health Connect read — the tab holds 30
+and the gate counts 60 nights — and until that landed the screen said
+"Calibrating", which is why the figure arrived a while after the screen did.
+Nothing cached the expensive part: the old store kept the score and could
+not be consulted without a snapshot, because the day it is keyed by comes
+out of the series the snapshot produces.
+
+It rides `MorningWorker` now, which was already the right machinery: booked
+at 06:00, looks again every twenty minutes, gives up at eleven. That retry
+loop is the whole answer to "the inputs are not there yet" — the Fitbit sync
+is not something this app drives, so a morning pass has to tolerate arriving
+before the night does. The cheap 30-day read is what each look costs; the
+120-day read happens only on the pass that can finish the job, and once a
+morning is settled there are no more looks that day. A phone nothing has
+written to in thirty days is not a morning running late, and is not retried.
+
+`MorningMoment.schedule` no longer cancels when the morning report is
+switched off, because the moment now carries two things and only one of them
+is the notification. That is one wakeup a morning on a phone that wanted no
+report; the alternative was a fourth scheduled job doing the same look a few
+minutes later.
+
+What is kept is the **series**, not the score, in `air_health`. The score is
+derived from it by the same `NEEDED` rule, so there is no second field to
+disagree with the first. It is keyed by the morning the figure describes —
+the day a night *ended*, per the day-boundary rule above, not `now()` — and
+served only for today or yesterday, because until the band syncs, yesterday
+is the honest answer. Replacement is by how well-founded a figure is rather
+than by how recent: a later morning wins unless it has no score at all, and
+the same morning is replaced only by one standing on more parts or a longer
+read. Without that, a 30-day widget read at midnight would overwrite this
+morning's real figure with "calibrating".
+
+## Three things known, and left alone
+
+Each of these was found deliberately, is understood, and was not fixed —
+either because the fix is a product decision or because it is lifecycle code
+that cannot be tested from here. None of them is a mystery; do not spend an
+afternoon rediscovering one.
+
+1. **The dedupe map goes deaf at 256 keys.** `CalendarAlertFilter` keeps one
+   entry per accepted alert, keyed by `sbn.key`, and `seen` only grows: the
+   filter is rebuilt on relay start and on a change of selected packages, and
+   never otherwise. Past 256 distinct keys, every notification with a new key
+   is refused for the life of the relay process. On a phone where the service
+   runs for weeks with a mail or news app selected, that is reachable, and it
+   reads as "notifications stopped after a while". It is **deliberate and
+   tested** — `boundedSessionNeverEvictsKeysAndReplaysOldAlerts` asserts it,
+   because evicting a key lets a re-posted old notification buzz again and an
+   app with no `MessagingStyle` timestamp has no second guard. The least-bad
+   fix is to evict, but require a non-null `messageTimestamp > startedAt`
+   before an evicted key may buzz again: it keeps the replay guard exactly
+   where it works and loses nothing for messaging apps.
+2. **A short listener disconnect can leave the relay down.**
+   `onListenerDisconnected` calls `requestStop`, which sets `stopping` but
+   only calls `stopSelf()` when nothing is pending — so with a buzz in flight
+   `active` stays non-null for up to the watchdog's four minutes. A reconnect
+   inside that window sees `isRunning == true`, skips the revive, and then the
+   old service destroys itself with nothing left to bring it back. The revive
+   check asks whether a service *object* exists; it should ask whether one is
+   still relaying.
+3. **`ALERT_LIFETIME_MILLIS` is thirty seconds and has never been justified.**
+   It arrived whole with the Flutter port and has no comment, no test and no
+   mention here in its history. It is shorter than one slow band operation,
+   which is the whole trap above. Sixty to ninety seconds would cover a full
+   `AirLink` timeout. It is one line, and it is a question about how late a
+   buzz is still worth feeling, which is not a question the code can answer.
+
+Also pre-existing and unchanged: the readiness **widget** face has no
+`day != today` guard, unlike `ReadinessTile` on the tab, so it can draw
+yesterday's figure under a head that says this morning.
 
 ## If you change the stored config
 

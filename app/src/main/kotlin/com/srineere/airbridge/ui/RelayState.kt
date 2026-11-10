@@ -401,8 +401,21 @@ internal class RelayState(private val context: Context, private val invalidate: 
          * closes, which the relay records because it has to know; but one
          * phone call is one thing that happened, and the wearer did not feel
          * it start, repeat and end as three separate events.
+         *
+         * `expired` belongs here for the same reason `failed` does: an alert
+         * the relay held until it was too old to send is an alert that never
+         * reached the wrist, and it was the only one of those with nowhere to
+         * be seen. It is also the one a slow band produces in bursts, so a
+         * column of them is the evidence that something is wrong between the
+         * phone and the Air rather than with the rules.
+         *
+         * `interrupted` is deliberately not here. It is written for every
+         * command still in flight when the relay goes down, which happens on
+         * every ordinary stop and restart, and a handful of rows saying the
+         * relay stopped each time somebody toggles the switch would bury the
+         * four the tab has room for.
          */
-        private val SHOWN_STAGES = setOf("verified", "failed")
+        private val SHOWN_STAGES = setOf("verified", "failed", "expired")
     }
 }
 

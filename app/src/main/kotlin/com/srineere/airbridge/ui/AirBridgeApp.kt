@@ -113,10 +113,39 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
     // a widget placed by an older version can name a screen that has since
     // been renamed, and crashing on it is a worse answer than opening the
     // Health tab.
+    // Going to a tab, from the bar or from a widget.
+    //
+    // One function for both, because a tab reached two ways that built two
+    // different back stacks is a tab that behaves differently depending on
+    // how you got there, and that is not something anybody can hold in
+    // their head.
+    val goToTab: (String) -> Unit = { route ->
+        nav.navigate(route) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     androidx.compose.runtime.LaunchedEffect(openRoute, openCount) {
         val route = openRoute ?: return@LaunchedEffect
-        if (route == Tab.Health.route) return@LaunchedEffect
-        runCatching { nav.navigate(route) }
+        runCatching {
+            if (Tab.entries.any { it.route == route }) {
+                // A tab asked for by a widget goes through the bar's own
+                // route rather than being pushed on top of wherever the app
+                // happened to be left. Health used to be skipped entirely
+                // here -- the effect returned without navigating -- so a
+                // Health widget tapped while the app sat on Alerts opened
+                // the app on Alerts and looked like a widget that did
+                // nothing.
+                goToTab(route)
+            } else {
+                // Everything else is a screen, pushed. singleTop so that a
+                // widget tapped twice in a row does not stack the same
+                // screen twice and ask for two presses of Back to leave.
+                nav.navigate(route) { launchSingleTop = true }
+            }
+        }
     }
 
     // The very first launch lands on Permissions.
@@ -153,11 +182,25 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
-                                if (selected) return@NavigationBarItem
-                                nav.navigate(tab.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                // Tapping the tab you are already on returns
+                                // to the top of it, rather than doing
+                                // nothing at all.
+                                //
+                                // `selected` is read off the destination
+                                // hierarchy, so anything the navigator
+                                // counts as inside this tab reads as
+                                // selected -- and the old early return made
+                                // that tap a no-op, which is identical to a
+                                // dead button from the other side of the
+                                // glass. Popping back to the tab's own route
+                                // is what the bar is for and is what every
+                                // other app does; where the tab is already
+                                // the top of the stack, popBackStack finds
+                                // nothing to pop and the tap costs nothing.
+                                if (selected) {
+                                    nav.popBackStack(tab.route, inclusive = false)
+                                } else {
+                                    goToTab(tab.route)
                                 }
                             },
                             icon = {
