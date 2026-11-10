@@ -100,7 +100,7 @@ jobs:
             echo "::error::No APK was produced under app/build/outputs/apk/release"
             exit 1
           fi
-          dest="air-bridge-${GITHUB_REF_NAME}.apk"
+          dest="cuff-${GITHUB_REF_NAME}.apk"
           cp "$src" "$dest"
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "sha256=$(sha256sum "$dest" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
