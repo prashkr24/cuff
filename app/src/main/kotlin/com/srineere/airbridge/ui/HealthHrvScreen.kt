@@ -117,11 +117,12 @@ internal fun HealthHrvScreen(onBack: () -> Unit) {
                 },
                 modifier = Modifier.padding(top = 10.dp),
                 label = { "$it nights" },
+                reading = state.wideningTo,
             )
 
             if (trend == null) {
                 Text(
-                    if (state.loading) "Reading these days…"
+                    if (state.refreshing) "Reading these days…"
                     else "Fewer than three nights in these days have a reading.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

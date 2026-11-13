@@ -65,6 +65,7 @@ import kotlin.math.roundToInt
 @Composable
 internal fun HealthHeartScreen(onBack: () -> Unit) {
     val data by healthData(LocalContext.current)
+    val state = LocalHealthState.current
     val extras = MaterialTheme.extras
     val axes = rememberAxes()
     var atHeart by remember { mutableStateOf<Float?>(null) }
@@ -96,11 +97,21 @@ internal fun HealthHeartScreen(onBack: () -> Unit) {
 
         if (summary == null) {
             Text(
-                if (data.snapshot.heartToday.isEmpty()) {
-                    "No heart rate recorded today yet. Google Health writes it " +
-                        "once your band syncs."
-                } else {
-                    "Nothing recorded in the last ${if (hours >= 24) "day" else "$hours hours"}."
+                when {
+                    // The one thing the tab's cache does not keep. Beats
+                    // are tens of thousands of readings about *today*, so
+                    // the kept snapshot carries none and a cold start
+                    // reaches here with an empty list and a read in
+                    // flight -- which is not the same fact as a band that
+                    // has not synced, and must not be said in its words.
+                    data.snapshot.heartToday.isEmpty() && state.refreshing ->
+                        "Reading today's beats…"
+                    data.snapshot.heartToday.isEmpty() ->
+                        "No heart rate recorded today yet. Google Health writes it " +
+                            "once your band syncs."
+                    else ->
+                        "Nothing recorded in the last " +
+                            "${if (hours >= 24) "day" else "$hours hours"}."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

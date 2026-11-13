@@ -81,13 +81,34 @@
         android:contentDescription="@string/widget_stack_next"
         android:src="@drawable/widget_stack_chevron_right" />
 
+    <!-- Gone, and with no text of its own, and both of those are load
+         bearing.
+
+         This file is also the stack's android:initialLayout, which is what
+         the host inflates raw, with no adapter, no actions and nothing
+         from this app at all, while a widget is waiting for its provider
+         to send something. That is the state every stack is in for the first
+         moments after a reboot, and with "Tap to choose what this stack
+         holds" baked in here it was the state the user reported: a stack
+         that had been set up for weeks asking to be set up again, every
+         single restart, until the app was opened.
+
+         So the sentence is set from code, by stackViews, which is the only
+         place that knows whether this stack holds anything. Until then
+         there is nothing to say and this says nothing.
+
+         The visibility stops being ours the moment setEmptyView is applied:
+         AdapterView owns an empty view's visibility and toggles it against
+         the adapter's count. Do not set it from code as well: the two
+         answers disagree for exactly one frame, and it is the frame
+         somebody is looking at. -->
     <TextView
         android:id="@+id/stack_empty"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
         android:padding="16dp"
-        android:text="@string/widget_stack_empty"
         android:textColor="#8A8A8E"
-        android:textSize="13sp" />
+        android:textSize="13sp"
+        android:visibility="gone" />
 </FrameLayout>

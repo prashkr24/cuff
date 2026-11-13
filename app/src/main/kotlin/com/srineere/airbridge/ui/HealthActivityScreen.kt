@@ -176,6 +176,7 @@ internal fun HealthActivityScreen(onBack: () -> Unit, onOpen: (String) -> Unit) 
                     state.widen(context, window.daysNeeded)
                 },
                 modifier = Modifier.padding(top = 10.dp),
+                reading = state.wideningTo,
             )
 
             GoalBars(

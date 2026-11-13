@@ -143,10 +143,11 @@ internal fun HealthSleepBankScreen(onBack: () -> Unit) {
                     state.widen(context, window.daysNeeded)
                 },
                 label = { "$it nights" },
+                reading = state.wideningTo,
             )
             if (logged == 0) {
                 Text(
-                    if (state.loading) "Reading these nights…"
+                    if (state.refreshing) "Reading these nights…"
                     else "No night in these was recorded.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

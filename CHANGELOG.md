@@ -18,6 +18,14 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Added
 
+- **The app and its widgets open on their last reading.** Both persist the
+  last `HealthSnapshot` — about 40 KB for the tab, 12 KB for the widgets —
+  so a screen draws real figures immediately and refreshes underneath
+  instead of showing a spinner. Restored data keeps its real age, and
+  anything meaning "so far today" is dropped once the day has turned. [13 Nov]
+- **Fewer Health Connect round trips.** `widen` rounds up to whole months, so
+  stepping a seven-day chart back four times costs one read of 60 days rather
+  than four reads over nearly the same ground. [13 Nov]
 - **The sleep score on the sleep stages widget**, at 4x4, in the trailing
   slot the Sleep card already uses and from the same reading, so the two
   sleep widgets cannot disagree. [10 Nov]
@@ -135,6 +143,21 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Fixed
 
+- **Widgets went blank after a reboot and said the stack was unconfigured.**
+  A widget's `initialLayout` is inflated raw out of the APK after a restart —
+  no adapter, no data — and the stack's empty TextView was visible with "Tap
+  to choose what this stack holds" baked into it, over stacks that were
+  configured perfectly well. The placeholder is blank now, a configured stack
+  that has no data says so differently from one that was never set up, and
+  the platform's own "Loading…" view is replaced by an empty card. [13 Nov]
+- **Nothing refreshed widgets at boot.** The periodic work reschedules itself
+  across a restart, but nothing covered the half hour before its first turn.
+  A boot receiver now pokes a redraw from the kept snapshot, with no Health
+  Connect read at boot at all. [13 Nov]
+- **The 90-day window emptied the screen and said nothing.** `loading` meant
+  "a read is in flight" and every screen read it as "there is nothing to
+  show". It is `refreshing` now, the shorter window stays drawn, and a line
+  under the window arrows says what is being read. [13 Nov]
 - **A burst of notifications behind one slow band write disappeared.** The
   coalescer's cooldown is measured from the end of the previous command and
   the alert lifetime from when the notification was posted, so a held burst

@@ -159,10 +159,11 @@ internal fun HealthEnergyScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         state.widen(context, window.daysNeeded)
                     },
                     modifier = Modifier.padding(bottom = 10.dp),
+                    reading = state.wideningTo,
                 )
                 if (series.isEmpty()) {
                     Text(
-                        if (state.loading) "Reading these days…"
+                        if (state.refreshing) "Reading these days…"
                         else "No day in these has both a burn and a logged meal, " +
                             "so there is no balance to draw.",
                         style = MaterialTheme.typography.bodyMedium,

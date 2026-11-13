@@ -253,6 +253,7 @@ private fun SplitSection(
                 picked = null
                 state.widen(context, window.daysNeeded)
             },
+            reading = state.wideningTo,
         )
         if (days.isEmpty()) {
             Text(
@@ -369,6 +370,7 @@ private fun ProteinSection(
                 pickedProtein = null
                 state.widen(context, window.daysNeeded)
             },
+            reading = state.wideningTo,
         )
         if (days.isEmpty() || average == null) {
             Text(

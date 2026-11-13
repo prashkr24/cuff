@@ -176,6 +176,7 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                 },
                 modifier = Modifier.padding(top = 10.dp),
                 label = { "$it nights" },
+                reading = state.wideningTo,
             )
 
             // Taller than it was, with a scale and the dates under it: this
@@ -183,7 +184,7 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             // size as the sparkline on the tile that opens it.
             if (shown.isEmpty()) {
                 Text(
-                    if (state.loading) "Reading these days…" else "No nights recorded in these days.",
+                    if (state.refreshing) "Reading these days…" else "No nights recorded in these days.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 24.dp),

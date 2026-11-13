@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import com.srineere.airbridge.health.HealthAvailability
+import com.srineere.airbridge.health.HealthCache
 import com.srineere.airbridge.health.HealthConnect
 import com.srineere.airbridge.health.HeartSample
 import com.srineere.airbridge.health.HealthReader
@@ -238,16 +239,55 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
      *
      * Public because an empty window and an unread window look identical on
      * screen, and only one of them means "you did not walk that week".
+     *
+     * Called `loading` until the tab learned to open on its last read.
+     * The two things it was being asked had quietly become different
+     * questions: "is a read running" and "is there anything to show". They
+     * used to have the same answer, because the only moment anything was
+     * running was the moment before the first result arrived. Now that a
+     * cold start draws the kept snapshot first, a read is nearly always
+     * running over a screen that is already full, and a screen keyed on
+     * the old name would have flashed its empty state on every refresh.
+     * "Nothing to show" is [HealthStage.Loading] on the data itself, which
+     * is where it has always lived and where it should be asked.
      */
-    var loading by mutableStateOf(false)
+    var refreshing by mutableStateOf(false)
         private set
 
     private var tilesLoaded = false
     private var goalsLoaded = false
-    private var windowDays = WINDOW_DAYS
+    private var restored = false
+    private var windowDays by mutableStateOf(WINDOW_DAYS)
 
     /** How many days the last read covered, for a screen that offers a choice. */
     val days: Int get() = windowDays
+
+    /**
+     * How many days the data **in hand** covers, which is not always
+     * [days]: between a widen and the read it starts, the window has moved
+     * and the figures have not.
+     *
+     * Zero until something has been read or restored.
+     */
+    var loadedDays by mutableStateOf(0)
+        private set
+
+    /**
+     * The longer window being read, while what is drawn is a shorter one.
+     *
+     * The whole of the missing feedback on the window controls. Tapping 90
+     * used to do nothing visible for several seconds -- the chart kept its
+     * thirty days, which is correct, and said nothing about the read that
+     * was going to fill the rest of it in. Null when nothing longer is on
+     * its way, so a bar can ask this and draw nothing the rest of the time.
+     *
+     * Null while nothing has been read at all, which is not the same
+     * silence: the charts already say "Reading these days…" where their
+     * own window is empty, and a bar saying it too would be the same
+     * sentence twice on a first run.
+     */
+    val wideningTo: Int?
+        get() = if (refreshing && loadedDays > 0 && windowDays > loadedDays) windowDays else null
 
     /**
      * Reads further back, when a detail screen asks for a longer window.
@@ -255,10 +295,20 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
      * One way only. A ninety-day read is a superset of a thirty-day one, so
      * widening costs one read and narrowing again would cost another for
      * nothing -- the screens that show less simply take the tail they want.
+     * Which is also why 30 → 90 → 30 → 90 is one read and not four, and why
+     * a cache keyed by window length would be a second answer to a question
+     * that already has one.
+     *
+     * The figure asked for is rounded up by [readWindow], because the
+     * screens do not ask in round numbers. Stepping a seven-day chart back
+     * through the autumn asks for 35, then 42, then 49: three separate
+     * reads of nearly the same ground, each one a fresh set of Health
+     * Connect queries on an interface that rate-limits callers. Rounded,
+     * those three are one.
      */
     fun widen(context: Context, days: Int) {
         if (days <= windowDays) return
-        windowDays = days
+        windowDays = readWindow(days)
         refresh(context, force = true)
     }
 
@@ -314,35 +364,82 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
     private val own = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     fun refresh(context: Context, force: Boolean = false) {
-        if (loading) return
+        restore(context)
+        if (refreshing) return
         val age = System.currentTimeMillis() - loadedAt
         if (!force && loadedAt != 0L && age < FRESH_MILLIS) return
-        loading = true
+        refreshing = true
         own.launch {
             // The window this read is for. A widen that arrives while it is
-            // running is dropped by the `loading` guard above, but windowDays
-            // has already moved -- so the next widen to the same figure
-            // early-returns at `days <= windowDays` and the longer read never
-            // happens at all. Opening Readiness during the tab's own first
-            // read used to leave it stuck on "30 of 60 nights" until the
-            // snapshot went stale a minute later.
+            // running is dropped by the `refreshing` guard above, but
+            // windowDays has already moved -- so the next widen to the same
+            // figure early-returns at `days <= windowDays` and the longer
+            // read never happens at all. Opening Readiness during the tab's
+            // own first read used to leave it stuck on "30 of 60 nights"
+            // until the snapshot went stale a minute later.
             val asked = windowDays
             try {
-                val next = withContext(Dispatchers.IO) { load(context) }
+                val next = withContext(Dispatchers.IO) {
+                    val read = loadHealthData(context, reader, asked)
+                    // Kept from the thread the read already runs on. Forty
+                    // kilobytes of JSON is a few milliseconds, which is
+                    // nothing against the twenty queries above it and a
+                    // visible stutter on the main thread. A read that came
+                    // back without permission is not kept: it holds no
+                    // readings, and writing it would throw away the ones
+                    // somebody saw yesterday.
+                    if (read.stage == HealthStage.Granted) {
+                        runCatching { HealthCache.write(context, read.snapshot, asked) }
+                    }
+                    read
+                }
                 data = next
+                loadedDays = asked
                 loadedAt = System.currentTimeMillis()
             } finally {
                 // In a finally, because a read that is cancelled or throws
                 // must still clear the flag. Left set, it refuses every
                 // later refresh and the tab never loads again.
-                loading = false
+                refreshing = false
             }
             if (windowDays != asked) refresh(context, force = true)
         }
     }
 
-    private suspend fun load(context: Context): HealthData =
-        loadHealthData(context, reader, windowDays)
+    /**
+     * Draws the last read back, before anything is asked of Health Connect.
+     *
+     * Synchronous, and on the thread that asked. It is a preferences string
+     * and a JSON parse -- a few milliseconds, once, at the moment the
+     * alternative is a spinner -- and doing it off the main thread would
+     * mean at least one frame of the empty state, which is the thing this
+     * exists to remove.
+     *
+     * Three decisions worth keeping:
+     *
+     * - Only when there is nothing read yet. A restore that could overwrite
+     *   a live snapshot is a restore that can put old figures over new ones.
+     * - [loadedAt] is deliberately left at zero. A restored reading is
+     *   *drawn*, not *fresh*: the freshness window exists to stop switching
+     *   tabs costing a read, and a cold start is not switching tabs. The
+     *   figures on screen are honest about their own age because the
+     *   header's "N min ago" comes from `writtenAt`, which is an instant in
+     *   the snapshot and not a measure of when we last asked.
+     * - [windowDays] is **not** restored from the entry. It is what the
+     *   next read will cover, not what this one did, and a cache claiming
+     *   ninety days would make `widen(90)` early-return so the longer read
+     *   never happened at all.
+     */
+    private fun restore(context: Context) {
+        if (restored) return
+        restored = true
+        if (data.stage != HealthStage.Loading) return
+        // A store that cannot be read is not a reason to show nothing: the
+        // read below is about to produce the same figures anyway.
+        val kept = runCatching { HealthCache.read(context) }.getOrNull() ?: return
+        data = healthDataOf(kept.snapshot)
+        loadedDays = kept.days
+    }
 
     /**
      * Runs something that must finish on the scope the reads use.
@@ -359,7 +456,13 @@ class HealthState(private val reader: HealthReader = HealthReader()) {
     }
 
     private companion object {
-        /** What the tab opens with: a month, which every tile's window fits in. */
+        /**
+         * What the tab opens with: a month, which every tile's window fits
+         * in. The same thirty [readWindow] rounds to and [HealthCache.DAYS]
+         * keeps: a read, a rounding step or a kept window shorter than what
+         * the tab opens with would each be a window nothing ever wanted.
+         * Change one and change all three.
+         */
         const val WINDOW_DAYS = 30
         /** Long enough that switching tabs costs nothing, short enough to feel live. */
         const val FRESH_MILLIS = 60_000L
@@ -397,28 +500,65 @@ internal suspend fun loadHealthData(
         return HealthData(stage = HealthStage.NotConnected)
     }
 
-    val snapshot = reader.read(context, days = days)
-    return HealthData(
-        stage = HealthStage.Granted,
-        snapshot = snapshot,
-        restingTrend = trendOf(snapshot.restingHeartRate),
-        hrvTrend = trendOf(snapshot.hrv),
-        breathingTrend = trendOf(snapshot.respiratoryRate),
-        skinTrend = trendOf(snapshot.skinTemperature),
-        weightTrend = trendOf(snapshot.weight),
-        stepsTrend = trendOf(snapshot.steps),
-        sleepTrend = trendOf(snapshot.nights.toSleepReadings()),
-        // These three are derived rather than read: Health Connect has
-        // no "balance" or "minutes exercised a day" to ask for, so they
-        // are built from the halves it does hold. Computed here with the
-        // rest, not in a tile, because a trend recomputed on every
-        // recomposition costs a frame to say the same thing.
-        energyTrend = trendOf(balanceReadings(snapshot)),
-        nutritionTrend = trendOf(snapshot.eatenDaily),
-        activityTrend = trendOf(snapshot.sessions.toDailyMinutes()),
-        nights = snapshot.nights.sortedBy { it.day },
-    )
+    return healthDataOf(reader.read(context, days = days))
 }
+
+/**
+ * A snapshot reduced to everything the tab draws.
+ *
+ * Split out from [loadHealthData] when the tab learned to open on its last
+ * read, and it is the reason that cache keeps the snapshot rather than the
+ * reduction. A restored frame runs this; a live read runs this; so the two
+ * cannot produce a different usual band, a different balance or a
+ * different count of nights, whatever either of them is given. Keeping the
+ * reduced figures on disk instead would have been a second copy of every
+ * number on the tab, waiting for somebody to change how a trend is counted
+ * and not know it existed.
+ */
+internal fun healthDataOf(snapshot: HealthSnapshot): HealthData = HealthData(
+    stage = HealthStage.Granted,
+    snapshot = snapshot,
+    restingTrend = trendOf(snapshot.restingHeartRate),
+    hrvTrend = trendOf(snapshot.hrv),
+    breathingTrend = trendOf(snapshot.respiratoryRate),
+    skinTrend = trendOf(snapshot.skinTemperature),
+    weightTrend = trendOf(snapshot.weight),
+    stepsTrend = trendOf(snapshot.steps),
+    sleepTrend = trendOf(snapshot.nights.toSleepReadings()),
+    // These three are derived rather than read: Health Connect has
+    // no "balance" or "minutes exercised a day" to ask for, so they
+    // are built from the halves it does hold. Computed here with the
+    // rest, not in a tile, because a trend recomputed on every
+    // recomposition costs a frame to say the same thing.
+    energyTrend = trendOf(balanceReadings(snapshot)),
+    nutritionTrend = trendOf(snapshot.eatenDaily),
+    activityTrend = trendOf(snapshot.sessions.toDailyMinutes()),
+    nights = snapshot.nights.sortedBy { it.day },
+)
+
+/**
+ * The window a read actually covers, for a screen that asked for an odd
+ * number of days.
+ *
+ * Rounded up to the next whole month, because the screens ask in whatever
+ * their window bar happens to need and Health Connect charges per round
+ * trip rather than per day. A seven-day chart stepped back four times asks
+ * for 35, 42, 49 and 56 days: four reads of ground that overlaps almost
+ * entirely, and four waits. Rounded, that is one read of sixty days and
+ * three steps that cost nothing.
+ *
+ * Thirty is the floor because it is what the tab opens with, and the two
+ * windows anything asks for by name -- ninety for the charts, a hundred
+ * and twenty for readiness and fitness age -- are both whole months
+ * already, so neither of them reads a day more than it did before.
+ */
+internal fun readWindow(days: Int): Int {
+    if (days <= READ_STEP) return READ_STEP
+    return ((days + READ_STEP - 1) / READ_STEP) * READ_STEP
+}
+
+/** A month, which is the window the tab opens with. */
+private const val READ_STEP = 30
 
 /**
  * Your heart rate while you were actually asleep, as the tenth percentile of

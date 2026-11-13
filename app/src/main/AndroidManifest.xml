@@ -66,6 +66,25 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Puts the home screen back after a reboot or an update, which
+             nothing else does: a widget's RemoteViews do not survive a
+             restart and the providers are not asked for new ones until
+             something asks them. A redraw from what was kept on disk, not a
+             Health Connect read. Same two protected broadcasts as above, and
+             separate from RelayBootReceiver on purpose: that one bails out
+             three ways before it decides to start the relay, and the widgets
+             must not be downstream of any of them. -->
+        <receiver android:name=".WidgetBootReceiver"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- Where the step check's alarm lands. Not exported and with no
              intent filter: the only thing that reaches it is this app's own
              PendingIntent, which AlarmManager delivers under this app's

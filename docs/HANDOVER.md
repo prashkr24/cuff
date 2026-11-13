@@ -683,6 +683,21 @@ adb logcat -s AirBridge
   thirty for a while and that was a coincidence, not a rule. Raising the
   door to match the queue would replay a minute and a half of old
   notifications onto a wrist every time the listener reconnects.
+- **A widget's `initialLayout` is inflated raw, and it is what you see after
+  a reboot.** RemoteViews live only in the launcher's and the system's
+  memory, so a restart throws them away and the host inflates
+  `android:initialLayout` straight out of the APK — no `setRemoteAdapter`,
+  no `setEmptyView`, no actions, no data. The stack's empty TextView was
+  `visible` with its text baked in, so every reboot drew "Tap to choose what
+  this stack holds" over a stack that was configured perfectly well, and no
+  amount of debugging `onDataSetChanged` would have found it, because
+  `onDataSetChanged` had not run. An initial layout is a placeholder for a
+  widget that knows nothing; write it as one.
+- **`getLoadingView()` returning null does not mean "no loading view".** It
+  means `RemoteViewsAdapter` supplies its own, which is a TextView reading
+  "Loading…" from the platform's resources. That string is not in this app
+  and grepping for it finds nothing, which is a memorable hour. Return an
+  empty item-shaped frame instead.
 - **`setIntent` makes a widget's tap permanent.** The activity is singleTop,
   so `onNewIntent` calls `setIntent` and `getIntent()` answers with that
   widget's intent for as long as the instance lives. A configuration change
@@ -1026,8 +1041,36 @@ level with it, every bar was full and three rings drew as a bullseye.
 method, so the widgets and the tab share one read. Two readers would be two
 sets of arithmetic drifting apart, and a tile whose trend differs from its
 widget's is the kind of bug nobody reports because nobody believes it. The
-widgets ask for 14 days, not the tab's 30: the longest window any face draws
-is a fortnight.
+widgets ask for 30 days — `WIDGET_WINDOW_DAYS` — and `widgetWindowDays`
+raises that to 120 when a readiness or fitness-age face is on the home
+screen, because those two count nights rather than days and cannot answer
+on a month.
+
+**And they draw from disk before they read anything.** The snapshot was held
+in memory alone, so a reboot, or Android reclaiming the process on a quiet
+afternoon, left every widget with nothing and sent the next draw to Health
+Connect on a thread the launcher was waiting on. `WidgetSnapshotStore` keeps
+the Health Connect half of the snapshot — about 12 KB of JSON in its own
+`air_widget_cache` file, deliberately not beside the tile layout, because
+SharedPreferences rewrites a whole file per commit. A cold process draws the
+kept figures at once and asks for a read behind them. Nothing derived is
+stored: the restored snapshot goes through the same `healthDataOf` the tab
+uses, so a widget and a tile cannot compute different trends from the same
+readings.
+
+Two things are deliberately thinned rather than kept whole. The hypnogram's
+segments are dropped — no face draws one, and `hasStages` is answered by the
+three stage durations, which are kept. Today's beats are thinned to the
+highest sample in each five minutes, which is lossless for the only thing any
+face draws from them, an hourly maximum, because five minutes divides an hour
+exactly. Every kept sample is a real sample at its real time.
+
+There are now **two** persisted caches of the same `HealthSnapshot` —
+`widget/WidgetSnapshotStore.kt` and `health/HealthCache.kt` — written at the
+same time by two people who could not see each other. They share the
+reduction and nothing else. Collapsing them is deleting one and pointing its
+reader at the other; it has not been done, and this paragraph is the reason
+somebody will know it was a decision rather than an oversight.
 
 **Adding one belongs to the launcher.** `requestPinAppWidget` was tried and
 removed: Android deliberately skips the configuration activity for a pinned
@@ -1391,6 +1434,44 @@ Left on plain `remember` on purpose: anything tied to an in-flight write, a
 transient refusal line, something re-read from disk, and the two dialogs that
 hold a `FoodEntry` or a `SavedFood` — neither is a Bundle-able kind, and
 making them saveable throws.
+
+## The tab opens on its last read
+
+`health/HealthCache.kt` keeps the last good `HealthSnapshot` in `air_health`
+as one JSON line, about 40 KB for a month, and the tab restores it before it
+reads anything. The snapshot is kept rather than the derived `HealthData`,
+because the trends, bands and balances are all computed from it — storing
+them too would be a second copy of every figure on the tab, and a second
+thing to disagree with the first. Both the live read and the restore run
+through `healthDataOf`, so a restored frame and the frame that replaces it
+differ only in how old they are.
+
+**`loading` is now `refreshing`, and the rename is the point.** It used to
+mean "a read is in flight", and every screen treated it as "there is nothing
+to show" — which is why switching a chart to 90 days emptied the screen and
+said nothing. Those are two different questions and now have two different
+answers: `refreshing` is the read, and `HealthStage.Loading` on the data is
+the emptiness. Anything drawing a spinner should ask the second; anything
+saying "this might still fill in" should ask the first.
+
+**What is not kept: today's individual beats.** Tens of thousands of
+samples, and the only part of a snapshot that is about *now* rather than
+about a day. So the heart screen says "Reading today's beats…" while a read
+runs, rather than "No heart rate recorded today yet", which would have been
+a false statement about a cache rather than about the user.
+
+**The day boundary is where a cache like this goes wrong.** The entry stores
+the local day it was read on, and on restore anything meaning "so far today"
+— the six counters and the two hourly series — is dropped when that day has
+turned. Opened at two in the morning the tab shows a month of real nights
+with today's counters empty, not yesterday's nine thousand steps under
+today's date.
+
+`widen` rounds a request up to the next whole month. A seven-day chart
+stepped back four times used to ask for 35, 42, 49 and 56 days — four full
+reads over almost identical ground — and now costs one read of 60. The
+windows asked for by name are already whole months, so nothing that was fast
+became slower.
 
 ## Readiness is settled in the morning, not when you open the screen
 

@@ -120,6 +120,15 @@ internal fun rememberChartWindow(length: Int): ChartWindow =
  * The arrows step by a whole window, because stepping by a day turns
  * "last week" into seven taps. Forward is disabled at today rather than
  * hidden, so the control does not change shape as you use it.
+ *
+ * [reading] is the window a longer read is currently fetching, from
+ * `HealthState.wideningTo`, and null the rest of the time. Tapping 90 used
+ * to do nothing anybody could see: the chart keeps the thirty days it
+ * already has, which is right — a chart that empties itself while it
+ * waits is a chart that lies about a quiet quarter — but keeping them
+ * silently made the control look broken for the several seconds Health
+ * Connect takes over ninety days. The line says what is happening and
+ * disappears when it has.
  */
 @Composable
 internal fun WindowBar(
@@ -128,6 +137,7 @@ internal fun WindowBar(
     onChange: () -> Unit,
     modifier: Modifier = Modifier,
     label: (Int) -> String = { "$it days" },
+    reading: Int? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -212,6 +222,20 @@ internal fun WindowBar(
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+    // Under the arrows rather than over the pills, so the control itself
+    // does not move when a read starts and stops. The same words the
+    // charts use for an unread window -- "Reading…" -- because it is the
+    // same fact, said about the window instead of about the gap in it.
+    if (reading != null) {
+        Text(
+            "Reading your last $reading days…",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.extras.disabled,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+        )
     }
 }
 

@@ -144,11 +144,12 @@ internal fun HealthStepsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     state.widen(context, window.daysNeeded)
                 },
                 modifier = Modifier.padding(top = 14.dp),
+                reading = state.wideningTo,
             )
 
             if (shown.isEmpty()) {
                 Text(
-                    if (state.loading) "Reading these days…" else "Nothing recorded in these days.",
+                    if (state.refreshing) "Reading these days…" else "Nothing recorded in these days.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 24.dp),

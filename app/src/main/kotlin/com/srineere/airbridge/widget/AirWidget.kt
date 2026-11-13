@@ -200,25 +200,67 @@ const val ROUTE_EXTRA = "air_route"
  */
 internal object WidgetSnapshotCache {
     private val mutex = Mutex()
-    // Volatile because invalidate() writes it from whatever thread called
+    // Volatile because refresh() writes it from whatever thread called
     // refreshWidgets while the stack's onDataSetChanged reads it through
     // get() on a binder thread. Without the barrier the stack could redraw
-    // from the snapshot the invalidate was meant to throw away, while the
-    // Glance faces beside it drew the new one.
+    // from the snapshot the refresh was meant to replace, while the Glance
+    // faces beside it drew the new one.
     @Volatile private var held: WidgetSnapshot? = null
+
+    /**
+     * Whether Health Connect has actually been read in *this* process.
+     *
+     * Not the same question as "is [held] set". A cold process restores
+     * what it kept on disk into [held] without reading anything, and the
+     * difference between those two states is what [get] turns on.
+     */
+    @Volatile private var read = false
+
+    /** Whether the kept entry has been looked for. Only read under the lock. */
+    private var looked = false
 
     suspend fun get(context: Context, maxAge: Long = FRESH_MILLIS): WidgetSnapshot = mutex.withLock {
         // A snapshot read for thirty days cannot answer a readiness card
         // that wants a hundred and twenty, so a held one that is too short
         // is as stale as an old one however recently it was taken.
         val want = widgetWindowDays(context)
-        val existing = held
+        val existing = held ?: kept(context)
         if (existing != null && existing.days >= want &&
             System.currentTimeMillis() - existing.readAt < maxAge
         ) {
             return existing
         }
-        readWidgetSnapshot(context, want).also { held = it }
+        if (existing != null && !read) {
+            // A cold process draws what it kept and reads afterwards.
+            //
+            // This is the whole of the reboot fix. The alternative is what
+            // was here before: the first thing a widget does on a phone
+            // that has just started is to block on Health Connect, which
+            // after a reboot is itself still waking up -- so the launcher
+            // sat on a spinner, or on an empty stack, for as long as that
+            // took, and drew nothing at all if it failed. The figures
+            // below are a few minutes old and carry their real age; the
+            // read that corrects them is on its way before this returns.
+            WidgetRefresh.readNow(context)
+            return existing
+        }
+        // Nothing kept and nothing held: there is genuinely nothing to
+        // draw, so this one does wait. A failed read falls back to
+        // whatever there was rather than to an empty card.
+        reread(context, want) ?: existing ?: WidgetSnapshot(days = want)
+    }
+
+    /**
+     * Reads Health Connect now and keeps what comes back.
+     *
+     * Called by the worker rather than left to the next draw. It used to
+     * be the other way round -- the worker emptied the cache and let
+     * whichever widget drew first pay for the read -- and that cannot work
+     * now that a draw prefers the kept entry: emptying would simply send
+     * the next draw back to the disk copy it had just been told was stale.
+     */
+    suspend fun refresh(context: Context) {
+        mutex.withLock { reread(context, widgetWindowDays(context)) }
     }
 
     /**
@@ -231,15 +273,40 @@ internal object WidgetSnapshotCache {
      * burst of messages turns into a read every few seconds.
      */
     suspend fun refreshBand(context: Context) = mutex.withLock {
-        val existing = held ?: return@withLock
+        val existing = held ?: kept(context) ?: return@withLock
         held = existing.copy(
             band = runCatching { BandStore.read(context) }.getOrDefault(existing.band),
         )
     }
 
-    /** Called when something the widgets draw has certainly changed. */
-    fun invalidate() {
-        held = null
+    /**
+     * One read, held, kept on disk, and never allowed to throw.
+     *
+     * A read that fails leaves the last one standing. Health Connect
+     * throws for a rate limit and for a provider that is mid-update, and
+     * both of those are a reason to draw the figures from ten minutes ago
+     * rather than to blank a home screen.
+     */
+    private suspend fun reread(context: Context, want: Int): WidgetSnapshot? {
+        val fresh = runCatching { readWidgetSnapshot(context, want) }.getOrNull() ?: return null
+        held = fresh
+        read = true
+        WidgetSnapshotStore.write(context, fresh)
+        return fresh
+    }
+
+    /**
+     * The entry on disk, looked for once and then never again.
+     *
+     * Once, because after the first look either [held] holds it or there
+     * was nothing to hold, and a process that reads the file on every draw
+     * is a process doing file IO on a binder thread the launcher is
+     * waiting on.
+     */
+    private fun kept(context: Context): WidgetSnapshot? {
+        if (looked) return null
+        looked = true
+        return runCatching { restoreWidgetSnapshot(context) }.getOrNull()?.also { held = it }
     }
 
     /** Long enough that a screen of widgets costs one read, short enough to feel current. */
@@ -257,7 +324,7 @@ internal object WidgetSnapshotCache {
  * stored. The launcher knows exactly which ids exist; ask it.
  */
 internal suspend fun refreshWidgets(context: Context, reread: Boolean = true) {
-    if (reread) WidgetSnapshotCache.invalidate()
+    if (reread) WidgetSnapshotCache.refresh(context)
     val manager = GlanceAppWidgetManager(context)
     val widget = AirWidget()
     refreshStacks(context)

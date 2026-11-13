@@ -27,6 +27,16 @@ class WidgetRefreshWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        // A redraw puts the home screen back from what was kept on disk and
+        // does nothing else -- in particular it does not reconcile, and it
+        // does not wake Health Connect. First, before the prune below,
+        // because this is the one turn that runs at boot: a launcher that
+        // has not finished loading its widgets reports none, and `prune`
+        // against that would delete every row this app has stored.
+        if (inputData.getBoolean(WidgetRefresh.REDRAW, false)) {
+            refreshWidgets(applicationContext, reread = false)
+            return Result.success()
+        }
         val placed = liveIds(applicationContext)
         // Nothing on the home screen: stop rather than read Health Connect
         // every half hour for a widget that was removed weeks ago.
@@ -53,7 +63,10 @@ class WidgetRefreshWorker(
 object WidgetRefresh {
     private const val NAME = "air-widgets"
     private const val NOW = "air-widgets-now"
+    private const val READ = "air-widgets-read"
+    private const val BACK = "air-widgets-back"
     internal const val BAND_ONLY = "band_only"
+    internal const val REDRAW = "redraw"
 
     /**
      * Redraw soon, because something this app just did changed what a
@@ -76,6 +89,51 @@ object WidgetRefresh {
                 OneTimeWorkRequestBuilder<WidgetRefreshWorker>()
                     .setInitialDelay(4, TimeUnit.SECONDS)
                     .setInputData(workDataOf(BAND_ONLY to true))
+                    .build(),
+            )
+        }
+    }
+
+    /**
+     * Read Health Connect as soon as the scheduler will have us, and redraw.
+     *
+     * Asked for by a draw that found only a kept snapshot to work from, so
+     * that the figures on the home screen correct themselves within moments
+     * of appearing rather than at the periodic turn, which after a reboot
+     * can be half an hour away.
+     *
+     * Unique and KEEP, not REPLACE: a screen of six widgets all noticing the
+     * same stale snapshot in the same second must come to one read. REPLACE
+     * would cancel and requeue five times and could, in principle, never
+     * settle long enough to run.
+     */
+    fun readNow(context: Context) {
+        runCatching {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                READ,
+                ExistingWorkPolicy.KEEP,
+                OneTimeWorkRequestBuilder<WidgetRefreshWorker>().build(),
+            )
+        }
+    }
+
+    /**
+     * Put the home screen back from what is already known.
+     *
+     * What a reboot needs and all it needs. Nothing here goes near Health
+     * Connect: the cards are composed from the snapshot kept on disk, which
+     * is both instant and the only thing that is actually true at that
+     * moment. Off the receiver's thread because composing a stack's cards
+     * is Glance work, and a broadcast receiver has ten seconds and the main
+     * thread to do it on.
+     */
+    fun redraw(context: Context) {
+        runCatching {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                BACK,
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<WidgetRefreshWorker>()
+                    .setInputData(workDataOf(REDRAW to true))
                     .build(),
             )
         }
@@ -105,6 +163,25 @@ object WidgetRefresh {
      */
     fun reconcile(context: Context) {
         if (liveIds(context).isEmpty()) cancel(context) else schedule(context)
+    }
+
+    /**
+     * The schedule put back if it is missing, and never taken away.
+     *
+     * [reconcile]'s first half and not its second, for use at boot. The
+     * cancelling half asks the launcher what it has, and at boot the
+     * launcher may not have finished loading its widgets: a momentary
+     * "nothing placed" would switch the half-hourly read off on a phone
+     * whose home screen is full of them, and nothing would turn it back on
+     * until the app was opened.
+     *
+     * Mostly belt and braces in any case. WorkManager re-establishes its
+     * own periodic work across a reboot, so there is usually no schedule
+     * missing here; this is for the phone that was force-stopped or
+     * restored from a backup.
+     */
+    fun ensure(context: Context) {
+        runCatching { if (liveIds(context).isNotEmpty()) schedule(context) }
     }
 }
 

@@ -62,6 +62,11 @@ internal fun FitnessAgeScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     LaunchedEffect(Unit) { state.widen(context, Readiness.WINDOW_DAYS) }
     var profile by remember { mutableStateOf(FitnessProfileStore.read(context)) }
     val fitness = remember(data.snapshot, profile) { fitnessAgeOf(data.snapshot, profile) }
+    // "Nothing to work it out from" is a finding about a person whose band
+    // has never written a VO₂ max, and this screen reaches four months back
+    // precisely because thirty days is often none. Printing the finding
+    // over the read that would overturn it is the screen answering early.
+    val reading = state.wideningTo != null
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Fitness age", subtitle = "moves in months", onBack = onBack)
@@ -83,8 +88,11 @@ internal fun FitnessAgeScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        if (fitness.years != null) "${fitness.word}, from VO₂ max"
-                        else "nothing to work it out from yet",
+                        when {
+                            fitness.years != null -> "${fitness.word}, from VO₂ max"
+                            reading -> "reading your last ${Readiness.WINDOW_DAYS} days"
+                            else -> "nothing to work it out from yet"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = extras.disabled,
                     )

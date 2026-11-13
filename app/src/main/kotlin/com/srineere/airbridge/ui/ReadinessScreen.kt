@@ -71,11 +71,24 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
     // somebody who had opened it to see a number settled hours earlier.
     val readiness = remember(data.snapshot) { readinessToday(context, data.snapshot) }
     // An unread window and an empty one look identical -- the trap every
-    // chart on this tab already checks `loading` for. "Calibrating, not
+    // chart on this tab already checks `refreshing` for. "Calibrating, not
     // enough nights behind it yet" is a verdict, and printing it over a
     // read that has not come back is the screen answering a question it
     // has not asked yet.
-    val reading = state.loading && readiness.days == 0
+    //
+    // The first half of this is new and is what the tab's own cache made
+    // necessary. The snapshot now arrives with thirty days already in it,
+    // so this screen can work out a perfectly real readiness over thirty
+    // nights and announce "30 of 60" at somebody while the hundred and
+    // twenty day read that settles the question is still running. Thirty
+    // of sixty is a true count of a window nobody asked for.
+    val reading = state.wideningTo != null || (state.refreshing && readiness.days == 0)
+    // "Reading" takes the place of the verdict only while there is no
+    // verdict to take the place of. Where a figure is already drawn --
+    // which, since the morning's figure is kept, is most mornings -- the
+    // word stays what the figure says and the note under the card carries
+    // the read instead.
+    val nothingYet = reading && readiness.trend == null
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         val today = java.time.LocalDate.now().toEpochDay()
@@ -103,7 +116,7 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
                 Column(Modifier.padding(bottom = 4.dp)) {
                     Text(
                         when {
-                            reading -> "Reading"
+                            nothingYet -> "Reading"
                             readiness.calibrating -> "Calibrating"
                             else -> readiness.word.replaceFirstChar { it.uppercase() }
                         },
@@ -115,7 +128,7 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
                         readiness.trend?.let { trend ->
                             "your own ${readiness.days} nights · usual is " +
                                 "${trend.usual.low.roundToInt()}–${trend.usual.high.roundToInt()}"
-                        } ?: if (reading) {
+                        } ?: if (nothingYet) {
                             "reading your last ${Readiness.WINDOW_DAYS} days"
                         } else {
                             "not enough nights behind it yet"
@@ -138,6 +151,20 @@ internal fun ReadinessScreen(onBack: () -> Unit) {
                     to = maxOf(trend.highest, trend.usual.high) + 3,
                     colour = ink,
                     modifier = Modifier.padding(top = 14.dp),
+                )
+            }
+
+            // Said beside a figure rather than instead of it. The figure
+            // above is the one that was settled this morning and it is not
+            // going to change; what the long read buys is the band behind
+            // it and the count of nights, which is worth waiting for and
+            // worth saying you are waiting for.
+            if (reading && !nothingYet) {
+                Text(
+                    "Reading your last ${Readiness.WINDOW_DAYS} days…",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = extras.disabled,
+                    modifier = Modifier.padding(top = 12.dp),
                 )
             }
 

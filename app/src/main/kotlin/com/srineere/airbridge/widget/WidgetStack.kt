@@ -165,7 +165,15 @@ internal fun stackViews(context: Context, appWidgetId: Int): RemoteViews {
     // flipper clamps what it draws, the route came out null so a tap opened
     // the Health tab, and the next chevron stepped from a number no card
     // was on.
-    val designs = WidgetStore.read(context, appWidgetId)?.designs.orEmpty()
+    //
+    // Guarded, because a stack whose row cannot be read is not a stack with
+    // no row: the one would say "tap to choose" at somebody who already
+    // has, and throwing out of here would leave the launcher with no views
+    // at all.
+    val designs = runCatching {
+        WidgetStore.read(context, appWidgetId)?.designs.orEmpty()
+    }.getOrDefault(emptyList())
+    views.setTextViewText(R.id.stack_empty, context.getString(stackEmptyText(designs)))
     val page = StackPage.read(context, appWidgetId)
         .coerceIn(0, (designs.size - 1).coerceAtLeast(0))
     // The tap belongs to the frame over the flipper rather than to the
@@ -182,6 +190,29 @@ internal fun stackViews(context: Context, appWidgetId: Int): RemoteViews {
     views.setDisplayedChild(R.id.stack_view, page)
     return views
 }
+
+/**
+ * Which of the two silences an empty stack is in.
+ *
+ * `setEmptyView` fires on one condition -- the adapter has no items -- and
+ * that one condition covers two completely different facts. A stack with
+ * no designs has never been told what to hold, and "tap to choose" is the
+ * only useful thing to say to it. A stack *with* designs whose cards are
+ * not composed has been set up, possibly months ago, and telling that
+ * person to choose what the stack holds is telling them their widget has
+ * forgotten them.
+ *
+ * Which is exactly what a reboot did. The sentence used to be baked into
+ * `widget_stack.xml`, which is also the stack's `initialLayout` -- the
+ * layout the host inflates with no adapter and no actions while it waits
+ * for the provider -- so every restart put it on screen and only opening
+ * the app took it off again.
+ *
+ * Pulled out of [stackViews] so the rule can be asserted without a
+ * launcher.
+ */
+internal fun stackEmptyText(designs: List<WidgetDesign>): Int =
+    if (designs.isEmpty()) R.string.widget_stack_empty else R.string.widget_stack_quiet
 
 /**
  * Which card of a stack is showing.
@@ -298,7 +329,15 @@ internal class StackFactory(
         // stack would be twenty megabytes resident and recomposed in full
         // on every refresh. The configuration screen caps the choice too;
         // this is the defence for a row already stored.
-        val stack = WidgetStore.read(context, appWidgetId)?.designs.orEmpty().take(MAX_STACK_CARDS)
+        val stack = runCatching {
+            WidgetStore.read(context, appWidgetId)?.designs.orEmpty()
+        }.getOrDefault(emptyList()).take(MAX_STACK_CARDS)
+        // The one honest way to have no cards: nobody has said what this
+        // stack holds. Everything below is written so that a stack which
+        // *has* been told always comes out of here with a card per design,
+        // whatever Health Connect is doing -- an empty adapter is the
+        // launcher's cue to draw the "tap to choose" sentence, and a stack
+        // that drew that after every reboot is the bug being fixed.
         if (stack.isEmpty()) {
             cards = emptyList()
             return
@@ -308,7 +347,15 @@ internal class StackFactory(
         // One read for the whole stack, as the five single-card providers
         // share one between them: six cards must not be six readings of
         // today taken a moment apart.
-        val snapshot = runBlocking { WidgetSnapshotCache.get(context) }
+        //
+        // get() prefers the snapshot kept on disk over waiting on Health
+        // Connect and never throws, which is what makes this safe to call
+        // from a binder thread the launcher is blocked on. The fallback
+        // below is for the case it cannot cover: a first run, with nothing
+        // read and nothing kept. The faces draw their own empty states from
+        // it, and empty cards are still cards.
+        val snapshot = runCatching { runBlocking { WidgetSnapshotCache.get(context) } }
+            .getOrDefault(WidgetSnapshot())
         val colours = widgetColours(context)
         val now = System.currentTimeMillis()
         val remote = GlanceRemoteViews()
@@ -367,7 +414,24 @@ internal class StackFactory(
         return item
     }
 
-    override fun getLoadingView(): RemoteViews? = null
+    /**
+     * The empty frame, rather than the platform's own loading view.
+     *
+     * Null here does not mean "no loading view": it means the platform
+     * builds a default one, and the default one is a `TextView` reading
+     * **Loading…** sized to the first card. That is where the word the user
+     * reported was coming from -- not from this app's vocabulary, which has
+     * no such string in it. It appears whenever the host asks for a card
+     * the adapter has not handed over yet, which is every rebind of a
+     * stack, and it is the most alarming thing a home screen can say about
+     * a widget that is in fact working.
+     *
+     * The same layout every card wears, so the recycler still sees one
+     * shape, and empty, so the moment before a card arrives looks like
+     * nothing rather than like a failure.
+     */
+    override fun getLoadingView(): RemoteViews =
+        RemoteViews(context.packageName, R.layout.widget_stack_item)
 
     /** One, because every card wears the same frame. */
     override fun getViewTypeCount(): Int = 1

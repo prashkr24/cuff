@@ -152,7 +152,7 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         HealthHeader(
             writtenAt = data.snapshot.writtenAt,
-            loading = state.loading,
+            refreshing = state.refreshing,
             onRefresh = askSync,
         )
 
@@ -238,7 +238,7 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
  * a tab held open kept saying "now" an hour later.
  */
 @Composable
-private fun HealthHeader(writtenAt: Instant?, loading: Boolean, onRefresh: () -> Unit) {
+private fun HealthHeader(writtenAt: Instant?, refreshing: Boolean, onRefresh: () -> Unit) {
     val now = nowTicking()
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -258,7 +258,7 @@ private fun HealthHeader(writtenAt: Instant?, loading: Boolean, onRefresh: () ->
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.extras.disabled,
         )
-        if (loading) {
+        if (refreshing) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.size(48.dp),

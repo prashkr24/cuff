@@ -27,7 +27,20 @@
     <string name="widget_tall_label">Tall widget</string>
     <string name="widget_stack_label">Stack</string>
     <string name="widget_stack_description">Several widgets in one cell. Swipe through them.</string>
+    <!-- A stack that has never been told what to hold, and only that. It
+         used to be shown for the other empty state as well, a stack set
+         up perfectly well whose cards had not been composed yet, which is
+         how a reboot came to ask somebody to set up a widget they had set
+         up in August. The two states are told apart in stackViews now. -->
     <string name="widget_stack_empty">Tap to choose what this stack holds</string>
+    <!-- A stack that holds designs but has no cards to show for them. After
+         the kept snapshot arrived this should be the sub-second gap while
+         the launcher binds the adapter, and nothing else: onDataSetChanged
+         draws from disk when Health Connect cannot be reached, so a
+         configured stack composes a card per design whatever happens. It is
+         worded for the case where that has somehow failed anyway, because
+         that is the only case anybody will read it in. -->
+    <string name="widget_stack_quiet">Open the app to draw this stack</string>
     <string name="widget_stack_previous">Previous card</string>
     <string name="widget_stack_next">Next card</string>
 </resources>
