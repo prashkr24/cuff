@@ -123,6 +123,61 @@ class WidgetCatalogueTest {
         }
     }
 
+    // ------------------------------------------- with the health half off
+
+    @Test
+    fun `nothing that needs a reading is offered with health off`() {
+        val offered = WidgetCatalogue.offered(healthOn = false)
+        assertTrue(offered.none { it.needsHealth() })
+        // Said the other way round too, so that a family added without a
+        // thought for the gate fails here rather than drawing a blank
+        // card on somebody's home screen.
+        assertTrue(offered.none { it is WidgetDesign.OfTile })
+        assertTrue(offered.none { it is WidgetDesign.OfRings })
+        assertTrue(offered.none { it is WidgetDesign.OfDials })
+        assertEquals(WidgetCatalogue.all, WidgetCatalogue.offered(healthOn = true))
+    }
+
+    @Test
+    fun `the band keeps every face it had`() {
+        // The whole promise of the gate: a battery, a relay state and a
+        // count of buzzes are facts this app holds itself, so none of
+        // them goes away with Health Connect.
+        val offered = WidgetCatalogue.offered(healthOn = false)
+        BandFace.entries.forEach { assertTrue(it.name, WidgetDesign.OfBand(it) in offered) }
+        assertTrue(WidgetDesign.OfType(TypeFace.Battery) in offered)
+        assertTrue(WidgetDesign.OfType(TypeFace.Relay) in offered)
+        // And the two type faces that are a tile with the card taken away
+        // do, because the reading underneath is still a reading.
+        assertFalse(WidgetDesign.OfType(TypeFace.Steps) in offered)
+        assertFalse(WidgetDesign.OfType(TypeFace.Sleep) in offered)
+    }
+
+    @Test
+    fun `every cell still has something to offer with health off`() {
+        // A picker with nothing in it is a launcher drop that cannot be
+        // completed, and default() calls first() on this list.
+        WidgetSize.entries.forEach { size ->
+            val fitting = WidgetCatalogue.forSize(size, healthOn = false)
+            assertTrue(size.name, fitting.isNotEmpty())
+            assertTrue(size.name, fitting.none { it.needsHealth() })
+            val fallback = WidgetCatalogue.default(size, healthOn = false)
+            assertTrue(size.name, fallback.fits(size))
+            assertFalse(size.name, fallback.needsHealth())
+        }
+    }
+
+    @Test
+    fun `no family is listed empty with health off either`() {
+        WidgetSize.entries.forEach { size ->
+            WidgetCatalogue.families(size, healthOn = false).forEach { (family, designs) ->
+                assertTrue(designs.isNotEmpty())
+                assertTrue(family.name, designs.none { it.needsHealth() })
+            }
+        }
+        assertTrue(WidgetCatalogue.families(healthOn = false).none { it.first == WidgetFamily.Tiles })
+    }
+
     // ------------------------------------------------------------ the band
 
     @Test

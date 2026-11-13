@@ -128,6 +128,22 @@ object HealthCache {
             .putString(KEY, encodeHealth(kept))
             .apply()
     }
+
+    /**
+     * Throws the entry away.
+     *
+     * For the moment the health half is switched off. A month of
+     * somebody's nights has no business sitting in a preferences file for
+     * a feature they have just turned off, and this is a cache rather
+     * than a record -- the cost of being wrong about that is one read.
+     *
+     * Nothing written is touched by this, here or anywhere else. The food
+     * log lives in Health Connect and the entries are the person's, not
+     * ours to withdraw.
+     */
+    fun clear(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY).apply()
+    }
 }
 
 /**

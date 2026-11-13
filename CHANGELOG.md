@@ -18,6 +18,13 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Added
 
+- **The Health half is opt-in**, behind a switch at the top of the Device tab
+  and off on a fresh install. The relay is what the app is for, and wanting
+  only that should not cost thirteen health permissions. Turning it on is
+  what asks for them; turning it off takes the tab, its widgets and its two
+  activity buzzes away, cancels the background work and clears the caches —
+  and deletes nothing, including food already written to Health Connect. An
+  install already using the tab keeps it. [13 Nov]
 - **The app and its widgets open on their last reading.** Both persist the
   last `HealthSnapshot` — about 40 KB for the tab, 12 KB for the widgets —
   so a screen draws real figures immediately and refreshes underneath
@@ -143,6 +150,10 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Fixed
 
+- **The hourly nudge fired outside its own window.** The end hour was
+  inclusive, so a window shown as "09:00–21:00" could buzz at 21:50 — fifty
+  minutes after the time chosen. Reported from a phone, and a test had been
+  asserting the wrong behaviour rather than catching it. [13 Nov]
 - **Widgets went blank after a reboot and said the stack was unconfigured.**
   A widget's `initialLayout` is inflated raw out of the APK after a restart —
   no adapter, no data — and the stack's empty TextView was visible with "Tap
@@ -254,6 +265,10 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Removed
 
+- **The journal, hidden rather than deleted.** No entry point, no reminder,
+  and the already-booked WorkManager job is cancelled so it stops firing a
+  notification for a screen that is no longer reachable. The code, its tests
+  and anything already written all stay, so it can come back. [13 Nov]
 - **The `INTERNET` permission from debug builds**, left over from Flutter's
   hot reload. This app makes no network call in any build type. [6 Nov]
 - **The DataStore dependency**, declared and never used — all state is

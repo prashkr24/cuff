@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
@@ -58,6 +59,7 @@ import com.srineere.airbridge.CalendarNotificationListener
 import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.health.HealthAvailability
 import com.srineere.airbridge.health.HealthConnect
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.ui.theme.extras
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,6 +84,7 @@ internal data class Grant(
 @Composable
 internal fun PermissionsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val healthOn by HealthEnabled.enabled.collectAsState()
     val grants = rememberGrants(context)
     val missing = grants.filter { !it.granted }
     val blocking = missing.count { it.need == Need.Required }
@@ -117,11 +120,27 @@ internal fun PermissionsScreen(onBack: () -> Unit) {
         // make "nothing left to allow" mean one thing on a screen that was
         // counting another.
         SectionHeader("The Health tab")
-        HealthGrantCard()
+        if (healthOn) {
+            HealthGrantCard()
+        } else {
+            // Nothing is asked for a half that is switched off, and this
+            // screen is the first thing a fresh install sees. A card here
+            // offering to allow thirteen kinds of reading, before anybody
+            // has said they want the readings at all, would make "off by
+            // default" a thing the app says rather than a thing it does.
+            Text(
+                "Off, so nothing here asks Health Connect for anything. The switch is on " +
+                    "the Device tab, and turning it on is what asks.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+            )
+        }
 
         Text(
-            "CUFF talks to the band directly over Bluetooth, and reads your readings " +
-                "from Health Connect on this phone. No account, no server, nothing uploaded.",
+            "CUFF talks to the band directly over Bluetooth" +
+                (if (healthOn) ", and reads your readings from Health Connect on this phone" else "") +
+                ". No account, no server, nothing uploaded.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 28.dp),
@@ -371,7 +390,16 @@ private fun Context.asked(permission: String) = askedKey().getBoolean(permission
 private fun Context.rememberAsked(permission: String) =
     askedKey().edit().putBoolean(permission, true).apply()
 
-private fun Context.openAppSettings() {
+/**
+ * This app's own page in Android's settings, which is the only way back
+ * in once a grant has been refused for good.
+ *
+ * Internal rather than private because the Device tab's health switch
+ * runs into exactly the same dead end: Health Connect stops showing its
+ * sheet, the launcher returns at once, and the control looks broken.
+ * One route out, written once.
+ */
+internal fun Context.openAppSettings() {
     runCatching {
         startActivity(
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
@@ -474,7 +502,7 @@ internal fun blockingGrants(context: Context): Int =
  * and up, so this only matters on older phones -- and the store may not be
  * there either, which is why the browser is the fallback.
  */
-private fun Context.openHealthConnectListing() {
+internal fun Context.openHealthConnectListing() {
     val id = "com.google.android.apps.healthdata"
     val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$id"))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

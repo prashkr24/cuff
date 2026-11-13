@@ -27,6 +27,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import dev.airpulse.fitbit_air.AirLink
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthReader
 import com.srineere.airbridge.health.HealthSettings
 import com.srineere.airbridge.health.canPulseBand
@@ -700,6 +701,17 @@ class CalendarRelayService : Service() {
      */
     private fun scheduleStepCheck() {
         handler.removeCallbacks(stepCheck)
+        // Both of these count your steps, so both are the health half
+        // wearing an Alerts hat, and with that half off there is nothing
+        // for them to read. Nothing is scheduled at all: the alarm is
+        // dropped rather than rearmed, and a nudge already sitting in the
+        // shade goes with it, for the same reason the next few lines drop
+        // one whose own switch has just been turned off.
+        if (!HealthEnabled.isOn(this)) {
+            runCatching { getSystemService(NotificationManager::class.java).cancel(903) }
+            cancelStepAlarm()
+            return
+        }
         val settings = HealthSettings.read(this)
         // A nudge still sitting in the shade after the thing that posts it
         // was switched off is a notification about a setting that no longer
@@ -850,6 +862,12 @@ class CalendarRelayService : Service() {
 
     private fun checkStepGoals(reschedule: Boolean = true) {
         if (reschedule) scheduleStepCheck()
+        // Asked again here and not only in the schedule above, because
+        // [onStepAlarm] comes in from a broadcast and goes straight
+        // through. The system holds a PendingIntent across a process
+        // restart, so an alarm armed before the health half was switched
+        // off can still arrive after it.
+        if (!HealthEnabled.isOn(this)) return
         val settings = HealthSettings.read(this)
         if (!settings.buzzOnGoal && !settings.hourlyNudge) return
         // A missing band used to end this outright. It still does when the

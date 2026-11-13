@@ -4,6 +4,7 @@ import android.content.Context
 import com.srineere.airbridge.health.FitnessProfile
 import com.srineere.airbridge.health.FitnessProfileStore
 import com.srineere.airbridge.health.Goals
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthGoals
 import com.srineere.airbridge.health.Readiness
 import com.srineere.airbridge.health.readinessToday
@@ -70,14 +71,32 @@ data class WidgetSnapshot(
  *
  * It costs a wider read every half hour. The alternative was to relabel
  * five faces away from the tiles they exist to mirror.
+ *
+ * With the health half switched off it costs nothing, because the read
+ * does not happen: see below. The band half of the snapshot is still
+ * assembled, because the faces that survive are drawn from it.
  */
 internal suspend fun readWidgetSnapshot(
     context: Context,
     days: Int = WIDGET_WINDOW_DAYS,
 ): WidgetSnapshot {
-    // Held, because readiness needs it too and the whole point of this
-    // object is that four widgets cost one read.
-    val health = loadHealthData(context, days = days)
+    // Not read at all with the health half off, and this is the one place
+    // it has to be stopped. The half-hourly worker goes on running -- the
+    // band faces want redrawing -- so without this it would ask Health
+    // Connect for thirty days of somebody's readings every half hour for
+    // a feature they have switched off, and then write them back to the
+    // very file the switch had just emptied. An ungranted HealthData is
+    // exactly the right shape for that: every face that wants a reading
+    // already knows what to do with one, `granted` comes back false, and
+    // WidgetSnapshotStore.write clears the kept entry rather than
+    // replacing it.
+    val health = if (HealthEnabled.isOn(context)) {
+        // Held, because readiness needs it too and the whole point of
+        // this object is that four widgets cost one read.
+        loadHealthData(context, days = days)
+    } else {
+        HealthData()
+    }
     return WidgetSnapshot(
         health = health,
         // Never throws the whole snapshot away: a band fact that cannot be

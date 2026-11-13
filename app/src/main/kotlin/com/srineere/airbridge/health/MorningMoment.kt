@@ -62,6 +62,20 @@ class MorningWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        // Nothing to do with the health half switched off: everything
+        // below reads Health Connect, and the two things this moment is
+        // for -- the report and the settled readiness figure -- are both
+        // health features.
+        //
+        // Returning without booking is what ends the chain. Each run
+        // books the next, so a run that books nothing is the last one,
+        // and a phone carrying a booking made before the switch existed
+        // loses it the first morning after.
+        if (!HealthEnabled.isOn(applicationContext)) {
+            Log.i(TAG, "morning: the health half is off, so nothing is booked")
+            return Result.success()
+        }
+
         // Tomorrow's is booked before today's is sent, so a failure to read
         // or to notify costs one morning rather than every morning after it.
         //
@@ -220,6 +234,17 @@ object MorningMoment {
      * scheduled job doing the same look a few minutes apart.
      */
     fun schedule(context: Context) {
+        // The whole moment belongs to the health half, report or no
+        // report: it reads thirty days out of Health Connect and settles
+        // readiness from them. With that half off there is nothing to
+        // read and nothing it may say, so this cancels what is booked
+        // rather than booking another -- which also means every caller
+        // can go on calling it unconditionally and get the right answer.
+        if (!HealthEnabled.isOn(context)) {
+            cancel(context)
+            Log.i("AirBridge", "morning: the health half is off, booking cancelled")
+            return
+        }
         val settings = HealthSettings.morning(context)
         // In waking mode the booking is for the first look rather than for
         // the report: what time it actually goes out is decided by when the
@@ -236,6 +261,23 @@ object MorningMoment {
                 .build(),
         )
         Log.i("AirBridge", "morning: next in $delay min, report on=${settings.on}")
+    }
+
+    /**
+     * Drops the morning entirely: the daily booking and the retry both.
+     *
+     * Both names, and that is not belt and braces. [lookAgainBefore]
+     * deliberately books under a second one so that a retry cannot
+     * cancel tomorrow's run -- so cancelling only the first would leave a
+     * retry to fire once more, and the first thing a run does is book the
+     * whole chain again.
+     */
+    fun cancel(context: Context) {
+        runCatching {
+            val manager = WorkManager.getInstance(context)
+            manager.cancelUniqueWork(NAME)
+            manager.cancelUniqueWork("$NAME-again")
+        }
     }
 
     /**

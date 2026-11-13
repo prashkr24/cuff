@@ -146,6 +146,17 @@ object HealthSettings {
     }
 
     /**
+     * Whether a layout has actually been chosen, as against the default
+     * one [tiles] hands back when there is nothing stored.
+     *
+     * Asked by [healthOnDecision] and by nothing else. Arranging tiles is
+     * a thing somebody does by hand inside the Health tab, so a stored
+     * layout is proof the half was in use before there was a switch to
+     * turn it off -- which is the whole question that function answers.
+     */
+    fun tilesConfigured(context: Context): Boolean = prefs(context).contains(KEY_TILES)
+
+    /**
      * Whether the tiles wear their change chips.
      *
      * On by default: a figure with nothing to compare it against is the

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import com.srineere.airbridge.ui.theme.ThemeMode
 import com.srineere.airbridge.ui.theme.AirBridgeTheme
 import com.srineere.airbridge.widget.ROUTE_EXTRA
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.JournalReminder
 import com.srineere.airbridge.health.MorningMoment
 import com.srineere.airbridge.widget.WidgetRefresh
@@ -65,6 +66,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         AppSettings.load(this)
+        // Beside the theme and for the same reason: the bottom bar is
+        // drawn from it on the first frame, and a tab that appeared one
+        // frame late would be a tab that flickered in.
+        HealthEnabled.load(this)
         asked(intent)
         setContent {
             val appearance by AppSettings.appearance.collectAsState()
@@ -91,9 +96,18 @@ class MainActivity : ComponentActivity() {
         //
         // Still here rather than dropped: reconcile repairs a widget refresh
         // schedule an update can lose, and the two schedule() calls re-book
-        // the morning report and the evening journal, which a cleared
-        // WorkManager database would otherwise have silently dropped.
+        // the morning report, which a cleared WorkManager database would
+        // otherwise have silently dropped -- and cancel it, and the evening
+        // journal, when they are not wanted. Both of them now answer to
+        // something: the morning to whether the health half is on, the
+        // journal to being hidden, and each cancels rather than books when
+        // the answer is no. So they stay unconditional here and the
+        // decision lives in one place each.
         lifecycleScope.launch(Dispatchers.Default) {
+            // First of the four, because the three below all ask whether
+            // the health half is on and on the first run of this version
+            // nobody has decided yet.
+            HealthEnabled.settle(this@MainActivity)
             WidgetRefresh.reconcile(this@MainActivity)
             MorningMoment.schedule(this@MainActivity)
             JournalReminder.schedule(this@MainActivity)

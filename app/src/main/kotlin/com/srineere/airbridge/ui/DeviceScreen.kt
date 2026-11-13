@@ -1,6 +1,8 @@
 package com.srineere.airbridge.ui
 
+import android.content.Context
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.BluetoothDisabled
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
@@ -61,7 +64,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.PermissionController
 import com.srineere.airbridge.Band
+import com.srineere.airbridge.CalendarRelayService
+import com.srineere.airbridge.health.HealthAvailability
+import com.srineere.airbridge.health.HealthCache
+import com.srineere.airbridge.health.HealthConnect
+import com.srineere.airbridge.health.HealthEnabled
+import com.srineere.airbridge.health.JournalReminder
+import com.srineere.airbridge.health.MorningMoment
+import com.srineere.airbridge.widget.WidgetSnapshotStore
 import androidx.compose.material.icons.outlined.Palette
 import com.srineere.airbridge.ui.theme.Accent
 import com.srineere.airbridge.ui.theme.ThemeMode
@@ -83,6 +95,34 @@ import androidx.compose.ui.res.colorResource
 internal fun DeviceScreen(onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val appearance by AppSettings.appearance.collectAsState()
+    val healthOn by HealthEnabled.enabled.collectAsState()
+
+    // Whether the last ask came back with nothing. Held here rather than
+    // stored, because it is about what just happened on this screen and
+    // not about the install: coming back tomorrow and being told what
+    // Health Connect said yesterday would be an app arguing.
+    var healthRefused by remember { mutableStateOf(false) }
+
+    // Health Connect's own sheet, which is the only thing that can grant
+    // these. The same contract the Permissions screen asks through, on
+    // purpose: a second way of asking would be a second set of answers
+    // to get right, and this one is already right.
+    val askHealth = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract(),
+    ) { granted ->
+        // The switch follows what was actually granted, not what was
+        // asked for. A sheet dismissed with nothing allowed leaves it
+        // off: a Health tab switched on behind no permissions is a page
+        // of empty cards, which is indistinguishable from a band that
+        // has not synced, and telling those two apart is most of what
+        // this app's permission copy exists to do.
+        if (granted.intersect(HealthConnect.readPermissions).isEmpty()) {
+            healthRefused = true
+        } else {
+            healthRefused = false
+            healthSwitched(context, on = true)
+        }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         // The logo in place of the word "Device", at the size the word was.
@@ -104,15 +144,85 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
 
         BandCard()
 
-        // No headings. Four rows under a card do not need two of them, and
-        // "Appearance" over a single row was a label for a label. They run
-        // in the order they are actually opened in instead.
+        // No headings. A handful of rows under a card do not need two of
+        // them, and "Appearance" over a single row was a label for a
+        // label. They run in the order they are actually reached in
+        // instead: the one switch, then the doors.
         Box(Modifier.padding(top = 8.dp))
+
+        // First, and the only row here that is a switch rather than a
+        // door. It decides whether half the app exists -- a tab, three
+        // notifications, two buzzes and most of the widget catalogue --
+        // so it sits above the things that only change how the rest of
+        // it looks.
+        SettingsRow(
+            title = "The Health tab",
+            subtitle = if (healthOn) {
+                "Your steps, sleep and heart rate, read from Health Connect"
+            } else {
+                "Off. The relay runs without it, and nothing is read"
+            },
+            icon = Icons.Outlined.FavoriteBorder,
+            trailing = {
+                RowSwitch(
+                    checked = healthOn,
+                    onCheckedChange = { wanted ->
+                        when {
+                            !wanted -> {
+                                healthRefused = false
+                                healthSwitched(context, on = false)
+                            }
+                            // Nothing is switched on here. The sheet's
+                            // answer is what switches it, above, so a
+                            // sheet that is dismissed leaves the switch
+                            // exactly where the finger found it.
+                            HealthConnect.availability(context) == HealthAvailability.Ready ->
+                                runCatching { askHealth.launch(HealthConnect.allPermissions) }
+                            // There is nothing to ask. Sending somebody
+                            // to where Health Connect comes from beats a
+                            // switch that flicks back with no reason
+                            // given.
+                            else -> context.openHealthConnectListing()
+                        }
+                    },
+                )
+            },
+        )
+        // Only once an ask has come back empty. Said as a row of its own
+        // rather than in the subtitle above, because it is about the
+        // thing that just happened and it has somewhere to go: once
+        // Health Connect has decided it will not ask again, the sheet
+        // returns instantly and the switch is a control that visibly
+        // does nothing, forever. The app's own settings page is the way
+        // back in, as it is for every other permanently refused grant on
+        // the Permissions screen.
+        if (healthRefused) {
+            SettingsRow(
+                indent = Indent.UnderIcon,
+                title = "Allow it in settings",
+                subtitle = "Health Connect allowed nothing, so the tab stays off",
+                onClick = { context.openAppSettings() },
+            )
+        }
+        // Said where the switch is, because it is the question anybody
+        // turning this off actually has. Nothing in Health Connect is
+        // ours to withdraw: the food log is the one thing this app
+        // writes, and those entries are the person's.
+        if (!healthOn) {
+            Text(
+                "Food you have already logged stays in Health Connect. Turning this off " +
+                    "stops CUFF reading; it deletes nothing.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.extras.disabled,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 6.dp),
+            )
+        }
+
         SettingsRow(
             title = "Home screen widgets",
-            // First, because it is the only one here that changes something
-            // you look at every day. The old subtitle described the band
-            // widget alone, which is one family of six.
+            // First of the doors, because it is the only one that changes
+            // something you look at every day. The old subtitle described
+            // the band widget alone, which is one family of six.
             subtitle = "What the home screen shows, and how it looks",
             icon = Icons.Outlined.Widgets,
             onClick = { onOpen("widgets") },
@@ -129,12 +239,18 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
             icon = Icons.Outlined.Lock,
             onClick = { onOpen("permissions") },
         )
-        SettingsRow(
-            title = "Export",
-            subtitle = "Your readings as files, kept where you choose",
-            icon = Icons.Outlined.FileDownload,
-            onClick = { onOpen("export") },
-        )
+        // Only while there is something to export. The screen behind this
+        // writes your readings out as files, so with nothing being read
+        // it is a page of empty sections and a button that produces an
+        // empty file.
+        if (healthOn) {
+            SettingsRow(
+                title = "Export",
+                subtitle = "Your readings as files, kept where you choose",
+                icon = Icons.Outlined.FileDownload,
+                onClick = { onOpen("export") },
+            )
+        }
         SettingsRow(
             title = "About",
             subtitle = "Your band, this app, and how they talk",
@@ -187,6 +303,54 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
 
         Box(Modifier.padding(bottom = 28.dp))
     }
+}
+
+/**
+ * Everything that has to move when the health half is switched.
+ *
+ * In one place because the four things below are not independent of each
+ * other. Two preferences files hold readings for a feature that has just
+ * stopped existing; two workers are booked against readings that will not
+ * be read; the relay keeps a step-check alarm of its own and has to be
+ * told rather than left to find out at the next quarter hour; and the
+ * home screen is drawn from a snapshot that has just stopped being true.
+ * Miss one and the symptom turns up days later, on a phone, as a buzz
+ * for a feature somebody switched off.
+ *
+ * Cheap enough to run on the thread that touched the switch: four
+ * preferences edits, two WorkManager calls and a redraw booked for four
+ * seconds' time. Nothing here reads Health Connect, which is the only
+ * expensive thing in reach.
+ *
+ * What it deliberately does **not** touch is anything written. The food
+ * log lives in Health Connect and those entries are the person's, not
+ * this app's to withdraw; and the goals, the tile layout, the saved
+ * foods and the journal's answers all stay exactly as they were, so that
+ * turning the half back on returns the tab somebody had rather than a
+ * new one.
+ */
+private fun healthSwitched(context: Context, on: Boolean) {
+    HealthEnabled.set(context, on)
+    if (!on) {
+        // The two caches of readings, and only those. Both are caches --
+        // one read rebuilds either of them -- so emptying them costs a
+        // spinner, and leaving them would mean a month of somebody's
+        // nights sitting on disk for a feature they have just turned
+        // off.
+        runCatching { HealthCache.clear(context) }
+        runCatching { WidgetSnapshotStore.clear(context) }
+    }
+    // Both of these cancel when they are not wanted and book when they
+    // are, so one call each way is the whole of it.
+    runCatching { MorningMoment.schedule(context) }
+    runCatching { JournalReminder.schedule(context) }
+    // The relay holds its own step-check alarm and would otherwise keep
+    // it until the next rule change.
+    CalendarRelayService.active?.settingsChanged()
+    // The home screen is full of faces that have just lost their data,
+    // or got it back. A poke redraws from what is kept rather than
+    // going back to Health Connect, which is right both ways round.
+    WidgetRefresh.poke(context)
 }
 
 /**

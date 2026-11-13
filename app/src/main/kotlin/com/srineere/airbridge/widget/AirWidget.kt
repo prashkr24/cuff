@@ -17,6 +17,7 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import com.srineere.airbridge.MainActivity
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.TileKind
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -55,7 +56,10 @@ class AirWidget : GlanceAppWidget() {
         val snapshot = WidgetSnapshotCache.get(context)
         val colours = widgetColours(context)
         val now = System.currentTimeMillis()
-        provideContent { Body(appWidgetId, config, snapshot, colours, now) }
+        // Read out here rather than inside the composition: it is a
+        // preferences lookup, and a composition recomposes.
+        val healthOn = HealthEnabled.isOn(context)
+        provideContent { Body(appWidgetId, config, snapshot, colours, now, healthOn) }
     }
 
     override suspend fun onDelete(context: Context, glanceId: GlanceId) {
@@ -72,6 +76,7 @@ class AirWidget : GlanceAppWidget() {
         snapshot: WidgetSnapshot,
         colours: WidgetColours,
         now: Long,
+        healthOn: Boolean,
     ) {
         val size = LocalSize.current
         val cell = WidgetSize.nearest(size.width.value.roundToInt(), size.height.value.roundToInt())
@@ -82,7 +87,7 @@ class AirWidget : GlanceAppWidget() {
             NeedsSetup(appWidgetId, colours, cell)
             return
         }
-        WidgetFace(config.design, cell, snapshot, colours, now, openFor(config.design))
+        WidgetFace(config.design, cell, snapshot, colours, now, openFor(config.design), healthOn)
     }
 
     @Composable
@@ -167,7 +172,30 @@ internal fun WidgetFace(
     colours: WidgetColours,
     now: Long,
     onClick: Action?,
+    healthOn: Boolean = true,
 ) {
+    // A widget placed while the health half was on, drawn after it was
+    // switched off.
+    //
+    // Saying so beats both of the alternatives. An empty card is the
+    // picture this app already draws for "nothing has been written yet",
+    // which sends somebody to Google Health looking for a sync that was
+    // never the problem. The last reading, left standing, is a figure on
+    // a home screen that nobody checks and that stops being true
+    // tomorrow.
+    //
+    // The tap is left as it was on purpose: every health route is turned
+    // away while the half is off and lands on the Device tab, which is
+    // where the switch is, so the card and the tap say the same thing.
+    if (!healthOn && design.needsHealth()) {
+        Empty(
+            colours,
+            design.title,
+            if (cell == WidgetSize.Strip) "Health is off" else "The Health tab is off. Tap to turn it on.",
+            onClick,
+        )
+        return
+    }
     val face = WidgetConfig.faceSizeOf(design, cell)
     when (design) {
         is WidgetDesign.OfTile -> TileWidget(design.kind, face, snapshot, colours, onClick)

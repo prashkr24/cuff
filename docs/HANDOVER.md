@@ -1353,6 +1353,17 @@ Both go through the relay's link, so neither fires while relaying is off. The
 rows say so, but only when it is off: a caveat that is always on screen stops
 being read.
 
+**The window's end hour is exclusive, and it did not used to be.**
+`shouldNudgeForHour` read `hour in activeFrom..activeUntil`, inclusive at both
+ends, so a window the Alerts tab printed as "09:00–21:00" could buzz somebody
+at 21:50 — fifty minutes after the time they chose. It was reported from the
+phone, not found here. A test asserted the behaviour outright
+(`shouldNudgeForHour(…, hour = 21, …) == true` with `activeUntil = 21`), which
+is how it survived: the assertion was the bug written down rather than a guard
+against it. It is `until` now, the last buzz lands at 20:50, and the boundary
+is pinned from both sides so moving it again takes a deliberate act. The start
+stays inclusive: the first buzz at 09:50 reports the hour that is running.
+
 **What schedules them.** `scheduleStepCheck()` still picks the wait with
 `nextStepCheckMillis`, which shortens the quarter hour so it lands inside the
 nudge's `[50,59]` window — without it, a relay started at two minutes past
@@ -1434,6 +1445,73 @@ Left on plain `remember` on purpose: anything tied to an in-flight write, a
 transient refusal line, something re-read from disk, and the two dialogs that
 hold a `FoodEntry` or a `SavedFood` — neither is a Bundle-able kind, and
 making them saveable throws.
+
+## The Health half is opt-in, and off unless somebody asked
+
+Several people who tried this wanted the relay and nothing else, and were
+being asked for thirteen health permissions to get it. So the whole half is
+behind one switch, `health/HealthEnabled.kt`, stored in `air_health` under
+`health_on`, and a fresh install starts with it off.
+
+**The migration is the part to be careful with.** Default off must not reach
+back and switch off a phone already using the tab. `healthOnDecision` runs
+once per install and settles it: a stored tile layout means on, otherwise any
+granted read means on, otherwise off — and if Health Connect *cannot be
+asked*, it writes nothing and tries again next launch. That last branch is
+load-bearing. `HealthConnect.granted()` flattens a failure into an empty set,
+so deciding "off" from a provider that was merely mid-update, and then never
+looking again, is exactly the regression the switch was supposed to avoid.
+
+Because the check is asynchronous, the first launch after this version lands
+on Alerts for a few hundred milliseconds before an already-granted install
+decides it is on. Once, and only on a launch.
+
+**What the switch reaches.** The tab and every health route; the morning
+report, the journal reminder and the readiness morning pass, which now
+*cancel* rather than simply not book, so a job already in WorkManager dies
+rather than outliving the feature; the step-goal buzz and the hourly nudge,
+which live in the relay but cannot work without step data and which the
+Alerts tab now explains rather than showing as two dead switches; the tile
+widgets, which leave the picker while the band widgets stay; and both
+on-disk caches, which are cleared so a switched-off feature leaves no
+readings behind.
+
+Nothing is deleted. Goals, the tile layout, saved foods and the journal's
+answers all survive, so turning it back on returns the tab somebody had, and
+food already written stays in Health Connect because it was never ours to
+remove.
+
+**Two traps worth knowing.** The NavHost's `startDestination` is remembered
+once rather than tracked live: changing it rebuilds the graph, and `setGraph`
+pops the whole back stack, so flipping the switch would throw somebody off
+the Device tab they were touching. And `goToTab` pops to a `root` the app
+tracks rather than to `findStartDestination()`, because the graph still names
+Health as its start whether or not Health is on, and popping to a route that
+is no longer on the stack pops nothing at all.
+
+A health route asked for while the half is off lands on Device, where the
+switch is. `isHealthRoute` is a predicate rather than a list — `startsWith
+("health")` plus five names — so a new health screen is covered without
+anybody remembering to add it.
+
+## The journal is hidden, not deleted
+
+The row is gone from the Health tab and `JournalReminder.hidden` turns the
+booking into a cancellation, but `Journal.kt`, `JournalScreen.kt`,
+`JournalTest` and the stored settings are all still here and still compile.
+The route stays registered, because an unregistered route makes `navigate()`
+throw rather than go somewhere.
+
+The part that mattered was not hiding it but **cancelling what was already
+booked**: the reminder is a real WorkManager job, and a build that merely
+stopped scheduling it would have gone on firing an evening notification for a
+screen that no longer exists. It is cancelled on the next app open and the
+worker also declines to re-book itself, so the chain ends even on a phone the
+app is never opened on. Notification 905 is cleared with it, because one
+posted last night would otherwise sit in the shade opening nothing.
+
+`hidden` is a non-const `internal val` on purpose, so the compiler cannot
+fold the booking away as unreachable and quietly make this harder to undo.
 
 ## The tab opens on its last read
 

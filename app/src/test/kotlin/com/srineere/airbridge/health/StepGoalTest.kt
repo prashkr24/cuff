@@ -91,10 +91,27 @@ class StepGoalTest {
         // The worst version of this feature wakes you at 3am to say you have
         // not walked.
         assertFalse(shouldNudgeForHour(nudging, fresh, 0, today, 3, 55, silenced = false))
+        // The start is inclusive: 09:50 is inside "09:00-21:00".
         assertFalse(shouldNudgeForHour(nudging, fresh, 0, today, 8, 55, silenced = false))
         assertTrue(shouldNudgeForHour(nudging, fresh, 0, today, 9, 55, silenced = false))
-        assertTrue(shouldNudgeForHour(nudging, fresh, 0, today, 21, 55, silenced = false))
+        // The end is exclusive, and this is the half that was wrong. Hour 21
+        // used to pass, so with activeUntil = 21 the band buzzed at 21:50 --
+        // fifty minutes after the end of the window the Alerts tab prints
+        // and the person chose. The last nudged hour is 20, at 20:50.
+        assertTrue(shouldNudgeForHour(nudging, fresh, 0, today, 20, 55, silenced = false))
+        assertFalse(shouldNudgeForHour(nudging, fresh, 0, today, 21, 55, silenced = false))
         assertFalse(shouldNudgeForHour(nudging, fresh, 0, today, 22, 55, silenced = false))
+    }
+
+    @Test
+    fun `the narrowest window the picker allows still has one hour in it`() {
+        // The Goals screen clamps activeUntil to at least activeFrom + 1, so
+        // the tightest pair is an hour apart. Exclusive at the end, that is
+        // exactly one nudge, at 09:50 -- not none, which is what an
+        // exclusive end would mean for a window of zero width.
+        val narrow = nudging.copy(activeFrom = 9, activeUntil = 10)
+        assertTrue(shouldNudgeForHour(narrow, fresh, 0, today, 9, 55, silenced = false))
+        assertFalse(shouldNudgeForHour(narrow, fresh, 0, today, 10, 55, silenced = false))
     }
 
     @Test

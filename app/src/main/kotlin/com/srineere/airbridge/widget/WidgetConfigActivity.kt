@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthSettings
 import com.srineere.airbridge.ui.AppSettings
 import com.srineere.airbridge.ui.ScreenTitle
@@ -211,7 +212,11 @@ private fun AddWidget(
     val snapshot = remember(context) { sampleWidgetSnapshot(HealthSettings.tiles(context)) }
     val now = remember { System.currentTimeMillis() }
     val inks = remember(context) { widgetColours(context).paperInks }
-    val fitting = remember(cell) { WidgetCatalogue.forSize(cell).size }
+    // Read here rather than collected: this is its own activity, started
+    // by the launcher, and it is gone again in one choice -- the switch
+    // cannot move underneath it.
+    val healthOn = remember(context) { HealthEnabled.isOn(context) }
+    val fitting = remember(cell, healthOn) { WidgetCatalogue.forSize(cell, healthOn).size }
     val changing = existing != null
 
     // A stack is built rather than chosen, so the list is held here until
@@ -271,6 +276,7 @@ private fun AddWidget(
                 snapshot = snapshot,
                 now = now,
                 inks = inks,
+                healthOn = healthOn,
                 fits = { it.fits(cell) },
                 onPick = { design ->
                     if (!stack) {

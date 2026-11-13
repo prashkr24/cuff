@@ -75,7 +75,18 @@ band's one session while it runs.
   latency and error code — and with no names and no message text, which is
   asserted by a test.
 
-### The Health tab
+### The Health tab — off unless you want it
+
+**This half is opt-in, and a fresh install starts without it.** The relay is
+what the app is for; plenty of people want their band to buzz and nothing
+else, and they should not be asked for thirteen health permissions to get it.
+There is a switch at the top of the Device tab. Turning it on for the first
+time is what asks Health Connect for anything, and turning it off again takes
+the tab, its widgets and its two activity buzzes away — and deletes nothing,
+including food you have already logged, which lives in Health Connect rather
+than here.
+
+An install that was already using it keeps it; the default is for new ones.
 
 Because it reads Health Connect rather than the band, this half is not really
 Air-specific: anything whose app writes there — a Pixel Watch, Garmin, Samsung,
@@ -171,7 +182,10 @@ nothing to relay.
 some phones this matters more than anything in the code: without it Android
 stops background work once the screen has been off a while.
 
-**7. For the Health tab, install Health Connect and allow Cuff in it.**
+**7. Only if you want the Health tab: turn it on in Device, then install
+Health Connect and allow Cuff in it.** The switch is the first row on the
+Device tab and it is off to begin with — the relay works fully without any of
+this, and nothing below is asked for until you turn it on.
 On Android 14 and up Health Connect is part of the system. On Android 13 and
 below it is a separate app from the Play Store, and the Health tab will say so
 rather than showing an empty grid. Cuff asks for thirteen read

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -30,12 +31,14 @@ import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.RelayPreset
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.health.StepGoalSettings
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthSettings
 import com.srineere.airbridge.health.MorningMoment
 
 @Composable
 internal fun AlertsScreen(onOpen: (String) -> Unit) {
     val state = LocalRelayState.current
+    val healthOn by HealthEnabled.enabled.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Alerts")
@@ -75,17 +78,35 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
         // more things that reach the wrist, with the app rather than a
         // notification behind them.
         SectionHeader("From your activity")
-        // First: it is the one of the three that arrives whether or not you
-        // are looking, and the only one that goes to the phone rather than
-        // to the wrist. Not in StepBuzzRows, because the Steps screen draws
-        // those too and a morning report is not a step setting.
-        SettingsRow(
-            title = "Morning report",
-            subtitle = morningSummary(LocalContext.current),
-            icon = Icons.Outlined.WbSunny,
-            onClick = { onOpen(MorningMoment.ROUTE) },
-        )
-        StepBuzzRows(onOpen, goals = false)
+        if (healthOn) {
+            // First: it is the one of the three that arrives whether or not
+            // you are looking, and the only one that goes to the phone
+            // rather than to the wrist. Not in StepBuzzRows, because the
+            // Steps screen draws those too and a morning report is not a
+            // step setting.
+            SettingsRow(
+                title = "Morning report",
+                subtitle = morningSummary(LocalContext.current),
+                icon = Icons.Outlined.WbSunny,
+                onClick = { onOpen(MorningMoment.ROUTE) },
+            )
+            StepBuzzRows(onOpen, goals = false)
+        } else {
+            // Said, rather than shown as three rows that cannot do
+            // anything. All three of these read your steps or your nights,
+            // so they are the health half wearing an Alerts hat: with that
+            // half off they do not fire, the relay does not even schedule
+            // the step check, and a switch that promises a buzz nothing
+            // can deliver is worse than a sentence.
+            Text(
+                "The morning report, the step goal buzz and the hourly nudge all read your " +
+                    "steps and your nights, so they come with the Health tab. It is off — " +
+                    "Device is where to turn it on.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.extras.disabled,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+            )
+        }
 
         if (state.history.isNotEmpty()) {
             // The newest few answer "did that buzz come from what I think it

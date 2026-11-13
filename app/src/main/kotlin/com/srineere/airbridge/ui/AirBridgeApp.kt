@@ -35,6 +35,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
@@ -47,18 +50,27 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.MorningMoment
+import com.srineere.airbridge.health.isHealthRoute
+import com.srineere.airbridge.health.isHiddenRoute
 import com.srineere.airbridge.ui.theme.extras
 
 /**
- * The tabs. Health is first in the bar, as it was always drawn, but the app
- * opens on Health: the relay runs without being looked at, and the readings
- * are the half of this app anyone opens it to see.
+ * The tabs. Health is first in the bar, as it was always drawn, and the app
+ * opens on Health when there is a Health tab at all: the relay runs without
+ * being looked at, and the readings are the half of this app anyone opens
+ * it to see.
+ *
+ * There are two tabs rather than three whenever the health half is
+ * switched off, which it is by default — see
+ * [com.srineere.airbridge.health.HealthEnabled]. Not three with one of
+ * them empty: a tab that opens on "nothing here" is a worse answer than no
+ * tab, and the switch that brings it back is one tab along, on Device.
  */
 /**
  * The three tabs, each with the glyph for "you are not here" and the one
@@ -98,9 +110,28 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
     WarmInstalledApps(context)
     val state = rememberRelayState(context)
     val health = rememberHealthState()
+    val healthOn by HealthEnabled.enabled.collectAsState()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination
+
+    // Which tabs there are. Two of them whenever the health half is off.
+    val tabs = remember(healthOn) { Tab.entries.filter { healthOn || it != Tab.Health } }
+
+    // The bottom of the back stack.
+    //
+    // Read once and held, rather than following the switch. A NavHost
+    // rebuilds its graph when its start destination changes and
+    // rebuilding empties the back stack -- so letting this follow would
+    // throw whoever just flipped the switch off the Device tab they
+    // flipped it on, which is the one screen they are certainly looking
+    // at. [root] is what keeps it honest instead: the moment the health
+    // half goes off, Alerts becomes the bottom and the stack is rebased
+    // onto it.
+    val startRoute = remember {
+        if (HealthEnabled.isOn(context)) Tab.Health.route else Tab.Alerts.route
+    }
+    var root by remember { mutableStateOf(startRoute) }
 
     // Where a widget sent us.
     //
@@ -141,17 +172,79 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
     //
     // Without them a tab goes to its own root, which is what a tab is for.
     // The cost is a scroll position; the thing bought is a bar that answers.
+    // [root] rather than the graph's own start destination, which is the
+    // same thing right up until the health half is switched off under a
+    // session that opened on Health. After that the graph still names
+    // Health as its start -- that is metadata and does not move -- while
+    // the stack's bottom is Alerts, and popping to a route that is no
+    // longer on the stack pops nothing at all, so the bar would quietly
+    // start stacking tabs on each other.
     val goToTab: (String) -> Unit = { route ->
         nav.navigate(route) {
-            popUpTo(nav.graph.findStartDestination().id)
+            popUpTo(root)
             launchSingleTop = true
         }
+    }
+
+    // The Health tab going away under a stack that was built on it.
+    //
+    // Only a session that opened on Health can be in this state, and only
+    // once. Alerts becomes the bottom, inclusive, so that nothing below
+    // is left pointing at a tab the bar no longer has: without it, Back
+    // from either remaining tab would land on a Health tab that is not in
+    // the bar and cannot be left the way it was reached.
+    //
+    // Then straight back to the tab that was open, because the only way
+    // to get here is to have just used the switch on the Device tab, and
+    // an app that moves you off the screen you are touching for having
+    // touched it is an app arguing. Both navigations run inside this one
+    // effect, so the stack is [Alerts, Device] by the next frame and
+    // nothing is drawn in between. Only a tab is restored -- a pushed
+    // route's pattern is not a route you can navigate to, and there is
+    // no way to be on one of those at this moment anyway.
+    LaunchedEffect(healthOn) {
+        if (healthOn || root != Tab.Health.route) return@LaunchedEffect
+        root = Tab.Alerts.route
+        val here = current?.route?.takeIf { route -> tabs.any { it.route == route } }
+        runCatching {
+            nav.navigate(Tab.Alerts.route) {
+                popUpTo(Tab.Health.route) { inclusive = true }
+                launchSingleTop = true
+            }
+            if (here != null && here != Tab.Alerts.route) {
+                nav.navigate(here) { launchSingleTop = true }
+            }
+        }
+    }
+
+    // A health screen reached while the half is off.
+    //
+    // Every one of those routes is still registered: taking them out of
+    // the graph would mean two graphs to keep right and a navigate() that
+    // throws rather than one that goes somewhere. So the refusal happens
+    // here, where it can say where to go instead -- Device, because the
+    // switch that brings the screen back is on it, and "this is gone" is
+    // half an answer without "and here is why".
+    LaunchedEffect(healthOn, current?.route) {
+        if (healthOn) return@LaunchedEffect
+        if (!isHealthRoute(current?.route)) return@LaunchedEffect
+        runCatching { goToTab(Tab.Device.route) }
     }
 
     androidx.compose.runtime.LaunchedEffect(openRoute, openCount) {
         val route = openRoute ?: return@LaunchedEffect
         runCatching {
-            if (Tab.entries.any { it.route == route }) {
+            when {
+                // The journal is hidden in this build and a notification
+                // posted by one that still offered it can be in the shade
+                // for days. Bringing the app forward is the whole of the
+                // answer; there is no screen behind it any more.
+                isHiddenRoute(route) -> Unit
+                // A widget placed while the health half was on, tapped
+                // after it was switched off. Refused here rather than two
+                // frames later by the guard above, so that the screen it
+                // cannot draw is never drawn at all.
+                !healthOn && isHealthRoute(route) -> goToTab(Tab.Device.route)
                 // A tab asked for by a widget goes through the bar's own
                 // route rather than being pushed on top of wherever the app
                 // happened to be left. Health used to be skipped entirely
@@ -159,23 +252,30 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
                 // Health widget tapped while the app sat on Alerts opened
                 // the app on Alerts and looked like a widget that did
                 // nothing.
-                goToTab(route)
-            } else {
+                tabs.any { it.route == route } -> goToTab(route)
                 // Everything else is a screen, pushed. singleTop so that a
                 // widget tapped twice in a row does not stack the same
                 // screen twice and ask for two presses of Back to leave.
-                nav.navigate(route) { launchSingleTop = true }
+                else -> nav.navigate(route) { launchSingleTop = true }
             }
         }
     }
 
     // The very first launch lands on Permissions.
     //
-    // A fresh install opens on the Health tab, which is a page of empty
-    // cards and one "Allow Health Connect" row, while the relay sits off
-    // and silent because nothing has been granted either. Nothing on that
-    // screen tells somebody there is a Permissions page two taps away in
-    // another tab, so the app reads as broken rather than as unconfigured.
+    // A fresh install now opens on Alerts, because the health half is off
+    // by default -- so the relay is the whole app for that person, and it
+    // is sitting off and silent with nothing granted. Nothing on that
+    // screen tells somebody there is a Permissions page in another tab,
+    // so the app reads as broken rather than as unconfigured, which is
+    // exactly the reason this landing existed when the first tab was
+    // Health instead.
+    //
+    // What that screen must not do is ask for Health Connect. The half is
+    // off and nothing is being read, so asking at the one moment somebody
+    // has no idea what the app is would make "off by default" a thing the
+    // app says and not a thing it does. PermissionsScreen leaves the
+    // section out while the half is off and says so instead.
     //
     // Skipped when a widget asked for a particular screen: that is a
     // deliberate destination and it outranks an introduction.
@@ -193,12 +293,12 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
         bottomBar = {
             // Only shown on the tabs themselves; a pushed screen takes the
             // whole height and comes back with its own arrow.
-            val onTab = Tab.entries.any { tab ->
+            val onTab = tabs.any { tab ->
                 current?.hierarchy?.any { it.route == tab.route } == true
             }
             if (onTab) {
                 NavigationBar(containerColor = MaterialTheme.extras.navSurface) {
-                    Tab.entries.forEach { tab ->
+                    tabs.forEach { tab ->
                         val selected = current?.hierarchy?.any { it.route == tab.route } == true
                         NavigationBarItem(
                             selected = selected,
@@ -264,7 +364,7 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
         ) {
             NavHost(
                 navController = nav,
-                startDestination = Tab.Health.route,
+                startDestination = startRoute,
                 modifier = Modifier.fillMaxSize().padding(insets),
                 // Tabs cross-fade; pushed screens slide, set per route below.
                 enterTransition = {
@@ -336,6 +436,13 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
                     HealthSleepScreen(onBack = nav::popBackStack, onOpen = nav::navigate)
                 }
                 pushed("export") { HealthExportScreen(onBack = nav::popBackStack) }
+                // Registered, and unreachable. The journal is hidden
+                // rather than removed -- see JournalReminder.hidden --
+                // so nothing links to this any more and `isHiddenRoute`
+                // turns away the one intent that still could. It stays
+                // in the graph because a route that is merely absent
+                // makes navigate() throw instead of going somewhere, and
+                // because the screen behind it is being kept.
                 pushed("journal") { JournalScreen(onBack = nav::popBackStack) }
                 pushed("readiness") { ReadinessScreen(onBack = nav::popBackStack) }
                 pushed("fitnessage") {

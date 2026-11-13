@@ -45,6 +45,20 @@ class JournalWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        // Hidden: see [JournalReminder.hidden]. A booking made by a build
+        // that still offered the journal can still land here, and the
+        // answer is to do nothing and book nothing -- each run books the
+        // next, so a run that books nothing is the last of them.
+        //
+        // Not a cancel. This run *is* the unique work it would cancel,
+        // and replacing running work stops it where it stands; the
+        // booking is dropped properly by [JournalReminder.cancel] on the
+        // next launch of the app.
+        if (JournalReminder.hidden) {
+            Log.i(TAG, "journal: hidden, so nothing is asked and nothing is booked")
+            return Result.success()
+        }
+
         val settings = HealthSettings.journal(applicationContext)
         if (!settings.on) return Result.success()
         // Tomorrow before tonight, so one failure costs one evening.
@@ -82,7 +96,35 @@ object JournalReminder {
 
     const val ROUTE = "journal"
 
+    /**
+     * Whether the journal is offered at all.
+     *
+     * **Hidden, not removed.** It was built a week ago and is being
+     * thought better of rather than decided against, so every part of it
+     * is still in the tree and still compiles: this file, `Journal.kt`,
+     * `JournalScreen.kt`, the settings in `HealthSettings`, and
+     * `JournalTest`. The answers anybody has already written are
+     * untouched on disk, which is what makes unhiding free.
+     *
+     * What is gone is every way in. The row on the Health tab, the
+     * booking below that raised the evening notification, and the route,
+     * which `isHiddenRoute` turns away so that a notification posted by
+     * an older build cannot open a screen nothing else links to. Putting
+     * the row back and taking the route out of that set is the whole of
+     * bringing it back; deleting it is a separate day's work and
+     * undoing a deletion is not free.
+     *
+     * Deliberately not a `const`. A constant true would let the compiler
+     * fold the booking below away as unreachable, and the booking is the
+     * thing being kept.
+     */
+    internal val hidden: Boolean = true
+
     fun schedule(context: Context) {
+        if (hidden) {
+            cancel(context)
+            return
+        }
         val settings = HealthSettings.journal(context)
         val manager = WorkManager.getInstance(context)
         if (!settings.on) {
@@ -98,6 +140,22 @@ object JournalReminder {
                 .build(),
         )
         Log.i("AirBridge", "journal: next in $delay min, at ${settings.clock}")
+    }
+
+    /**
+     * Drops the booking, and anything it has already put in the shade.
+     *
+     * The notification matters as much as the work does. A reminder
+     * posted last night is still sitting there when this build goes on,
+     * and tapping it would ask for a screen that is no longer offered --
+     * so the one that is up goes with the one that would have followed
+     * it.
+     */
+    fun cancel(context: Context) {
+        runCatching { WorkManager.getInstance(context).cancelUniqueWork(NAME) }
+        runCatching {
+            context.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION)
+        }
     }
 
     /**

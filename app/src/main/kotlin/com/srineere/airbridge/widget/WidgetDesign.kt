@@ -168,6 +168,31 @@ enum class BandFace(
     ),
 }
 
+/**
+ * Whether this design has nothing to draw once the health half is
+ * switched off.
+ *
+ * The band's own faces do not need it: a charge, whether the phone is
+ * relaying and who rang last are facts this app holds itself, and none of
+ * them comes out of Health Connect. Two of the type faces are those same
+ * two facts with the card taken away, so they do not need it either --
+ * and the other two are a tile with the card taken away, so they do.
+ *
+ * A `when` over the family rather than a flag on each face, because a
+ * flag is a thing to remember per face and this is a question about where
+ * the figure comes from, which the family already answers.
+ */
+fun WidgetDesign.needsHealth(): Boolean = when (this) {
+    is WidgetDesign.OfBand -> false
+    is WidgetDesign.OfType -> when (face) {
+        TypeFace.Battery, TypeFace.Relay -> false
+        TypeFace.Steps, TypeFace.Sleep -> true
+    }
+    is WidgetDesign.OfTile -> true
+    is WidgetDesign.OfRings -> true
+    is WidgetDesign.OfDials -> true
+}
+
 private fun tileSummary(kind: TileKind): String = when (kind) {
     TileKind.Heart -> "Where it settled overnight, against your fortnight"
     TileKind.Zones -> "Today's beats, by the hour"
@@ -205,12 +230,30 @@ object WidgetCatalogue {
             DialFace.entries.map { WidgetDesign.OfDials(it) } +
             TypeFace.entries.map { WidgetDesign.OfType(it) }
 
-    fun forSize(size: WidgetSize): List<WidgetDesign> = all.filter { it.fits(size) }
+    /**
+     * What is actually on offer, which is not always everything.
+     *
+     * With the health half switched off there are no readings behind the
+     * tiles, the arcs, the dials or two of the four type faces, so they
+     * are not offered at all. Not offered and dimmed, as a design that
+     * will not fit the cell is: that dimming says "this goes somewhere
+     * else", and the reason here is nothing to do with the cell. A
+     * picker full of cards that would each say "health is off" wastes
+     * somebody's time before it disappoints them.
+     *
+     * What survives is the band's own faces and the two type faces that
+     * draw them, which is enough for every one of the five cells.
+     */
+    fun offered(healthOn: Boolean): List<WidgetDesign> =
+        if (healthOn) all else all.filterNot { it.needsHealth() }
+
+    fun forSize(size: WidgetSize, healthOn: Boolean = true): List<WidgetDesign> =
+        offered(healthOn).filter { it.fits(size) }
 
     /** Everything, grouped, for the catalogue under Device. */
-    fun families(): List<Pair<WidgetFamily, List<WidgetDesign>>> =
+    fun families(healthOn: Boolean = true): List<Pair<WidgetFamily, List<WidgetDesign>>> =
         WidgetFamily.entries
-            .map { family -> family to all.filter { it.family == family } }
+            .map { family -> family to offered(healthOn).filter { it.family == family } }
             .filter { it.second.isNotEmpty() }
 
     /**
@@ -223,9 +266,12 @@ object WidgetCatalogue {
     val notBuilt: List<WidgetFamily>
         get() = WidgetFamily.entries.filter { family -> all.none { it.family == family } }
 
-    fun families(size: WidgetSize): List<Pair<WidgetFamily, List<WidgetDesign>>> =
+    fun families(
+        size: WidgetSize,
+        healthOn: Boolean = true,
+    ): List<Pair<WidgetFamily, List<WidgetDesign>>> =
         WidgetFamily.entries
-            .map { family -> family to forSize(size).filter { it.family == family } }
+            .map { family -> family to forSize(size, healthOn).filter { it.family == family } }
             .filter { it.second.isNotEmpty() }
 
     /** Null for an id this build no longer knows, which the widget says out loud. */
@@ -261,9 +307,11 @@ object WidgetCatalogue {
      *
      * Only used where the catalogue could not run -- a restore, or a launcher
      * that skipped the configuration activity. Steps at every size it has,
-     * the band at the two it does not.
+     * the band at the two it does not -- and the band at all five with the
+     * health half off, because Steps is then a card that cannot draw.
      */
-    fun default(size: WidgetSize): WidgetDesign =
-        WidgetDesign.OfTile(TileKind.Steps).takeIf { it.fits(size) }
-            ?: forSize(size).first()
+    fun default(size: WidgetSize, healthOn: Boolean = true): WidgetDesign =
+        WidgetDesign.OfTile(TileKind.Steps)
+            .takeIf { it.fits(size) && (healthOn || !it.needsHealth()) }
+            ?: forSize(size, healthOn).first()
 }

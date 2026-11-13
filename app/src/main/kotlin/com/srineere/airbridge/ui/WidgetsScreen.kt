@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.produceState
@@ -31,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthSettings
 import android.appwidget.AppWidgetManager
 import android.content.Intent
@@ -89,9 +91,24 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
     val now = remember { System.currentTimeMillis() }
     val inks = remember(context) { widgetColours(context).paperInks }
     val notBuilt = remember { WidgetCatalogue.notBuilt }
+    val healthOn by HealthEnabled.enabled.collectAsState()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Widgets", onBack = onBack)
+
+        // Said before the gallery rather than left to be noticed. Two
+        // thirds of this page is missing with the health half off, and a
+        // catalogue that is quietly short is a catalogue somebody scrolls
+        // twice looking for the sleep widget.
+        if (!healthOn) {
+            Text(
+                "The Health tab is off, so the readings are not offered here. The band's " +
+                    "own faces do not need it.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.extras.disabled,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+            )
+        }
 
         if (placed.isNotEmpty()) {
             SectionHeader("On your home screen")
@@ -111,7 +128,7 @@ internal fun WidgetsScreen(onBack: () -> Unit) {
             }
         }
 
-        WidgetGallery(snapshot, now, inks)
+        WidgetGallery(snapshot, now, inks, healthOn = healthOn)
 
         if (notBuilt.isNotEmpty()) {
             SectionHeader("Other styles")
@@ -163,12 +180,18 @@ internal fun WidgetGallery(
     snapshot: WidgetSnapshot,
     now: Long,
     inks: PaperInks,
+    /**
+     * Whether the health half is on. Off leaves out everything that
+     * draws a reading, rather than dimming it: [fits] dims, and dimmed
+     * means "this goes in another cell", which is a different sentence.
+     */
+    healthOn: Boolean = true,
     fits: (WidgetDesign) -> Boolean = { true },
     onPick: ((WidgetDesign) -> Unit)? = null,
     /** Where this design sits in a stack being built, counting from one. */
     place: ((WidgetDesign) -> Int?)? = null,
 ) {
-    val families = remember { WidgetCatalogue.families() }
+    val families = remember(healthOn) { WidgetCatalogue.families(healthOn) }
     val expanded = remember { mutableStateMapOf<WidgetFamily, Boolean>() }
     families.forEach { (family, designs) ->
         // What fits comes first. Four previews of a family, three of them

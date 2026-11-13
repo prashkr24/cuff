@@ -22,6 +22,7 @@ import androidx.glance.appwidget.ExperimentalGlanceRemoteViewsApi
 import androidx.glance.appwidget.GlanceRemoteViews
 import com.srineere.airbridge.MainActivity
 import com.srineere.airbridge.R
+import com.srineere.airbridge.health.HealthEnabled
 import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
 
@@ -358,6 +359,10 @@ internal class StackFactory(
             .getOrDefault(WidgetSnapshot())
         val colours = widgetColours(context)
         val now = System.currentTimeMillis()
+        // Asked once for the whole stack, as the snapshot and the colours
+        // are. A card whose reading belongs to the health half draws a
+        // line saying so instead of a figure; see WidgetFace.
+        val healthOn = HealthEnabled.isOn(context)
         val remote = GlanceRemoteViews()
         val began = System.currentTimeMillis()
         cards = stack.mapNotNull { design ->
@@ -377,7 +382,10 @@ internal class StackFactory(
                                 .width(size.width)
                                 .height(size.height),
                         ) {
-                            WidgetFace(design, cell, snapshot, colours, now, onClick = null)
+                            WidgetFace(
+                                design, cell, snapshot, colours, now,
+                                onClick = null, healthOn = healthOn,
+                            )
                         }
                     }.remoteViews
                 }

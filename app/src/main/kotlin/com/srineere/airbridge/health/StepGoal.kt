@@ -12,7 +12,23 @@ data class StepGoalSettings(
     val buzzOnGoal: Boolean = false,
     val hourlyNudge: Boolean = false,
     val hourlyGoal: Int = 250,
-    /** Hours the nudge is allowed to fire, inclusive of [activeFrom]. */
+    /**
+     * The hours the nudge is allowed to fire in: [activeFrom] inclusive,
+     * [activeUntil] **exclusive**.
+     *
+     * The asymmetry is not a convention, it falls out of what the nudge
+     * says. It fires at HH:50 and reports the hour HH, which is still
+     * running -- so firing in hour [activeUntil] would be commenting on
+     * an hour that ends after the window the person set. With the
+     * defaults, 9 and 21, the first nudge is at 09:50 and the last at
+     * 20:50, both inside the "09:00–21:00" the Alerts tab prints.
+     *
+     * The end was inclusive until it was found on a phone, buzzing at
+     * 21:50 under a label that said the window closed at 21:00. The
+     * label was right; the range was wrong. Anything that widens either
+     * end has to answer the same question: is the hour being reported
+     * inside what the label promises?
+     */
     val activeFrom: Int = 9,
     val activeUntil: Int = 21,
     /**
@@ -62,6 +78,10 @@ fun shouldBuzzForGoal(
  *
  * Fires in the last ten minutes of an hour, once, and only when the hour is
  * still short. [minute] is the minute of the hour now.
+ *
+ * `until` and not `..`: the window's end is exclusive, because the buzz
+ * reports the hour it lands in and that hour is still running. See
+ * [StepGoalSettings.activeFrom].
  */
 fun shouldNudgeForHour(
     settings: StepGoalSettings,
@@ -73,7 +93,7 @@ fun shouldNudgeForHour(
     silenced: Boolean,
 ): Boolean = settings.hourlyNudge &&
     !silenced &&
-    hour in settings.activeFrom..settings.activeUntil &&
+    hour in settings.activeFrom until settings.activeUntil &&
     minute >= NUDGE_FROM_MINUTE &&
     stepsThisHour < settings.hourlyGoal &&
     !(history.nudgeFiredDay == today && history.nudgeFiredHour == hour)

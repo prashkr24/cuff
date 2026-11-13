@@ -185,16 +185,15 @@ private fun HealthGrid(data: HealthData, onOpen: (String) -> Unit) {
             }
         }
 
-        // In the order you come back to them: the journal is answered most
-        // days, the goals are revisited now and then, and the tab's own
-        // arrangement is a thing you settle once. All three sit under the
-        // tab rather than taking a corner of the header away from the day's
-        // readings.
-        SettingsRow(
-            title = "Journal",
-            subtitle = "What you did before a night, and what it turned out to mean",
-            onClick = { onOpen("journal") },
-        )
+        // In the order you come back to them: the goals are revisited now
+        // and then, and the tab's own arrangement is a thing you settle
+        // once. Both sit under the tab rather than taking a corner of the
+        // header away from the day's readings.
+        //
+        // A Journal row used to be first here, and is **hidden rather
+        // than deleted** -- see JournalReminder.hidden for what is still
+        // in the tree and why. This row and that flag are the two halves
+        // of bringing it back; neither is a leftover to be tidied away.
         SettingsRow(
             title = "Goals",
             subtitle = "The targets every goal line here is drawn from",
