@@ -14,6 +14,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.srineere.airbridge.MainActivity
+import com.srineere.airbridge.R
 import com.srineere.airbridge.RelayRuleStore
 import com.srineere.airbridge.widget.ROUTE_EXTRA
 import java.time.LocalDate
@@ -306,7 +307,7 @@ object MorningMoment {
             manager.notify(
                 NOTIFICATION,
                 builder
-                    .setSmallIcon(android.R.drawable.ic_menu_day)
+                    .setSmallIcon(R.drawable.ic_cuff_notification)
                     .setContentTitle(report.headline)
                     .setContentText(report.line)
                     // The second line is long enough to be cut on a lock

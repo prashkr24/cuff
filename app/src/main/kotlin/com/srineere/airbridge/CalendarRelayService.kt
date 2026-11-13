@@ -180,7 +180,7 @@ class CalendarRelayService : Service() {
         val pause = PendingIntent.getService(this, 2, Intent(this, CalendarRelayService::class.java)
             .setAction(if (silence == "paused") RESUME else PAUSE), flags)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
-        builder.setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+        builder.setSmallIcon(R.drawable.ic_cuff_notification)
             .setContentTitle("CUFF")
             .setContentText(when {
                 ring != null -> "Ringing your Air · tap Silence to stop"
@@ -948,7 +948,7 @@ class CalendarRelayService : Service() {
             manager.notify(
                 903,
                 builder
-                    .setSmallIcon(android.R.drawable.ic_menu_directions)
+                    .setSmallIcon(R.drawable.ic_cuff_notification)
                     .setContentTitle("Time to move")
                     .setContentText(
                         // The figure, not an exhortation. What is missing is

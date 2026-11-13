@@ -14,6 +14,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.srineere.airbridge.MainActivity
+import com.srineere.airbridge.R
 import com.srineere.airbridge.RelayRuleStore
 import com.srineere.airbridge.widget.ROUTE_EXTRA
 import java.time.LocalDateTime
@@ -134,7 +135,7 @@ object JournalReminder {
             manager.notify(
                 NOTIFICATION,
                 builder
-                    .setSmallIcon(android.R.drawable.ic_menu_edit)
+                    .setSmallIcon(R.drawable.ic_cuff_notification)
                     .setContentTitle("How was today?")
                     .setContentText(
                         if (answered == 0) {

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The status bar icon, and the only icon any Cuff notification uses.
+
+  The four notifications this app raises used to carry platform stock
+  drawables - stat_sys_data_bluetooth for the relay, ic_menu_directions,
+  ic_menu_edit and ic_menu_day for the three it schedules. Those resolve
+  against the *device's* framework, not this APK, so every manufacturer
+  draws its own version and some are a decade old: on ColorOS they came
+  out as shapes belonging to nothing in particular, which is what "the
+  wrong icon" was. An icon that is not yours is not a brand, it is a
+  guess, and four different guesses are worse than one.
+
+  Same silhouette as the themed launcher layer, deliberately: one shape
+  for the app wherever it appears. What differs is the framing. The
+  monochrome layer is an adaptive icon, drawn on a 108dp canvas whose
+  content must stay inside a 72dp safe zone because the launcher masks
+  the edges - so used as-is in the status bar it would sit in a quarter
+  of the space every other app's icon fills and read as a smaller, less
+  confident app. The paths here are the same numbers; the group scales
+  them about the canvas centre so the band fills the frame the way a
+  status bar icon is supposed to.
+
+  Alpha only, and that is a platform rule rather than a choice: the
+  system throws the colours away and tints the alpha channel to match
+  the shade. The half-alpha outer waves survive that - they come through
+  as the fainter pair they already are - but nothing here may rely on
+  hue, which is why the clasp stays a cut-out.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="1.5" android:scaleY="1.5"
+        android:pivotX="54" android:pivotY="54">
+        <path android:fillType="evenOdd" android:fillColor="#FFFFFF"
+            android:pathData="M49,26 h10 a11,11 0 0 1 11,11 v34 a11,11 0 0 1 -11,11 h-10 a11,11 0 0 1 -11,-11 v-34 a11,11 0 0 1 11,-11 z M41,50 h26 a4,4 0 0 1 0,8 h-26 a4,4 0 0 1 0,-8 z"/>
+        <path android:pathData="M34,48 Q30,54 34,60" android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.5" android:strokeLineCap="round"/>
+        <path android:pathData="M28,44 Q23,54 28,64" android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.5" android:strokeAlpha="0.5" android:strokeLineCap="round"/>
+        <path android:pathData="M74,48 Q78,54 74,60" android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.5" android:strokeLineCap="round"/>
+        <path android:pathData="M80,44 Q85,54 80,64" android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.5" android:strokeAlpha="0.5" android:strokeLineCap="round"/>
+    </group>
+</vector>
