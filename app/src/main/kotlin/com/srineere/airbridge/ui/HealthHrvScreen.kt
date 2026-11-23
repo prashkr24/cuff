@@ -56,7 +56,9 @@ internal fun HealthHrvScreen(onBack: () -> Unit) {
     val colour = LocalTileColour.current ?: MaterialTheme.extras.hrv
     val all = data.snapshot.hrv
     val axes = rememberAxes()
-    val window = rememberChartWindow(30)
+    // A week, like the other three vitals. The baseline it is read
+    // against is still the full history; only the chart is a week.
+    val window = rememberChartWindow(7)
     var picked by remember { mutableStateOf<Int?>(null) }
     val readings = window.slice(all) { it.day }
     val trend = remember(readings) { trendOf(readings) }

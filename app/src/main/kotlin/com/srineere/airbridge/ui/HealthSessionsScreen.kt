@@ -54,7 +54,12 @@ import java.util.Locale
 internal fun HealthSessionsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val colour = LocalTileColour.current ?: MaterialTheme.extras.activity
-    var days by remember { mutableIntStateOf(90) }
+    // Thirty, not ninety. Every change of this re-reads Health Connect
+    // for the whole range before a single row is drawn, so the opening
+    // window is also the wait before the screen says anything -- and a
+    // month is enough to find all but the oldest workout. Ninety and a
+    // year are a pill away.
+    var days by remember { mutableIntStateOf(30) }
     var sessions by remember { mutableStateOf<List<Session>?>(null) }
 
     LaunchedEffect(days) {

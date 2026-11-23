@@ -109,11 +109,16 @@ internal fun HealthTrendScreen(
         TrendMetric.Weight -> data.snapshot.weight
     }
     val axes = rememberAxes()
-    // Weight is written by hand, or by a scale somebody steps on when they
-    // remember. Thirty days of it is two readings and the card then says it
-    // cannot draw a trend -- which is true of the window, not of the person.
-    // Ninety is the first one that usually has a line in it.
-    val window = rememberChartWindow(if (metric == TrendMetric.Weight) 90 else 30)
+    // A week for the vitals: these are read once a night, so seven is
+    // seven points, and the question somebody opens one of these with is
+    // how this week has gone.
+    //
+    // Weight is the exception, and the reason this is not a constant. It
+    // is written by hand, or by a scale somebody steps on when they
+    // remember. A week of it is one reading and the card then says it
+    // cannot draw a trend -- which is true of the window, not of the
+    // person. Ninety is the first one that usually has a line in it.
+    val window = rememberChartWindow(if (metric == TrendMetric.Weight) 90 else 7)
     // Opened wide rather than widened by a tap: the tab loads a month, and a
     // default window nobody touched would otherwise ask for days no one read.
     LaunchedEffect(Unit) { state.widen(context, window.daysNeeded) }

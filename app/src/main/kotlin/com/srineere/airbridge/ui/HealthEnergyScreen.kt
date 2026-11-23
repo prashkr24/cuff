@@ -54,7 +54,11 @@ internal fun HealthEnergyScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
     LaunchedEffect(Unit) { state.loadGoals(context) }
     val goals = state.goals
     val axes = rememberAxes()
-    val window = rememberChartWindow(30)
+    // A week, because burn and food are a daily balance and the question
+    // on opening this is "how is this week going", not "how was October".
+    // Thirty bars of a two-sided balance is also the densest chart on the
+    // tab, and it opened on it.
+    val window = rememberChartWindow(7)
     var picked by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
     val energy = LocalTileColour.current ?: MaterialTheme.extras.energy
