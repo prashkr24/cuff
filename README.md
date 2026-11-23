@@ -178,6 +178,14 @@ hand at *Settings → Notifications → Device & app notifications*. This is the
 permission that lets the app see notifications at all; without it there is
 nothing to relay.
 
+> **If the switch is greyed out, that is Android, not a bug.** From Android 13
+> onwards, notification access is a *restricted setting*, and it is blocked for
+> any app installed from a file rather than from a store — which is every copy
+> of this one. Tapping the switch says "Restricted setting" and nothing more.
+> To get through: *Settings → Apps → Cuff → ⋮ (top right) → Allow restricted
+> settings*, then grant notification access as above. Reported on a Pixel,
+> where the switch simply would not move.
+
 **6. Allow it to keep running in the background**, from the same screen. On
 some phones this matters more than anything in the code: without it Android
 stops background work once the screen has been off a while.

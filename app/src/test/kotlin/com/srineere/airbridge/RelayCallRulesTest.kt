@@ -160,6 +160,62 @@ class RelayCallRulesTest {
         assertTrue(RelayRingWatch.stopOnRemoval(RelayRingWatch.MODE_IN_CALL))
     }
 
+    /**
+     * The bug a reporter on a Pixel 9a found the shape of before we did:
+     * with the ringer silenced, no call ever buzzed the wrist, and the
+     * one buzz that did arrive came after the call was over. Setting an
+     * audible ringtone fixed it, which is what named the cause.
+     *
+     * Telecom takes ringing audio focus to play a ringtone. With nothing
+     * to play it never asks, so the mode sits at MODE_NORMAL through a
+     * ringing call -- and MODE_NORMAL is exactly what this reads as "the
+     * phone has stopped ringing". The ring died on the first swap of the
+     * notification, every time.
+     */
+    @Test fun `with the ringer silenced the audio mode is not a witness`() {
+        val silent = false
+        // The failing case: ringing, notification replaced, mode never
+        // reached MODE_RINGTONE because there was no ringtone to play.
+        assertFalse(RelayRingWatch.stopOnRemoval(RelayRingWatch.MODE_NORMAL, silent))
+        // Answered is still answered: that one the mode does report.
+        assertTrue(RelayRingWatch.stopOnRemoval(RelayRingWatch.MODE_IN_CALL, silent))
+        assertTrue(RelayRingWatch.stopOnRemoval(RelayRingWatch.MODE_IN_COMMUNICATION, silent))
+    }
+
+    @Test fun `an audible ringer behaves exactly as it always has`() {
+        // The half that works is not being changed, and this says so.
+        RelayRingWatch.run {
+            listOf(MODE_NORMAL, MODE_RINGTONE, MODE_IN_CALL, MODE_IN_COMMUNICATION).forEach { mode ->
+                assertEquals(stopOnRemoval(mode), stopOnRemoval(mode, ringerAudible = true))
+            }
+        }
+    }
+
+    /**
+     * What ends a ring on a silent phone that nobody picked up.
+     *
+     * Without a second witness the ring would run to its full forty-five
+     * seconds after a phone that had already given up, which is a worse
+     * bug than the one being fixed. Telecom posts the missed call on its
+     * own channel the moment it stops ringing.
+     */
+    @Test fun `a missed call ends the ring it belongs to`() {
+        assertTrue(RelayRingWatch.endsRing("com.google.android.dialer", "com.google.android.dialer", "phone_missed_call"))
+        // Answered elsewhere, or picked up: the ongoing-call channel.
+        assertTrue(RelayRingWatch.endsRing("com.whatsapp", "com.whatsapp", "ongoing_call"))
+    }
+
+    @Test fun `somebody else's notification does not end the ring`() {
+        // A message arriving mid-call is not the call ending, and nor is
+        // another app's missed call.
+        assertFalse(RelayRingWatch.endsRing("com.whatsapp", "com.google.android.dialer", "phone_missed_call"))
+        assertFalse(RelayRingWatch.endsRing("com.whatsapp", "com.whatsapp", "messages"))
+        // The ringing channel itself must never end its own ring: that is
+        // the notification being re-posted, which is how it stays up.
+        assertFalse(RelayRingWatch.endsRing("com.whatsapp", "com.whatsapp", "incoming_call"))
+        assertFalse(RelayRingWatch.endsRing("com.whatsapp", "com.whatsapp", null))
+    }
+
     @Test fun `the ring ends when the phone stops ringing, however it ended`() {
         val ringing = RelayRingWatch.MODE_RINGTONE
         // Still ringing.

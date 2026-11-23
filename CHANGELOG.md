@@ -18,6 +18,20 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Added
 
+- **The hourly nudge no longer comes with the Health tab.** It reads how many
+  steps the current hour has had and nothing else, so the price of a buzz
+  every hour was thirteen record types and a page nobody asked for. With the
+  tab off it now appears on Alerts in its own right, and switching it on asks
+  Health Connect for two permissions — steps, and reading in the background —
+  instead of fifteen. Decline the sheet and it stays off rather than promising
+  an hourly buzz it cannot deliver. [23 Nov]
+- **The buzzes widget takes every size, and the big ones list what buzzed.**
+  It offered 2×1 and 2×2, and a launcher stretched the square to fill a 4×4 —
+  a kicker at the top, a number at the bottom and a hand's width of nothing
+  between. 4×1 adds the last buzz, 4×2 three recent, 4×4 six, each with the
+  time and with the failed ones marked. The count stays arrivals only while
+  the list shows attempts, so the two can disagree; that disagreement is the
+  part worth having on a home screen. [23 Nov]
 - **The Health half is opt-in**, behind a switch at the top of the Device tab
   and off on a fresh install. The relay is what the app is for, and wanting
   only that should not cost thirteen health permissions. Turning it on is
@@ -117,6 +131,18 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Changed
 
+- **Failure rows say what happened in plain words.** A buzz that did not
+  arrive showed the humanised error code — a row reading "Failed · gatt
+  connect" sat under one reading "Failed · the band did not answer", and
+  neither was written for the person holding the phone. Every code the send
+  path can raise now has a short sentence, five of them for the first time,
+  and none of them uses a word that only means something inside the
+  codebase. [23 Nov]
+- **Screens open on a window that suits them.** Energy and the four vitals
+  start at seven days rather than thirty — they are read once a night, so
+  seven is seven points — and All activities starts at thirty rather than
+  ninety, where the opening window is also the wait before a single row is
+  drawn. Weight keeps ninety: a week of it is often one reading. [23 Nov]
 - **The whole app was rewritten from Flutter to native Kotlin and Compose**,
   and the transport moved in as the `:air` module rather than a package
   dependency. [3 Nov]
@@ -150,6 +176,26 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Fixed
 
+- **Calls never reached the wrist on a phone with the ringer off.** The relay
+  asks `AudioManager` whether the phone is still ringing, and Telecom only
+  takes ringing audio focus in order to play a ringtone — with none to play it
+  never asks, so the mode reads as "not ringing" for the whole call. Every
+  call therefore died on the first swap of its notification and the only buzz
+  anyone got was the missed call afterwards. The audio mode is now consulted
+  only when it can answer, and the missed-call notification ends a ring that
+  nothing else would. Reported from a Pixel 9a, where setting any audible
+  ringtone was the workaround that named the cause. [23 Nov]
+- **Widgets went blank instead of saying anything.** Four reads in the widget
+  provider were unguarded, and one of them goes to Health Connect, which
+  throws for a rate limit and for a provider updated underneath it. Any of
+  them failing meant no `RemoteViews` was handed back at all and the launcher
+  drew an empty cell. Each one now falls back, and a failed read draws the
+  Cuff card with a line about why. [23 Nov]
+- **Notification access could not be granted on a recent Pixel.** Not a bug in
+  the app: from Android 13 it is a *restricted setting* and the switch is
+  greyed out for any app installed from a file, which is every copy of this
+  one. The Permissions screen and the README now name the way through —
+  Settings → Apps → Cuff → ⋮ → Allow restricted settings. [23 Nov]
 - **An afternoon sleep counted as a night of its own.** Health Connect has
   no concept of a night: it files every sleep as a session, so three hours
   in the afternoon arrived looking exactly like last night. The day's total

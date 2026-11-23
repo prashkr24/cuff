@@ -413,7 +413,24 @@ private fun grantsFor(context: Context, ask: (String) -> Unit): List<Grant> = bu
     add(
         Grant(
             title = "Read your notifications",
-            body = "So we can tell a call from a group chat. Nothing leaves your phone.",
+            // The second sentence is the whole reason anybody gets stuck
+            // here, and it is invisible until they do.
+            //
+            // Android calls notification access a restricted setting, and
+            // for an app installed from a file rather than from a store
+            // it greys the switch out: tapping it says "Restricted
+            // setting" and nothing else, with no hint that there is a way
+            // through. Every copy of this app is installed from a file,
+            // so every first run meets it. Reported from a Pixel, where
+            // the switch simply would not move.
+            body = "So we can tell a call from a group chat. Nothing leaves your phone." +
+                if (Build.VERSION.SDK_INT >= 33) {
+                    "\n\nIf the switch is greyed out, Android is blocking it because Cuff " +
+                        "was installed from a file. In Settings → Apps → Cuff, open the ⋮ " +
+                        "menu and choose Allow restricted settings, then come back."
+                } else {
+                    ""
+                },
             granted = CalendarRelayService.hasAccess(context) && CalendarNotificationListener.connected,
             need = Need.Required,
         ) { context.openNotificationAccess() }

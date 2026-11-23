@@ -698,6 +698,24 @@ adb logcat -s AirBridge
 
 ## Traps that have already cost time
 
+- **`AudioManager.getMode()` never reaches `MODE_RINGTONE` on a silent
+  phone.** Telecom takes ringing audio focus in order to play a ringtone; with
+  nothing to play it never asks, and the mode sits at `MODE_NORMAL` for the
+  whole of a ringing call. `RelayRingWatch` treated that mode as proof the
+  phone had stopped ringing, so with the ringer off every call died on the
+  first swap of its notification and the only buzz anyone got was the missed
+  call afterwards. A reporter on a Pixel 9a found the shape of it before we
+  did — setting any audible ringtone made it work. The mode is now consulted
+  only when `ringerAudible()` says it is worth consulting, and a second
+  witness, the missed-call channel, ends a ring that nothing else would.
+  Anything else that reads the audio mode has the same hole.
+- **Notification access is a *restricted setting* for a sideloaded app.**
+  From Android 13 the switch is greyed out for any app installed from a file,
+  which is every copy of this one, and tapping it says "Restricted setting"
+  and no more. The way through is *Settings → Apps → Cuff → ⋮ → Allow
+  restricted settings*. It is in the README and in the Permissions screen's
+  own copy, because the first run of this app meets it every time and nothing
+  on screen used to say so.
 - **Two builds fight over the band.** The POC and the dev build each hold the
   band's single DTLS session; running both turns a 2-second read into 15 and
   logs `resetting DTLS` / `GattlinkSessionResent`. Uninstall one.

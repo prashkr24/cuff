@@ -51,6 +51,13 @@ class CalendarNotificationListener : NotificationListenerService() {
             "category=${sbn.notification.category} fullScreen=${sbn.notification.fullScreenIntent != null} " +
             "channel=${if (Build.VERSION.SDK_INT >= 26) sbn.notification.channelId else null}")
         val kind = RelayAlertClassifier.classify(sbn.notification, sbn.isOngoing)
+        // Before anything else this posting might do. A missed call that
+        // also ends a ring should end it first, so the ring's own stop is
+        // recorded ahead of the buzz for the missed call rather than
+        // landing underneath it in the activity list.
+        if (Build.VERSION.SDK_INT >= 26) {
+            runCatching { relay.onSettledCall(sbn.packageName, sbn.notification.channelId) }
+        }
         if (kind == RelayAlertKind.CALL) RelayAppSelection.rememberCalling(this, sbn.packageName)
         val caller = if (kind == RelayAlertKind.CALL) {
             RelayCallerIdentity.of(this, sbn.packageName, sbn.notification)
