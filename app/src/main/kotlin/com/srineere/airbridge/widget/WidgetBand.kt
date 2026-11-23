@@ -43,7 +43,7 @@ internal fun BandWidget(
         BandFace.Everything -> Everything(size, band, colours, onClick, now)
         BandFace.Battery -> Battery(size, band, colours, onClick, now)
         BandFace.Relay -> Relay(size, band, colours, onClick, now)
-        BandFace.Buzzes -> Buzzes(size, band, colours, onClick)
+        BandFace.Buzzes -> Buzzes(size, band, colours, onClick, now)
     }
 }
 
@@ -294,27 +294,179 @@ private fun Relay(
 }
 
 
+/**
+ * How many got through since midnight, and -- where there is room -- what
+ * they were.
+ *
+ * The count on its own is a number nobody can check. "Fourteen" answers
+ * how busy the wrist has been and nothing else; the question anybody
+ * actually has in front of a home screen is which fourteen, and whether
+ * the one they are waiting for was among them. So every size past a 2x2
+ * spends its extra room on the list rather than on a bigger number.
+ *
+ * The list is attempts, not arrivals, while the figure above it is
+ * arrivals only. They can disagree -- four rows under a count of two --
+ * and that disagreement is the useful part: the two that failed are the
+ * rows worth having a widget for. A buzz that worked already told you.
+ */
 @Composable
 private fun Buzzes(
     size: WidgetSize,
     band: BandFacts,
     colours: WidgetColours,
     onClick: Action?,
+    now: Long,
 ) {
+    val unit = if (band.buzzesToday == 1) "buzz today" else "buzzes today"
     WidgetCard(colours, onClick) {
-        if (size == WidgetSize.Square) {
-            Kicker("Today", colours.tile(TileColour.Hrv))
-            Grow()
-            Figure("${band.buzzesToday}", WidgetText.FigureHero, colours.onBackground)
-            Gap(5.dp)
-            Sub(if (band.buzzesToday == 1) "buzz today" else "buzzes today", colours.muted, size = WidgetText.Label)
-        } else {
-            Figure("${band.buzzesToday}", WidgetText.FigureL, colours.onBackground)
-            Gap(4.dp)
-            Sub(if (band.buzzesToday == 1) "buzz today" else "buzzes today", colours.faint, size = WidgetText.Label)
+        when (size) {
+            // One line. The figure, and the last one, which is the single
+            // most useful row of the list when only one will fit.
+            WidgetSize.Row -> Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Figure("${band.buzzesToday}", WidgetText.FigureL, colours.onBackground)
+                Spacer(GlanceModifier.width(6.dp))
+                Sub("today", colours.faint, size = WidgetText.Label)
+                Spacer(GlanceModifier.defaultWeight())
+                band.recent.firstOrNull()?.let { last ->
+                    Column(horizontalAlignment = Alignment.End) {
+                        Sub(
+                            last.who,
+                            if (last.arrived) colours.onBackground else colours.muted,
+                            size = WidgetText.Body,
+                        )
+                        Sub("last · " + clockOf(last.atMillis), colours.faint, size = WidgetText.Label)
+                    }
+                }
+            }
+
+            WidgetSize.Wide, WidgetSize.Tall -> {
+                val tall = size == WidgetSize.Tall
+                if (tall) {
+                    Kicker("Today", colours.tile(TileColour.Hrv))
+                    Gap(6.dp)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Figure("${band.buzzesToday}", WidgetText.FigureXL, colours.onBackground)
+                        Spacer(GlanceModifier.width(8.dp))
+                        Sub(unit, colours.muted, size = WidgetText.Label)
+                    }
+                } else {
+                    // Wide has two lines' worth of room in all, so the
+                    // kicker shares the figure's line rather than taking
+                    // one of its own.
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        Kicker("Today", colours.tile(TileColour.Hrv))
+                        Spacer(GlanceModifier.defaultWeight())
+                        Figure("${band.buzzesToday}", WidgetText.FigureL, colours.onBackground)
+                        Spacer(GlanceModifier.width(6.dp))
+                        Sub("buzzes", colours.muted, size = WidgetText.Label)
+                    }
+                }
+                Gap(if (tall) 10.dp else 8.dp)
+                Hairline(colours.outline)
+                Gap(if (tall) 4.dp else 2.dp)
+                BuzzList(band, colours, now, rows = if (tall) 6 else 3)
+            }
+
+            WidgetSize.Square -> {
+                Kicker("Today", colours.tile(TileColour.Hrv))
+                Grow()
+                Figure("${band.buzzesToday}", WidgetText.FigureHero, colours.onBackground)
+                Gap(5.dp)
+                Sub(unit, colours.muted, size = WidgetText.Label)
+            }
+
+            WidgetSize.Strip -> {
+                Figure("${band.buzzesToday}", WidgetText.FigureL, colours.onBackground)
+                Gap(4.dp)
+                Sub(unit, colours.faint, size = WidgetText.Label)
+            }
         }
     }
 }
+
+/**
+ * The rows under the figure, newest first.
+ *
+ * A count of zero at seven in the morning is true and useless, and a card
+ * that went blank every night until the first buzz would be a card people
+ * take off the home screen. So the list runs past midnight: it says where
+ * today ended and keeps going into yesterday, which is the only thing on
+ * the card that is worth reading before breakfast.
+ */
+@Composable
+private fun BuzzList(band: BandFacts, colours: WidgetColours, now: Long, rows: Int) {
+    if (band.recent.isEmpty()) {
+        BuzzLine("No buzzes yet", null, colours.faint, colours, rows)
+        return
+    }
+    val midnight = startOfDay(now)
+    // One line, between the last of today and the first of yesterday, and
+    // only when there is something each side of it to separate.
+    var ruled = band.recent.first().atMillis < midnight
+    if (ruled) BuzzLine("Nothing since midnight", null, colours.faint, colours, rows)
+    var drawn = if (ruled) 1 else 0
+    band.recent.forEach { row ->
+        if (drawn >= rows) return@forEach
+        if (!ruled && row.atMillis < midnight) {
+            ruled = true
+            BuzzLine("Earlier", null, colours.faint, colours, rows)
+            drawn++
+            if (drawn >= rows) return@forEach
+        }
+        BuzzLine(
+            text = row.who,
+            at = row.atMillis,
+            // A failed row steps back rather than shouting. It is still
+            // the thing worth seeing, and a home screen is not a place to
+            // be alarmed at from across a room.
+            colour = if (row.arrived) colours.onBackground else colours.muted,
+            colours = colours,
+            rows = rows,
+            failed = !row.arrived,
+        )
+        drawn++
+    }
+}
+
+@Composable
+private fun BuzzLine(
+    text: String,
+    at: Long?,
+    colour: ColorProvider,
+    colours: WidgetColours,
+    rows: Int,
+    failed: Boolean = false,
+) {
+    Row(
+        modifier = GlanceModifier.fillMaxWidth().height(if (rows > 3) 26.dp else 22.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Sub(if (failed) "$text · failed" else text, colour, size = WidgetText.Body)
+        Spacer(GlanceModifier.defaultWeight())
+        if (at != null) Sub(clockOf(at), colours.faint, size = WidgetText.Label)
+    }
+}
+
+/** The rule between the figure and the list. */
+@Composable
+private fun Hairline(colour: ColorProvider) {
+    Spacer(GlanceModifier.fillMaxWidth().height(1.dp).background(colour))
+}
+
+/** Midnight this morning, which is where "today" starts for the count. */
+private fun startOfDay(now: Long): Long = java.util.Calendar.getInstance().apply {
+    timeInMillis = now
+    set(java.util.Calendar.HOUR_OF_DAY, 0)
+    set(java.util.Calendar.MINUTE, 0)
+    set(java.util.Calendar.SECOND, 0)
+    set(java.util.Calendar.MILLISECOND, 0)
+}.timeInMillis
 
 // ------------------------------------------------------------------- words
 

@@ -163,8 +163,12 @@ enum class BandFace(
     ),
     Buzzes(
         "Buzzes today",
-        "How many got through since midnight",
-        setOf(WidgetSize.Strip, WidgetSize.Square),
+        "How many got through, and what they were",
+        // Every size. It was two, and a launcher will happily stretch a
+        // 2x2 to fill a 4x4 -- which it did: a card with a kicker at the
+        // top, a number at the bottom and a hand's width of nothing in
+        // between. The big sizes now have something to be big with.
+        WidgetSize.entries.toSet(),
     ),
 }
 

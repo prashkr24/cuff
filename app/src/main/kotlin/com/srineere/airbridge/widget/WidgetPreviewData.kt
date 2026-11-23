@@ -107,6 +107,18 @@ private val SAMPLE_BAND = BandFacts(
     lastBuzzWho = "Priya",
     lastBuzzWasCall = true,
     buzzesToday = 14,
+    // Made-up rows, like every other figure here, and one of them failed
+    // on purpose: the catalogue should show what a failed line looks like
+    // before somebody puts the widget on a home screen, not the first
+    // time their band is out of range.
+    recent = listOf(
+        BuzzRow("Priya", System.currentTimeMillis() - 2 * 60 * 1000, arrived = true),
+        BuzzRow("Messages", System.currentTimeMillis() - 26 * 60 * 1000, arrived = true),
+        BuzzRow("Messages", System.currentTimeMillis() - 27 * 60 * 1000, arrived = false),
+        BuzzRow("Step goal", System.currentTimeMillis() - 94 * 60 * 1000, arrived = true),
+        BuzzRow("Hourly nudge", System.currentTimeMillis() - 154 * 60 * 1000, arrived = true),
+        BuzzRow("Calendar", System.currentTimeMillis() - 221 * 60 * 1000, arrived = true),
+    ),
 )
 
 /** The colour a design is drawn in, for a preview that has no widget yet. */

@@ -50,15 +50,44 @@ class AirWidget : GlanceAppWidget() {
      */
     override val sizeMode = SizeMode.Exact
 
+    /**
+     * Nothing in here is allowed to throw, because the launcher's answer
+     * to a provider that throws is an empty cell.
+     *
+     * Every line below was a bare call, and any one of them failing took
+     * the whole widget out: `provideContent` is never reached, no
+     * `RemoteViews` is handed back, and the home screen is left with a
+     * card-shaped hole where this used to be. The reads are not
+     * hypothetical either -- [WidgetSnapshotCache.get] goes to Health
+     * Connect, which throws for a rate limit and for a provider that was
+     * updated underneath us, and both of those happen on a real phone.
+     *
+     * So each read falls back to something drawable and the face is given
+     * whatever did come back. A widget showing the Cuff card and a line
+     * about why is a widget somebody can tap; a blank one is a widget
+     * they remove.
+     */
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        val config = WidgetStore.read(context, appWidgetId)
-        val snapshot = WidgetSnapshotCache.get(context)
-        val colours = widgetColours(context)
+        val appWidgetId = runCatching { GlanceAppWidgetManager(context).getAppWidgetId(id) }
+            .getOrDefault(AppWidgetManager.INVALID_APPWIDGET_ID)
+        val config = runCatching { WidgetStore.read(context, appWidgetId) }.getOrNull()
+        // Null and empty are different answers. Null is "the read failed",
+        // which the card says out loud; an empty snapshot is "nothing has
+        // been written", which every face already draws as dashes.
+        val snapshot = runCatching { WidgetSnapshotCache.get(context) }.getOrNull()
+        val colours = runCatching { widgetColours(context) }.getOrNull()
         val now = System.currentTimeMillis()
         // Read out here rather than inside the composition: it is a
         // preferences lookup, and a composition recomposes.
-        val healthOn = HealthEnabled.isOn(context)
+        val healthOn = runCatching { HealthEnabled.isOn(context) }.getOrDefault(false)
+        if (colours == null) {
+            // The theme is what every card is drawn out of, so there is no
+            // card to draw without it. Left to the launcher deliberately:
+            // it keeps the last RemoteViews it was given, which is the
+            // widget as it looked a moment ago -- better than anything
+            // that could be invented here.
+            return
+        }
         provideContent { Body(appWidgetId, config, snapshot, colours, now, healthOn) }
     }
 
@@ -73,7 +102,7 @@ class AirWidget : GlanceAppWidget() {
     private fun Body(
         appWidgetId: Int,
         config: WidgetConfig?,
-        snapshot: WidgetSnapshot,
+        snapshot: WidgetSnapshot?,
         colours: WidgetColours,
         now: Long,
         healthOn: Boolean,
@@ -85,6 +114,20 @@ class AirWidget : GlanceAppWidget() {
             // activity. Saying so beats drawing a guess: tapping opens the
             // catalogue, which is where the choice belongs.
             NeedsSetup(appWidgetId, colours, cell)
+            return
+        }
+        if (snapshot == null) {
+            // The readings could not be got at all. Named after the thing
+            // the person put on their home screen rather than after the
+            // failure, because "Cuff · couldn't read just now" is a card
+            // that will be right again in half an hour, and a stack trace
+            // is not something to put under somebody's clock.
+            Empty(
+                colours,
+                "CUFF",
+                if (cell == WidgetSize.Strip) "Couldn't read" else "Couldn't read just now. Tap to open.",
+                openFor(config.design),
+            )
             return
         }
         WidgetFace(config.design, cell, snapshot, colours, now, openFor(config.design), healthOn)

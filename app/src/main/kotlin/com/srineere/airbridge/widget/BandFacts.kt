@@ -2,6 +2,7 @@ package com.srineere.airbridge.widget
 
 import android.content.Context
 import com.srineere.airbridge.CalendarRelayService
+import com.srineere.airbridge.RelayActivity
 import com.srineere.airbridge.RelayHistory
 import com.srineere.airbridge.RelayRuleStore
 import java.util.Calendar
@@ -16,6 +17,19 @@ import java.util.TimeZone
  * quietly cost a day of steps and sleep. No widget opens a session: each
  * draws the last charge the *app* read, with its age beside it.
  */
+/**
+ * One line of a buzz list: who it was, when, and whether it arrived.
+ *
+ * [who] is already resolved -- a person from the rules, an app from the
+ * package manager -- because nothing stored on disk is ever a name, and
+ * the resolving happens where the widget is drawn.
+ */
+data class BuzzRow(
+    val who: String,
+    val atMillis: Long,
+    val arrived: Boolean,
+)
+
 data class BandFacts(
     val battery: Int? = null,
     /** Epoch millis of that reading, or 0 for never. */
@@ -48,6 +62,22 @@ data class BandFacts(
      */
     val lastBuzzWasOwn: Boolean = false,
     val buzzesToday: Int = 0,
+    /**
+     * The last few entries, newest first, for the faces with room to list
+     * them.
+     *
+     * Attempts as well as arrivals, which is why this is not simply the
+     * delivered ones [buzzesToday] counts. A list that showed only what
+     * got through would make the count look like the whole story, and the
+     * rows somebody actually wants to see on a home screen are the ones
+     * that did not: a buzz that failed is news, a buzz that worked is a
+     * wrist that already told you.
+     *
+     * Kept short deliberately. The tallest face shows six, and a widget
+     * holds its whole state in a `RemoteViews` the launcher has to carry,
+     * so there is no sense resolving forty app labels to draw six rows.
+     */
+    val recent: List<BuzzRow> = emptyList(),
 ) {
     fun pausedAt(now: Long): Boolean = pauseUntil == PAUSED_INDEFINITELY || pauseUntil > now
 
@@ -155,11 +185,56 @@ object BandStore {
             // like: nothing relayed them, so neither word applies.
             lastBuzzWasOwn = last != null && last.sourcePackage == null,
             buzzesToday = delivered.count { it.atMillis >= midnight },
+            recent = buzzRows(history, MOST_ROWS) { entry ->
+                buzzWho(
+                    callerLabel = entry.callerId?.let { config.callers[it]?.label },
+                    sourcePackage = entry.sourcePackage,
+                    commandId = entry.commandId,
+                    appLabel = { appLabelOf(context, it) },
+                )
+            },
         )
     }
 
-    private const val VERIFIED = "verified"
+    /** What the tallest face asks for, so nothing resolves more than that. */
+    private const val MOST_ROWS = 6
 }
+
+/** The stage the band acknowledged. Everything else is an attempt. */
+internal const val VERIFIED = "verified"
+
+/**
+ * The stages that mean a buzz was tried and did not arrive.
+ *
+ * Not every stage that is not [VERIFIED]. A queued entry has not finished
+ * happening yet, and a duplicate or a cancelled one is the relay deciding
+ * not to buzz rather than failing to — showing those as failures on a home
+ * screen would report trouble where the app did exactly its job.
+ */
+private val ATTEMPTED = setOf("failed", "expired")
+
+/**
+ * The newest few entries worth showing, newest first.
+ *
+ * Arrivals and failures together, which is the point of the list: the
+ * figure above it counts what got through, and the rows worth a glance
+ * are the ones that did not. A buzz that worked has already told you.
+ *
+ * [who] resolves a name, and is called at most [limit] times — the
+ * filtering and the sort happen first so that a hundred stored entries
+ * never cost a hundred package-manager lookups to draw six rows.
+ */
+internal fun buzzRows(
+    history: List<RelayActivity>,
+    limit: Int,
+    who: (RelayActivity) -> String,
+): List<BuzzRow> = history
+    .asSequence()
+    .filter { it.stage == VERIFIED || it.stage in ATTEMPTED }
+    .sortedByDescending { it.atMillis }
+    .take(limit)
+    .map { BuzzRow(who(it), it.atMillis, arrived = it.stage == VERIFIED) }
+    .toList()
 
 /**
  * Who or what raised a buzz, in the order `ActivityRow` decides it.
