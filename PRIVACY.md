@@ -106,13 +106,19 @@ Cuff is not directed at children and collects nothing from anyone.
 ## About the code
 
 Cuff is unofficial, and is not made, endorsed or supported by Fitbit or
-Google. The source is available so that the claims above can be checked
-rather than taken on trust.
+Google.
 
-One honest note for anyone reading the dependency list: the vendored Golden
-Gate transport includes an OkHttp-based remote-debugging class from upstream.
-Nothing in Cuff calls it, and without the `INTERNET` permission it could not
-open a connection if it did.
+The source is not public, so the claims above cannot be checked by reading
+it. One of them can be checked without it, and it is the one that matters
+most: an app's permissions are listed in the APK itself. Any APK inspector,
+or Android's own app info screen, will show that Cuff does not hold the
+`INTERNET` permission — and an app without it cannot open a network
+connection, whatever its code says.
+
+One honest note for anyone who does inspect the APK: the vendored Golden Gate
+transport includes an OkHttp-based remote-debugging class from upstream, so
+OkHttp appears among the bundled libraries. Nothing in Cuff calls it, and
+without the `INTERNET` permission it could not open a connection if it did.
 
 ## Changes
 
@@ -122,8 +128,17 @@ effective date, and the change is noted in the app's changelog.
 ## Contact
 
 <!-- Fill this in before publishing anywhere that requires a privacy policy.
-     A store listing needs a contact a stranger can actually reach: either a
-     dedicated address, or GitHub issues if the repository is public. It is
-     deliberately left blank rather than guessed at. -->
+     A store listing needs a contact a stranger can actually reach, and with
+     this repository private that cannot be its issue tracker: it has to be
+     an address. Left blank rather than guessed at, because which address to
+     put in public is not a decision to make on somebody's behalf. -->
 
 _Contact details to be added._
+
+## Where this document lives
+
+This file is the source of truth and sits in a private repository, so the
+copy you are reading may be a published mirror of it. A store listing needs
+a privacy policy at a public URL, and this app's code is not public; if the
+two ever disagree, the version carrying the later effective date is the
+current one.
