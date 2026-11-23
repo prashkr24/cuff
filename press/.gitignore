@@ -1,0 +1,9 @@
+# The captures as they came off the phone, before redact.py blurs them.
+# These hold real contact names, a real phone number, a home screen with a
+# location on it and a work calendar. They are the one thing in this folder
+# that must never be committed -- shots/screens/ holds the redacted copies
+# that cards.py actually builds from.
+raw/
+
+# Written by cards.py on every run, from the files above.
+cards/
