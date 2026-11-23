@@ -64,8 +64,8 @@ internal fun AboutScreen(onBack: () -> Unit) {
         Band.readDeviceInfo(context, airResult(
             onSuccess = { info = it as? Map<*, *> },
             onError = { code, _ ->
-                failure = if (code == "BUSY") "The relay is delivering a notification."
-                else "The band did not answer. These come from the Air itself, so it needs to be in range."
+                failure = if (code == "BUSY") "Cuff is busy sending a notification to the band."
+                else "The band didn't answer. These come from the band itself, so it needs to be in range."
             },
         ))
     }

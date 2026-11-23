@@ -177,24 +177,53 @@ internal fun describeRelayFailure(stage: String, errorCode: String?): String {
 /**
  * The failure codes that have been read back to where they are raised.
  *
- * The first four are this app's own, from [CalendarRelayService]; the rest
- * are `AirLink`'s, and each sentence says what the line that throws it says,
- * in the register the rest of the app uses.
+ * The first five are this app's own, from [CalendarRelayService] and
+ * [RelayWorkerResult]; the rest are `AirLink`'s, and each sentence says
+ * what the line that throws it says.
+ *
+ * **Written for whoever is holding the phone, not for whoever wrote the
+ * code.** These rows are read by somebody wondering why their wrist
+ * stayed still, so none of them uses a word that only means something
+ * inside this repository: no "relay", no "secure session", no "GATT", no
+ * "Air" where "band" will do. The codes stay, in the log and in the
+ * export: they are how a report gets traced back here.
+ *
+ * **One short phrase each, and no second clause.** This is a list to be
+ * scanned down, not read, and a sentence that wrapped onto a third line
+ * pushed the row below it off the screen. Advice about what to do -- "it
+ * may be out of range" -- went with the wrapping: it was a guess
+ * appended to a fact, it was the same guess on half these lines, and it
+ * cost more room than it was worth. The fact is what distinguishes one
+ * row from the next, so the fact is what stayed.
+ *
+ * Every code reachable from a buzz is covered, which is the point --
+ * anything missing falls through to the humanised code, and a row reading
+ * "Failed · gatt connect" is how this list looked before.
  */
-private val FAILURE_NOTES = mapOf(
-    "WORKER_UNAVAILABLE" to "the relay had no link to the band",
-    "SERVICE_STOPPED" to "the relay stopped before it finished",
-    "PARTIAL" to "only part of the pattern played",
-    "WORKER_ERROR" to "the band gave no reason we could read",
-    "TIMEOUT" to "the band did not answer",
-    "HANDSHAKE_TIMEOUT" to "no secure session; Google Health may have had the band",
+internal val FAILURE_NOTES = mapOf(
+    "WORKER_UNAVAILABLE" to "Cuff wasn't connected to the band",
+    "SERVICE_STOPPED" to "Cuff stopped before it could send",
+    // The band did answer, and the wrist did feel something -- just not
+    // all of it. Worth distinguishing from every other line here.
+    "PARTIAL" to "only part of the buzz played",
+    "WORKER_ERROR" to "the band refused it and didn't say why",
+    "WORKER_PROTOCOL" to "the band's answer couldn't be read",
+    "TIMEOUT" to "the band didn't answer in time",
+    // Not "couldn't connect", which is what GATT_CONNECT says: these are
+    // two different failures and the only thing separating them on
+    // screen is which name is in the line.
+    "HANDSHAKE_TIMEOUT" to "Google Health may have been using the band",
     "BUSY" to "the band was busy with something else",
-    "AIR_NOT_FOUND" to "no Air is paired in Google Health",
-    "BLUETOOTH_PERMISSION" to "nearby devices is not allowed",
-    "HAPTIC_TAP_FAILED" to "the band refused the buzz",
-    "HAPTIC_PULSE_FAILED" to "the band refused the buzz",
-    "HAPTIC_FAILED" to "the band refused the buzz",
-    "RING_FAILED" to "the band refused the ring",
+    "AIR_NOT_FOUND" to "no band is set up in Google Health",
+    "BLUETOOTH_PERMISSION" to "Cuff isn't allowed to use nearby devices",
+    "SCAN_FAILED" to "Android couldn't search for the band",
+    "GATT_CONNECT" to "couldn't connect over Bluetooth",
+    "GATT_DISCONNECTED" to "the band disconnected part-way through",
+    "GATT_DISCOVERY" to "the band connected but didn't answer properly",
+    "HAPTIC_TAP_FAILED" to "the band wouldn't play the buzz",
+    "HAPTIC_PULSE_FAILED" to "the band wouldn't play the buzz",
+    "HAPTIC_FAILED" to "the band wouldn't play the buzz",
+    "RING_FAILED" to "the band wouldn't ring",
 )
 
 internal data class RelayWorkerResult(val stage: String, val errorCode: String?) {
