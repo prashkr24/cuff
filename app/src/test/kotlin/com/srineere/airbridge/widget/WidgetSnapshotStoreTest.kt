@@ -223,18 +223,19 @@ class WidgetSnapshotStoreTest {
     }
 
     /**
-     * Eleven positions, every length in seconds.
+     * Ten positions, every length in seconds.
      *
-     * Time in bed is among them rather than measured back from the start
-     * and end: a day whose naps have been folded into one night has its
-     * sleep spread over sessions, and the span between the two instants
-     * here covers only the longest of them.
+     * Time in bed and the middle of the sleep are among them rather than
+     * worked back from the start and end. On a day of two sleeps the two
+     * instants here are sixteen hours apart with a waking afternoon in
+     * between, so neither figure can be recovered from them.
      */
     @Test
-    fun `a night is stored as eleven numbers`() {
+    fun `a night is stored as ten numbers`() {
         val raw = encodeKept(kept(HealthSnapshot(nights = health().nights)), zone)
         assertEquals(
-            "[[20405,${lastNight},${lastNight + 26_000_000L},24720,1380,12600,5520,6600,26000,0,0]]",
+            "[[20405,${lastNight},${lastNight + 26_000_000L},24720,1380,12600,5520,6600," +
+                "26000,${lastNight + 13_000_000L}]]",
             JSONObject(raw).getJSONArray("nights").toString(),
         )
     }

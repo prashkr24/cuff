@@ -52,11 +52,13 @@ data class SleepSegment(val stage: SleepStage, val start: Instant, val end: Inst
  * keeps whichever one happened to come last, so the nap replaces the
  * night. [oneNightPerDay] folds them together before anything sees them.
  *
- * [start], [end] and [segments] stay those of the longest sleep of the
- * day. The sums are the day's. That split is the whole design: a total
- * ought to count every sleep, but a hypnogram drawn from midnight to
- * three the following afternoon, and a body clock judged by the middle of
- * that span, would both be nonsense.
+ * **Everything here is the day's, and no sleep leads.** [start] is the
+ * first of them, [end] the last, [segments] all of them in order, and
+ * every length is the sum. Nothing is scaled up to cover the hours
+ * between -- [inBed] adds the sessions rather than measuring the span, so
+ * an afternoon spent awake never counts as time in bed -- and the two
+ * figures that would otherwise be dragged across that gap, [wakes] and
+ * [midpoint], are each defined to survive it.
  */
 data class Night(
     val day: Long,
@@ -70,23 +72,52 @@ data class Night(
     /** In order, empty for a night written as one block. */
     val segments: List<SleepSegment> = emptyList(),
     /**
-     * Time in bed, summed over every sleep of the day.
+     * Time in bed, added up over every sleep of the day.
      *
      * Held rather than measured from [start] to [end], because once a nap
-     * is folded in those two are the ends of the main sleep and the span
-     * between them is not what anybody lay down for. A single-session day
-     * gets the same number either way, which is why the default is the
-     * span.
+     * is in the same night those two are hours apart with a day in
+     * between, and the span between them is not what anybody lay down
+     * for. A day with one sleep gets the same number either way, which is
+     * why the default is the span.
      */
     val inBed: Duration = Duration.between(start, end),
-    /** Sleeps besides the longest one that were folded into this day. */
-    val naps: Int = 0,
-    /** How much of [asleep] came from those naps. */
-    val napAsleep: Duration = Duration.ZERO,
+    /**
+     * The separate sleeps this day was added up from, in order.
+     *
+     * Empty when there was only one, which is the ordinary case and the
+     * reason nothing else has to care. When there were two -- six hours
+     * overnight and three in the afternoon -- the total above is nine,
+     * and these are the six and the three, each with its own hours,
+     * stages and efficiency, so the screen can show the sum **and** what
+     * it is a sum of. A total nobody can take apart is a figure to be
+     * taken on trust.
+     *
+     * Each part is a [Night] with its own [parts] empty: one level, never
+     * a tree.
+     */
+    val parts: List<Night> = emptyList(),
+    /**
+     * The middle of the sleep, weighted by how much of it there was.
+     *
+     * Stored rather than taken from [start] and [end], and that is the
+     * one place this file does arithmetic instead of addition. The middle
+     * of the *span* between a night and an afternoon nap is breakfast
+     * time: it would report a body clock nobody has, and `consistency` in
+     * [SleepScore] -- the only thing that reads this -- would mark down
+     * every napping day for a shift that never happened. Weighting each
+     * sleep by its own length is still the day's sleep and nothing else,
+     * it just refuses to count the waking hours between. A day with one
+     * sleep is unaffected, which is why the default is the span's middle.
+     */
+    val midpoint: Instant = start.plusSeconds(Duration.between(start, end).seconds / 2),
 ) {
     /** Asleep against time in bed. Null when the day has no length. */
     val efficiency: Double?
         get() = if (inBed.seconds <= 0) null else asleep.seconds.toDouble() / inBed.seconds
+
+    /** How many separate sleeps this day's total is made of; one or more. */
+    val sleeps: Int
+        get() = parts.size.coerceAtLeast(1)
 
     /** True when the writer broke the night down; false when it is one block. */
     val hasStages: Boolean
@@ -95,24 +126,48 @@ data class Night(
     /**
      * Times you woke in the middle, not counting settling at either end.
      *
-     * A wake at the very start or the very end of the session is going to
-     * bed and getting up; counting those would give everyone two.
+     * A wake at the very start or the very end of a sleep is going to bed
+     * and getting up; counting those would give everyone two.
+     *
+     * "Either end" means either end of **each** sleep, not of the day. A
+     * day's segments run night then nap with the afternoon missing from
+     * between them, so a single pass over the list would find the night's
+     * last segment -- getting up -- sitting in the middle, and charge a
+     * wake for it. The run between two gaps is the unit here.
      */
     val wakes: Int
-        get() = segments.filterIndexed { index, segment ->
-            segment.stage == SleepStage.Awake &&
-                index != 0 && index != segments.lastIndex &&
-                segment.length >= Duration.ofMinutes(1)
-        }.size
+        get() {
+            var count = 0
+            var runStart = 0
+            segments.indices.forEach { index ->
+                val lastOfRun = index == segments.lastIndex ||
+                    Duration.between(
+                        segments[index].end,
+                        segments[index + 1].start,
+                    ) > SEPARATE_SLEEPS
+                if (!lastOfRun) return@forEach
+                for (inner in (runStart + 1) until index) {
+                    val segment = segments[inner]
+                    if (segment.stage == SleepStage.Awake &&
+                        segment.length >= Duration.ofMinutes(1)
+                    ) {
+                        count++
+                    }
+                }
+                runStart = index + 1
+            }
+            return count
+        }
 
-    /**
-     * The middle of the main sleep, which is what consistency is measured on.
-     *
-     * Deliberately not the middle of the whole day's sleep: a nap would
-     * drag it hours later and report a body clock nobody has.
-     */
-    val midpoint: Instant
-        get() = start.plusSeconds(Duration.between(start, end).seconds / 2)
+    private companion object {
+        /**
+         * A hole in the segments wider than this is two sleeps, not a
+         * wake. A minute is enough: stages written by the same session
+         * abut exactly, and the smallest gap between two sessions is the
+         * time it takes to get out of bed.
+         */
+        val SEPARATE_SLEEPS: Duration = Duration.ofMinutes(1)
+    }
 }
 
 /**
@@ -122,13 +177,18 @@ data class Night(
  * split in two around a long wake -- which read as two short nights, and
  * scored as two short nights, for as long as this app counted sessions.
  *
- * The longest sleep leads: it keeps its [Night.start], [Night.end] and
- * hypnogram, so the timeline and the midpoint go on describing the thing
- * that was actually the night. Everything that is a quantity -- asleep,
- * awake, the three stages, time in bed -- is the day's sum, because a
- * total that leaves out an hour of afternoon sleep is not a total. The
- * naps are counted and their sleep totalled separately so a screen can
- * say where the extra came from rather than quietly inflating a night.
+ * No sleep leads and none is treated as the real one. Every length is
+ * added, the hypnogram is all of them end to end, and the day runs from
+ * the first to the last. Six hours overnight and three in the afternoon
+ * is a nine-hour day. The sleeps themselves are kept in [Night.parts], so
+ * the screen can show the nine and the six and the three rather than
+ * asking anyone to take the total on trust.
+ *
+ * What is *not* stretched across the gap is the point: [Night.inBed] adds
+ * the sessions instead of measuring first-to-last, so eight waking hours
+ * never become time in bed; [Night.wakes] counts within each sleep; and
+ * [Night.midpoint] is weighted by sleep rather than taken from the span.
+ * Every one of those would otherwise turn a nap into a worse night.
  */
 internal fun oneNightPerDay(nights: List<Night>): List<Night> =
     nights.groupBy { it.day }
@@ -136,23 +196,44 @@ internal fun oneNightPerDay(nights: List<Night>): List<Night> =
         .sortedBy { it.day }
 
 private fun folded(sameDay: List<Night>): Night {
-    // Longest asleep leads; the earlier one wins a tie, so the result does
-    // not depend on the order Health Connect happened to hand them back.
-    val main = sameDay.maxWith(compareBy<Night> { it.asleep }.thenByDescending { it.start })
-    // By identity, not by value: two genuinely identical sessions in a day
-    // are unlikely, but `-` on a data class would drop both of them.
-    val rest = sameDay.filter { it !== main }
+    // By when they happened, so the hypnogram reads left to right and the
+    // result does not depend on the order Health Connect handed them back.
+    val inOrder = sameDay.sortedBy { it.start }
     fun total(of: (Night) -> Duration): Duration =
-        sameDay.fold(Duration.ZERO) { sum, night -> sum + of(night) }
-    return main.copy(
-        asleep = total { it.asleep },
+        inOrder.fold(Duration.ZERO) { sum, night -> sum + of(night) }
+    val asleep = total { it.asleep }
+    return Night(
+        day = inOrder.first().day,
+        start = inOrder.first().start,
+        // Not the last session's end: a short sleep can sit wholly inside
+        // a longer one when two writers describe the same night.
+        end = inOrder.maxOf { it.end },
+        asleep = asleep,
         awake = total { it.awake },
         light = total { it.light },
         deep = total { it.deep },
         rem = total { it.rem },
+        segments = inOrder.flatMap { it.segments },
         inBed = total { it.inBed },
-        naps = rest.size,
-        napAsleep = rest.fold(Duration.ZERO) { sum, night -> sum + night.asleep },
+        parts = inOrder,
+        midpoint = middleOfSleep(inOrder, asleep),
+    )
+}
+
+/**
+ * The middle of a day's sleep, each session weighted by its own length.
+ *
+ * A mean, not a midpoint: the instant halfway between going to bed and
+ * waking from an afternoon nap is the middle of a *day*, and scoring
+ * consistency against it would punish the nap twice. Forty minutes
+ * against seven hours moves this by about an hour, which is the honest
+ * amount for a sleep that really did happen in the afternoon.
+ */
+private fun middleOfSleep(sleeps: List<Night>, asleep: Duration): Instant {
+    val weight = asleep.seconds
+    if (weight <= 0L) return sleeps.first().midpoint
+    return Instant.ofEpochSecond(
+        sleeps.sumOf { it.midpoint.epochSecond * it.asleep.seconds } / weight,
     )
 }
 

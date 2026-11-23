@@ -421,13 +421,18 @@ private fun nightJson(night: Night): JSONObject = JSONObject()
     .put("light", night.light.toMillis())
     .put("deep", night.deep.toMillis())
     .put("rem", night.rem.toMillis())
-    // Time in bed is its own figure now that a day's naps are folded into
-    // one night: it is the sum of every sleep, not the span from the
-    // night's start to its end, and it cannot be recovered from the two.
+    // Two figures that cannot be recovered from the rest, now that a
+    // day's sleeps are added together: time in bed is their sum and not
+    // the span from start to end, and the middle is weighted by how much
+    // sleep each of them was.
     .put("inBed", night.inBed.toMillis())
-    .put("naps", night.naps)
-    .put("napAsleep", night.napAsleep.toMillis())
+    .put("midpoint", night.midpoint.toEpochMilli())
     .put("stages", encodeSegments(night.start, night.segments))
+    // The sleeps the day was added up from, each written exactly as a
+    // night is. Empty for the ordinary single-sleep day, and one level
+    // deep for any other: a part's own parts are always empty, so this
+    // recursion terminates on the first step.
+    .put("parts", JSONArray(night.parts.map(::nightJson)))
 
 private fun nightOf(json: JSONObject): Night? {
     val start = Instant.ofEpochMilli(json.getLong("start"))
@@ -442,8 +447,8 @@ private fun nightOf(json: JSONObject): Night? {
         rem = Duration.ofMillis(json.getLong("rem")),
         segments = decodeSegments(json.getString("stages"), start) ?: return null,
         inBed = Duration.ofMillis(json.getLong("inBed")),
-        naps = json.getInt("naps"),
-        napAsleep = Duration.ofMillis(json.getLong("napAsleep")),
+        midpoint = Instant.ofEpochMilli(json.getLong("midpoint")),
+        parts = json.getJSONArray("parts").objects().map { nightOf(it) ?: return null },
     )
 }
 

@@ -179,12 +179,15 @@ object HealthExport {
 
     private fun nights(writer: OutputStreamWriter, snapshot: HealthSnapshot, zone: ZoneId) {
         writer.write(
-            // One row per day, not per sleep: the lengths are the day's
-            // total and `naps` says how many sleeps went into it, while
-            // `start` and `end` are the longest of them. Without those two
-            // columns a napping day would look like a very long night.
+            // One row per day, not per sleep. The lengths are the day's
+            // total, `start` and `end` reach from the first sleep to the
+            // last, and `sleeps` says how many there were -- without
+            // which a day of six hours and three would read as a single
+            // extraordinary night. `in_bed_min` adds the sleeps rather
+            // than measuring between those two, so the waking afternoon
+            // in the middle is not counted as time in bed.
             "date,start,end,asleep_min,awake_min,light_min,deep_min,rem_min," +
-                "naps,nap_min,in_bed_min," +
+                "sleeps,in_bed_min," +
                 "efficiency,score,score_duration,score_stages,score_consistency," +
                 "score_interruptions\n",
         )
@@ -202,8 +205,7 @@ object HealthExport {
                 night.light.toMinutes().toString(),
                 night.deep.toMinutes().toString(),
                 night.rem.toMinutes().toString(),
-                night.naps.toString(),
-                night.napAsleep.toMinutes().toString(),
+                night.sleeps.toString(),
                 night.inBed.toMinutes().toString(),
                 figure(night.efficiency),
                 score?.total?.toString().orEmpty(),

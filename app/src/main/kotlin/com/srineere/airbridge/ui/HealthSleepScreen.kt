@@ -162,14 +162,12 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     // Said out loud, because the figure above is a day's
-                    // sleep and the timeline below is only the night of
-                    // it. Without this line the two disagree and neither
-                    // of them explains why.
-                    if (night.naps > 0) {
+                    // sleep and not a night's. Nine hours is a startling
+                    // number until you know it was six and three, and
+                    // the sleeps themselves are listed further down.
+                    if (night.sleeps > 1) {
                         Text(
-                            "Includes ${night.naps} " +
-                                (if (night.naps == 1) "nap" else "naps") +
-                                ", ${night.napAsleep.asHoursMinutes()}",
+                            "Added up from ${night.sleeps} sleeps",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -432,7 +430,15 @@ private fun NightDetail(night: Night, extras: AirExtraColors) {
     DetailCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "${clock.format(night.start)} – ${clock.format(night.end)}",
+                // On a day of one sleep this is when it was. On a day of
+                // two it would be "23:10 - 15:20", which says the person
+                // was in bed for sixteen hours; the count goes here
+                // instead and the sleeps are listed underneath.
+                if (night.sleeps > 1) {
+                    "${night.sleeps} sleeps"
+                } else {
+                    "${clock.format(night.start)} – ${clock.format(night.end)}"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
@@ -445,6 +451,29 @@ private fun NightDetail(night: Night, extras: AirExtraColors) {
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        // Each sleep on its own line: when it was, and how much of it was
+        // sleep. The totals on this screen are the day's, and this is the
+        // one place that says what they were added up from -- so six
+        // hours overnight and three in the afternoon can be read as the
+        // two things that happened rather than as nine mysterious hours.
+        night.parts.forEach { part ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 6.dp),
+            ) {
+                Text(
+                    "${clock.format(part.start)} – ${clock.format(part.end)}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    part.asleep.asHoursMinutes(),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
         // The lanes are rows, so their names belong beside them. Across the
         // bottom they read as an axis, which is the one thing this chart's

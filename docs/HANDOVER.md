@@ -509,36 +509,55 @@ directions at once and quietly in all of them:
   napping day that is the nap, so a twenty-minute doze replaced a
   seven-hour night in the baseline and in the bank.
 
-`oneNightPerDay` in `health/HealthReader.kt` folds them before anything
+`oneNightPerDay` in `health/HealthReader.kt` adds them up before anything
 sees them, called once, right where `toNight` is mapped over the records.
 Everything downstream — charts, score, readiness, widgets, export, both
 caches — gets one night per day for free, and nothing else needed to know.
 
-**What is summed and what is not is the whole design.** The longest sleep
-of the day leads and keeps its `start`, `end` and `segments`; the
-quantities are the day's sum. A hypnogram drawn from midnight to three the
-following afternoon, an efficiency diluted by eight waking hours, and a
-body clock judged by the middle of that span would each be a new lie in
-place of the old one. So `Night.inBed` is now a stored field rather than
-`Duration.between(start, end)` — the two agree on a single-session day and
-must not be confused on any other — and `midpoint`, which drives the
-consistency score, stays the middle of the main sleep.
+**Everything is added and no sleep leads.** Six hours overnight and three
+in the afternoon is a nine-hour day: the lengths are summed, `start` and
+`end` reach from the first sleep to the last, and `segments` is all of
+them end to end, so the hypnogram shows the afternoon with a gap where the
+day was. An earlier draft of this let the longest sleep lead and keep the
+timeline, which is tidier to draw and wrong: it presents a total as though
+it belonged to one sleep.
 
-`naps` and `napAsleep` are carried so a screen can say where the extra came
-from. The sleep screen prints "Includes 1 nap, 40m" under the date, because
-the figure above it is a day and the timeline below it is a night, and
-without that line the two disagree with no explanation.
+**`Night.parts` holds the sleeps the day was added up from**, each a
+`Night` in its own right with its own hours, stages and efficiency —
+empty on the ordinary one-sleep day, and never nested more than one deep.
+The sleep screen lists them under the hypnogram, and the headline says
+"Added up from 2 sleeps", because nine hours is a startling figure until
+you can see it was six and three. A total nobody can take apart is a
+figure to be taken on trust.
+
+**Three things must not stretch across the waking hours between two
+sleeps**, and each is a field or a rule rather than a derivation:
+
+- `inBed` adds the sessions instead of measuring `start` to `end`. On a
+  two-sleep day the span is sixteen hours, against which nine hours of
+  sleep reads as a wretched efficiency. The two agree on a one-sleep day,
+  which is why the default is the span — and why confusing them is easy.
+- `wakes` counts within each run of contiguous segments, splitting on a
+  gap wider than a minute. Every sleep ends on an Awake segment — getting
+  up — and a single pass over a merged list finds the morning's sitting in
+  the middle and charges a wake for it.
+- `midpoint` is stored, and is the mean of each sleep's middle weighted by
+  its own length. Halfway between going to bed and waking from an
+  afternoon sleep is breakfast time; `consistency` in `SleepScore` is the
+  only thing that reads it, and it would mark down every napping day for a
+  shift that never happened.
 
 The fold also repairs a night a writer split in two around a long wake,
-which until now read and scored as two short nights. It is counted as a nap
-in that case. Nothing available here can tell the two apart, and claiming
-"includes 1 nap, 3h" is less wrong than counting the night twice.
+which until now read and scored as two short nights.
 
-Both persisted caches gained the three fields, and both version constants
-went to 2 — `CACHE_VERSION` and `KEPT_VERSION`. That is what makes the
-migration a non-event: a cache written by the old build is refused whole
-and rebuilt by the next read, so no pre-fold night can survive into a
-screen that now assumes one night per day.
+Both persisted caches gained fields, and both version constants went to
+2 — `CACHE_VERSION` and `KEPT_VERSION`. That is what makes the migration a
+non-event: a cache written by the old build is refused whole and rebuilt by
+the next read, so no pre-fold night can survive into a screen that now
+assumes one night per day. The widget store deliberately keeps no `parts`,
+so `Night.sleeps` reads 1 there, alongside `wakes` reading 0 for want of
+segments; both are documented at the encoder and neither is asked for by
+anything in `widget/`.
 
 ## The export
 

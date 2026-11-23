@@ -98,8 +98,8 @@ private fun doubles(array: JSONArray): List<Double> =
     (0 until array.length()).map { array.getDouble(it) }
 
 /**
- * `[day, start, end, asleep, awake, light, deep, rem, inBed, naps,
- * napAsleep]` -- every duration in seconds, the two instants in millis.
+ * `[day, start, end, asleep, awake, light, deep, rem, inBed, midpoint]`
+ * -- durations in seconds, instants in millis.
  */
 private fun nightsOf(list: List<Night>): JSONArray = JSONArray().apply {
     list.forEach { night ->
@@ -114,11 +114,12 @@ private fun nightsOf(list: List<Night>): JSONArray = JSONArray().apply {
                 .put(night.deep.seconds)
                 .put(night.rem.seconds)
                 // Time in bed is kept because the two sleep faces draw
-                // efficiency from it, and once a day's naps are folded in
-                // it is no longer the span from start to end.
+                // efficiency from it, and once a day's sleeps are added
+                // together it is no longer the span from start to end.
+                // The middle is kept for the same reason, and because the
+                // sleep face scores consistency off it.
                 .put(night.inBed.seconds)
-                .put(night.naps)
-                .put(night.napAsleep.seconds)
+                .put(night.midpoint.toEpochMilli())
         )
     }
 }
@@ -133,9 +134,14 @@ private fun nightsOf(list: List<Night>): JSONArray = JSONArray().apply {
  * segments would be the better part of two thousand rows for a picture
  * nothing on the home screen draws.
  *
- * The one thing that degrades is `Night.wakes`, which counts segments and
- * would read zero. Nothing in `widget/` asks it. Anything that starts to
- * must keep the segments too.
+ * `Night.parts` is dropped for the same reason: the separate sleeps of a
+ * day are there to be shown one by one, which is a screen's job and not a
+ * 4x2 tile's. The totals already include them.
+ *
+ * Two things therefore degrade here -- `Night.wakes`, which counts
+ * segments and would read zero, and `Night.sleeps`, which would read one
+ * on a day that had two. Nothing in `widget/` asks either. Anything that
+ * starts to must keep what it is counting.
  */
 private fun nights(array: JSONArray): List<Night> =
     (0 until array.length()).map { index ->
@@ -150,8 +156,7 @@ private fun nights(array: JSONArray): List<Night> =
             deep = Duration.ofSeconds(row.getLong(6)),
             rem = Duration.ofSeconds(row.getLong(7)),
             inBed = Duration.ofSeconds(row.getLong(8)),
-            naps = row.getInt(9),
-            napAsleep = Duration.ofSeconds(row.getLong(10)),
+            midpoint = Instant.ofEpochMilli(row.getLong(9)),
         )
     }
 

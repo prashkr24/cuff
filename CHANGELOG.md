@@ -150,18 +150,21 @@ Reconstructed from the commit history on `native`, which began on 2 November
 
 ### Fixed
 
-- **A nap counted as a night.** Health Connect has no concept of a night: it
-  files every sleep as a session, so an afternoon doze arrived looking
-  exactly like last night. The day's total left it out, "the last 7 nights"
-  became the last seven sessions — so a napper saw five days in a seven-day
-  chart — and the sleep bank and readiness baseline, which key nights by
-  day, kept whichever session came last, letting twenty minutes replace a
-  seven-hour night. Every sleep of a day is now one night: the lengths are
-  summed, the longest sleep keeps the timeline and the midpoint so the
-  hypnogram and the consistency score still describe a night, and the sleep
-  screen says "Includes 1 nap, 40m" rather than folding it in silently. The
-  same fold repairs a night a writer split in two around a long wake, which
-  until now read as two short nights. [23 Nov]
+- **An afternoon sleep counted as a night of its own.** Health Connect has
+  no concept of a night: it files every sleep as a session, so three hours
+  in the afternoon arrived looking exactly like last night. The day's total
+  left it out, "the last 7 nights" became the last seven sessions — so a
+  napper saw five days in a seven-day chart — and the sleep bank and the
+  readiness baseline, which key nights by day, kept whichever session came
+  last, letting an afternoon replace the night outright. A day's sleep is
+  now added up: six hours overnight and three in the afternoon is nine
+  hours, the hypnogram shows both, and the sleep screen lists each sleep
+  with its own hours underneath, because a total nobody can take apart is
+  a figure to be taken on trust. Time in bed, the count of wakes and the
+  middle of the sleep are each measured so that the waking hours between
+  two sleeps are not counted as part of either. The same change repairs a
+  night a writer split in two around a long wake, which until now read as
+  two short nights. [23 Nov]
 - **The hourly nudge fired outside its own window.** The end hour was
   inclusive, so a window shown as "09:00–21:00" could buzz at 21:50 — fifty
   minutes after the time chosen. Reported from a phone, and a test had been

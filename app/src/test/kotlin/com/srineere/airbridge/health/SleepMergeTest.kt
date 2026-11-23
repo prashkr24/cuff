@@ -7,25 +7,25 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * A day's sleep is a day's sleep, however many times somebody lay down.
+ * Six hours overnight and three in the afternoon is a nine-hour day.
  *
- * Health Connect has no concept of a night: it holds sessions, and an
- * afternoon nap is a session exactly as last night is. For as long as this
- * app mapped one session to one [Night] that cost it in three separate
- * ways, and each of them is pinned here.
+ * Health Connect has no concept of a night. It holds sessions, and an
+ * afternoon sleep is a session exactly as the night is. For as long as
+ * this app mapped one session to one [Night] that cost it in three ways,
+ * and each of them is pinned here:
  *
- * - A total that left out an hour of afternoon sleep.
- * - "The last 7 nights" quietly becoming the last seven *sessions*, so a
- *   napper saw five days of history in a seven-day chart.
- * - Every screen that keyed nights by day keeping whichever session came
- *   last, which on a napping day is the nap -- so a twenty-minute doze
- *   replaced a seven-hour night in the sleep bank and in readiness.
+ * - a total that left the afternoon out;
+ * - "the last 7 nights" quietly becoming the last seven *sessions*, so a
+ *   napper saw five days of history in a seven-day chart;
+ * - every screen keying nights by day -- the sleep bank's `associateBy`,
+ *   readiness' `sleepByDay` -- keeping whichever session came last, so
+ *   three hours in the afternoon replaced the six-hour night outright.
  *
- * The other half of the design is what must *not* be summed, and those
- * tests matter more: a hypnogram spanning midnight to three the following
- * afternoon, an efficiency diluted by eight waking hours, and a body clock
- * judged by the middle of that span would each be a new lie told in place
- * of the old one.
+ * Everything is added and no sleep leads. The other half of the tests are
+ * the three figures that must **not** be stretched across the waking
+ * hours between two sleeps: time in bed, the count of wakes, and the
+ * middle of the sleep. Each of those, done naively, would turn a day with
+ * a nap in it into a worse night than the same night without one.
  */
 class SleepMergeTest {
 
@@ -56,131 +56,210 @@ class SleepMergeTest {
             segments = if (!staged) emptyList() else listOf(
                 SleepSegment(SleepStage.Light, start, start.plus(light)),
                 SleepSegment(SleepStage.Deep, start.plus(light), start.plus(light).plus(deep)),
-                SleepSegment(SleepStage.Rem, start.plus(light).plus(deep), end),
+                SleepSegment(SleepStage.Rem, start.plus(light).plus(deep), start.plus(asleep)),
+                // Getting up. Last of its own sleep, and the segment that
+                // a single pass over a merged day would miscount.
+                SleepSegment(SleepStage.Awake, start.plus(asleep), end),
             ),
         )
     }
 
-    /** Last night: in at 23:00 the day before, up at 06:30. */
-    private fun night(day: Long = 100L, hours: Long = 7) =
+    /** In at 23:00 the day before, up six hours later. */
+    private fun overnight(day: Long = 100L, hours: Long = 6) =
         sleep(day, Duration.ofHours(-1), Duration.ofHours(hours))
 
-    /** A doze after lunch on the same day. */
-    private fun nap(day: Long = 100L, minutes: Long = 40) =
-        sleep(day, Duration.ofHours(14), Duration.ofMinutes(minutes), awake = Duration.ofMinutes(5))
+    /** Three hours in the afternoon of the same day. */
+    private fun afternoon(day: Long = 100L, hours: Long = 3) =
+        sleep(day, Duration.ofHours(14), Duration.ofHours(hours), awake = Duration.ofMinutes(5))
 
     // ------------------------------------------------------------ the total
 
     @Test
-    fun `a nap is added to the night rather than counted as a second one`() {
-        val folded = oneNightPerDay(listOf(night(), nap()))
+    fun `six hours overnight and three in the afternoon is nine hours`() {
+        val folded = oneNightPerDay(listOf(overnight(), afternoon()))
 
         assertEquals(1, folded.size)
-        assertEquals(Duration.ofHours(7).plusMinutes(40), folded.single().asleep)
+        assertEquals(Duration.ofHours(9), folded.single().asleep)
     }
 
     @Test
-    fun `the stages of a nap are added to the day's stages`() {
-        val only = oneNightPerDay(listOf(night(), nap())).single()
-        val separately = night().let { it.light + it.deep + it.rem } +
-            nap().let { it.light + it.deep + it.rem }
+    fun `the stages are added up too`() {
+        val only = oneNightPerDay(listOf(overnight(), afternoon())).single()
+        val separately = overnight().let { it.light + it.deep + it.rem } +
+            afternoon().let { it.light + it.deep + it.rem }
 
         assertEquals(separately, only.light + only.deep + only.rem)
+        assertEquals(overnight().awake + afternoon().awake, only.awake)
     }
 
     @Test
-    fun `the nap is disclosed, not folded in silently`() {
-        val only = oneNightPerDay(listOf(night(), nap(minutes = 40))).single()
+    fun `the day reaches from the first sleep to the last`() {
+        val only = oneNightPerDay(listOf(overnight(), afternoon())).single()
 
-        assertEquals(1, only.naps)
-        assertEquals(Duration.ofMinutes(40), only.napAsleep)
+        assertEquals(overnight().start, only.start)
+        assertEquals(afternoon().end, only.end)
     }
 
     @Test
-    fun `two naps are two naps`() {
-        val only = oneNightPerDay(
-            listOf(night(), nap(minutes = 40), sleep(100L, Duration.ofHours(18), Duration.ofMinutes(15))),
-        ).single()
+    fun `the hypnogram is every sleep of the day, in order`() {
+        val only = oneNightPerDay(listOf(afternoon(), overnight())).single()
 
-        assertEquals(2, only.naps)
-        assertEquals(Duration.ofMinutes(55), only.napAsleep)
+        assertEquals(overnight().segments + afternoon().segments, only.segments)
     }
 
     @Test
     fun `a day with one sleep is left exactly as it was`() {
-        val alone = night()
+        val alone = overnight()
 
         assertEquals(alone, oneNightPerDay(listOf(alone)).single())
+        assertEquals(1, alone.sleeps)
     }
 
-    // ------------------------------------- what the night still has to mean
+    // ------------------------------------------- and what it is a sum of
 
     @Test
-    fun `the timeline stays the night's, so no hypnogram runs into the afternoon`() {
-        val only = oneNightPerDay(listOf(night(), nap())).single()
+    fun `the sleeps it was added up from are kept, in order`() {
+        val only = oneNightPerDay(listOf(afternoon(), overnight())).single()
 
-        assertEquals(night().start, only.start)
-        assertEquals(night().end, only.end)
-        assertEquals(night().segments, only.segments)
+        assertEquals(2, only.sleeps)
+        assertEquals(listOf(overnight(), afternoon()), only.parts)
+        assertEquals(
+            listOf(Duration.ofHours(6), Duration.ofHours(3)),
+            only.parts.map { it.asleep },
+        )
     }
 
     @Test
-    fun `efficiency counts time in bed, not the waking hours between sleeps`() {
-        val only = oneNightPerDay(listOf(night(hours = 7), nap(minutes = 40))).single()
+    fun `a part is a sleep in its own right, with its own figures`() {
+        val only = oneNightPerDay(listOf(overnight(), afternoon())).single()
+        val second = only.parts[1]
 
-        // Nothing here was spent lying awake beyond the 25 minutes the two
-        // sessions actually record; the eight hours between them were a day.
-        val inBed = Duration.between(night().start, night().end) +
-            Duration.between(nap().start, nap().end)
-        assertEquals(inBed, only.inBed)
+        assertEquals(afternoon().start, second.start)
+        assertEquals(afternoon().end, second.end)
+        assertEquals(Duration.ofHours(3), second.asleep)
+        // One level, never a tree: whatever walks these cannot recurse.
+        assertTrue(only.parts.all { it.parts.isEmpty() })
+    }
+
+    @Test
+    fun `three sleeps are three parts`() {
+        val only = oneNightPerDay(
+            listOf(overnight(), afternoon(), sleep(100L, Duration.ofHours(20), Duration.ofMinutes(25))),
+        ).single()
+
+        assertEquals(3, only.sleeps)
+        assertEquals(Duration.ofHours(9).plusMinutes(25), only.asleep)
+    }
+
+    // ------------------------------- what must not stretch across the gap
+
+    @Test
+    fun `the waking afternoon is not counted as time in bed`() {
+        val only = oneNightPerDay(listOf(overnight(), afternoon())).single()
+
+        val lyingDown = Duration.between(overnight().start, overnight().end) +
+            Duration.between(afternoon().start, afternoon().end)
+        assertEquals(lyingDown, only.inBed)
+        // The span from first to last is sixteen hours; against that, nine
+        // hours of sleep would read as a wretched night.
         assertTrue("efficiency was ${only.efficiency}", only.efficiency!! > 0.9)
     }
 
     @Test
-    fun `the midpoint stays in the middle of the night`() {
-        val only = oneNightPerDay(listOf(night(), nap())).single()
+    fun `getting up in the morning is not a wake in the middle of the day`() {
+        // Each sleep here ends on an Awake segment. Merged into one list,
+        // the first sleep's last segment is no longer last, and a single
+        // pass would charge a wake for having got up.
+        val only = oneNightPerDay(listOf(overnight(), afternoon())).single()
 
-        assertEquals(night().midpoint, only.midpoint)
+        assertEquals(0, only.wakes)
+        assertEquals(0, overnight().wakes)
+    }
+
+    @Test
+    fun `a wake inside a sleep is still counted`() {
+        val broken = overnight().let { night ->
+            night.copy(
+                segments = listOf(
+                    SleepSegment(SleepStage.Light, night.start, night.start.plusSeconds(3_600)),
+                    SleepSegment(SleepStage.Awake, night.start.plusSeconds(3_600), night.start.plusSeconds(4_200)),
+                    SleepSegment(SleepStage.Deep, night.start.plusSeconds(4_200), night.end),
+                ),
+            )
+        }
+
+        assertEquals(1, broken.wakes)
+        assertEquals(1, oneNightPerDay(listOf(broken, afternoon())).single().wakes)
+    }
+
+    @Test
+    fun `the middle of the sleep is weighted, not the middle of the span`() {
+        val only = oneNightPerDay(listOf(overnight(), afternoon())).single()
+
+        // Halfway between 23:00 and the end of the afternoon sleep is
+        // about seven in the morning, which is nobody's body clock. The
+        // weighted middle stays in the small hours, pulled a few hours on
+        // by three real hours of afternoon sleep.
+        val span = only.start.plusSeconds(Duration.between(only.start, only.end).seconds / 2)
+        assertTrue(only.midpoint.isBefore(span))
+        assertTrue(only.midpoint.isAfter(overnight().midpoint))
+        // Six hours against three, so two parts of the night's middle to
+        // one of the afternoon's. Within a minute, since the weighting
+        // divides in whole seconds.
+        val weighted =
+            (overnight().midpoint.epochSecond * 6 + afternoon().midpoint.epochSecond * 3) / 9
+        assertTrue(
+            "weighted middle was ${only.midpoint}, expected about ${Instant.ofEpochSecond(weighted)}",
+            Duration.between(Instant.ofEpochSecond(weighted), only.midpoint).abs() <
+                Duration.ofMinutes(1),
+        )
+    }
+
+    @Test
+    fun `one sleep keeps the middle it always had`() {
+        val alone = overnight()
+
+        assertEquals(
+            alone.start.plusSeconds(Duration.between(alone.start, alone.end).seconds / 2),
+            alone.midpoint,
+        )
     }
 
     // ------------------------------------------------------------ stability
 
     @Test
     fun `the order Health Connect hands sessions back does not change the result`() {
-        val forwards = oneNightPerDay(listOf(night(), nap())).single()
-        val backwards = oneNightPerDay(listOf(nap(), night())).single()
+        val forwards = oneNightPerDay(listOf(overnight(), afternoon())).single()
+        val backwards = oneNightPerDay(listOf(afternoon(), overnight())).single()
 
         assertEquals(forwards, backwards)
     }
 
     @Test
-    fun `the longest sleep leads even when it is not the first of the day`() {
-        // Awake before dawn, back to bed for six hours: the second sleep is
-        // the night, and the hypnogram should be its own.
-        val early = sleep(100L, Duration.ofHours(-2), Duration.ofMinutes(45))
-        val long = sleep(100L, Duration.ofHours(1), Duration.ofHours(6))
+    fun `a sleep wholly inside another does not shorten the day`() {
+        // Two writers describing the same night, one of them in part.
+        val whole = sleep(100L, Duration.ofHours(-1), Duration.ofHours(7))
+        val inside = sleep(100L, Duration.ofHours(1), Duration.ofHours(2))
 
-        assertEquals(long.start, oneNightPerDay(listOf(early, long)).single().start)
+        assertEquals(whole.end, oneNightPerDay(listOf(whole, inside)).single().end)
     }
 
     @Test
     fun `a night a writer split in two is one night again`() {
         val first = sleep(100L, Duration.ofHours(-1), Duration.ofHours(3))
         val second = sleep(100L, Duration.ofHours(3), Duration.ofHours(4))
-        val only = oneNightPerDay(listOf(first, second)).single()
 
-        assertEquals(Duration.ofHours(7), only.asleep)
-        // Not a nap: the second half is still part of the night. It is
-        // counted as one because nothing here can tell the difference, and
-        // saying "includes 1 nap, 3h" would be worse than saying nothing.
-        assertEquals(1, only.naps)
+        assertEquals(Duration.ofHours(7), oneNightPerDay(listOf(first, second)).single().asleep)
     }
 
     @Test
     fun `days come back oldest first, one each`() {
-        val folded = oneNightPerDay(listOf(night(102L), nap(101L), night(101L), night(100L)))
+        val folded = oneNightPerDay(
+            listOf(overnight(102L), afternoon(101L), overnight(101L), overnight(100L)),
+        )
 
         assertEquals(listOf(100L, 101L, 102L), folded.map { it.day })
+        assertEquals(listOf(1, 2, 1), folded.map { it.sleeps })
     }
 
     @Test
