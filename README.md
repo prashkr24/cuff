@@ -426,6 +426,9 @@ The other documents:
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the features chosen on 5 November 2026
   and the reasoning behind each, including the reversal of the
   no-composite-scores rule.
+- [`PRIVACY.md`](PRIVACY.md) — what the app reads, where it keeps it, and why
+  none of it can leave the phone. Written to serve as the privacy policy a
+  store listing requires.
 - [`docs/SIGNING.md`](docs/SIGNING.md) — how to sign releases with a real key
   instead of the debug one, and why every release so far has made people
   uninstall the last.
