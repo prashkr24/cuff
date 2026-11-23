@@ -6,10 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project aims at [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 once it reaches 1.0.
 
-**No version has been released yet.** There are no tags in this repository and
-no published APK, so everything below sits under *Unreleased*. The app
-currently reports `versionName 0.3.0` / `versionCode 24`, which is what the
-first tag will carry.
+**The last release was `v0.3.1`.** The app now reports `versionName 0.4.0` /
+`versionCode 26`, which is what the next tag will carry. Everything below
+still sits under *Unreleased* because the entries predate the split into
+released versions; the ones dated from 23 November onwards are what 0.4.0
+adds on top of 0.3.1.
 
 ## [Unreleased]
 

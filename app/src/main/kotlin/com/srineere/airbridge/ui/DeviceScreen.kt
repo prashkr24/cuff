@@ -77,6 +77,7 @@ import com.srineere.airbridge.widget.WidgetSnapshotStore
 import androidx.compose.material.icons.outlined.Palette
 import com.srineere.airbridge.ui.theme.Accent
 import com.srineere.airbridge.ui.theme.ThemeMode
+import androidx.compose.ui.text.style.TextAlign
 import com.srineere.airbridge.ui.theme.extras
 import com.srineere.airbridge.widget.BandStore
 import com.srineere.airbridge.widget.WidgetRefresh
@@ -84,12 +85,8 @@ import com.srineere.airbridge.ui.theme.isAvailable
 import dev.airpulse.fitbit_air.airResult
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
-import androidx.compose.ui.res.painterResource
 import com.srineere.airbridge.R
 import com.srineere.airbridge.BuildConfig
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.res.colorResource
 
 @Composable
 internal fun DeviceScreen(onOpen: (String) -> Unit) {
@@ -258,48 +255,37 @@ internal fun DeviceScreen(onOpen: (String) -> Unit) {
             onClick = { onOpen("about") },
         )
 
-        // The app's own name, at the foot of the tab about everything else.
+        // The version, centred, at the foot of the tab about everything
+        // else.
         //
-        // Every other line here names a piece of hardware or a setting;
-        // nothing said what this was. On a phone with two installs of it
-        // side by side that stopped being a philosophical point.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        // It had the launcher icon beside it, left-aligned like a row, on
+        // the reasoning that somebody with two installs side by side
+        // should be able to tell which one they were holding. True, and
+        // answered better elsewhere: the icon is at the top of this tab
+        // in the wordmark, and the two builds differ by name in the
+        // launcher. What was left was a settings row that could not be
+        // tapped, sitting under rows that could.
+        //
+        // So it reads as a footer now rather than as a row: no icon,
+        // centred, labelMedium and the dimmest tone the theme has. The
+        // version is the last thing on the screen and the least of it —
+        // worth finding when a report needs it, worth nothing the rest of
+        // the time.
+        //
+        // What this app is not — official, approved, supported — is said
+        // twice on the About screen, in the two places somebody would
+        // look: under what can break it, and under how to report a
+        // problem. A third copy here would be a disclaimer, not
+        // information.
+        Text(
+            "Version ${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.extras.disabled,
+            textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 20.dp, end = 20.dp, top = 26.dp),
-        ) {
-            // The icon as it is on the home screen, ground and all, rather
-            // than a silhouette of it tinted to the accent. This row is
-            // about which app you are holding, and a logo that changes
-            // colour with the theme answers that less well than the one
-            // thing the launcher actually shows.
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(colorResource(R.color.cuff_background)),
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_cuff_foreground),
-                    contentDescription = null,
-                    modifier = Modifier.size(34.dp),
-                )
-            }
-            // The version and nothing else. What this app is not — official,
-            // approved, supported — is said twice on the About screen, in
-            // the two places somebody would look for it: under what can
-            // break it, and under how to report a problem. A third copy at
-            // the foot of a settings list is a disclaimer, not information.
-            Text(
-                "Version ${BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-        }
+        )
 
         Box(Modifier.padding(bottom = 28.dp))
     }
