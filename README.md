@@ -426,6 +426,9 @@ The other documents:
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — the features chosen on 5 November 2026
   and the reasoning behind each, including the reversal of the
   no-composite-scores rule.
+- [`docs/SIGNING.md`](docs/SIGNING.md) — how to sign releases with a real key
+  instead of the debug one, and why every release so far has made people
+  uninstall the last.
 - [`docs/REVIEW.md`](docs/REVIEW.md) — an earlier consistency and performance
   review.
 - [`docs/explorations/`](docs/explorations/) — the research the roadmap came

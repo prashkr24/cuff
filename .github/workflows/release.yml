@@ -90,7 +90,7 @@ jobs:
           AIR_RELAY_KEYSTORE_PASSWORD: ${{ secrets.AIR_RELAY_KEYSTORE_PASSWORD }}
           AIR_RELAY_KEY_ALIAS: ${{ secrets.AIR_RELAY_KEY_ALIAS }}
           AIR_RELAY_KEY_PASSWORD: ${{ secrets.AIR_RELAY_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --console=plain
+        run: ./gradlew :app:assembleRelease :app:bundleRelease --console=plain
 
       - name: Name the APK after the tag
         id: apk
@@ -105,11 +105,36 @@ jobs:
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "sha256=$(sha256sum "$dest" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
+      # The same build as an App Bundle, which is the only format Play
+      # accepts for a new app. Attached to the release rather than built
+      # on demand later, so that the .aab somebody uploads is the one
+      # built from the tag, by the same job, with the same key -- an
+      # .aab assembled separately afterwards is a different artefact
+      # wearing the same version number.
+      #
+      # Nobody installs this file. It is a container Play opens to
+      # generate per-device APKs, and sideloading it does not work; the
+      # notes say so next to it.
+      - name: Name the bundle after the tag
+        id: aab
+        run: |
+          src=$(find app/build/outputs/bundle/release -name '*.aab' -print -quit)
+          if [ -z "$src" ]; then
+            echo "::error::No bundle was produced under app/build/outputs/bundle/release"
+            exit 1
+          fi
+          dest="cuff-${GITHUB_REF_NAME}.aab"
+          cp "$src" "$dest"
+          echo "path=$dest" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$dest" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Write the preamble for the release notes
         env:
           SIGNED: ${{ steps.signing.outputs.signed }}
           APK: ${{ steps.apk.outputs.path }}
           SHA: ${{ steps.apk.outputs.sha256 }}
+          AAB: ${{ steps.aab.outputs.path }}
+          AAB_SHA: ${{ steps.aab.outputs.sha256 }}
         run: |
           {
             echo "**Android only, sideloaded, unofficial.** \`arm64-v8a\`, Android 9 (API 28) and up."
@@ -133,6 +158,19 @@ jobs:
             echo "Installing needs four grants no installer can make for you — Bluetooth,"
             echo "notification access, background running, and Health Connect for the Health"
             echo "tab. See [Install](https://github.com/srineere/air-bridge#install)."
+            echo
+            echo "<details><summary>App Bundle</summary>"
+            echo
+            echo "\`\`\`"
+            echo "$AAB"
+            echo "sha256  $AAB_SHA"
+            echo "\`\`\`"
+            echo
+            echo "**Do not download this one to install.** An \`.aab\` is a container a"
+            echo "store opens to build per-device APKs; a phone cannot install it. It is"
+            echo "here so that whatever is uploaded to a store is the artefact this tag"
+            echo "built, with this key, rather than one assembled separately afterwards."
+            echo "</details>"
           } > release-notes.md
 
       - name: Publish the release
@@ -144,4 +182,5 @@ jobs:
             --notes-file release-notes.md \
             --generate-notes \
             --verify-tag \
-            "${{ steps.apk.outputs.path }}"
+            "${{ steps.apk.outputs.path }}" \
+            "${{ steps.aab.outputs.path }}"
