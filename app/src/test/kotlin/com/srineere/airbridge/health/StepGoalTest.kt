@@ -216,4 +216,35 @@ class StepGoalTest {
         // With the nudge off nothing is shortened at all.
         assertEquals(quarter, nextStepCheckMillis(false, minute = 12, second = 0, periodMillis = quarter))
     }
+
+    /**
+     * The nudge does not belong to the Health tab, and the goal does.
+     *
+     * They were hidden and scheduled together, which made the price of a
+     * buzz every hour the whole health half: thirteen record types and a
+     * tab. The nudge reads one thing -- the steps in this hour -- and
+     * asks Health Connect for that permission on its own.
+     */
+    @Test
+    fun `the hourly nudge stands without the health half, and the daily goal does not`() {
+        val nudgeOnly = StepGoalSettings(hourlyNudge = true, buzzOnGoal = false)
+        val goalOnly = StepGoalSettings(hourlyNudge = false, buzzOnGoal = true)
+
+        assertTrue(stepWorkWanted(nudgeOnly, healthOn = false))
+        assertTrue(stepWorkWanted(nudgeOnly, healthOn = true))
+        // The goal's own switch lives on the Steps screen, which goes
+        // with the tab -- so a `buzzOnGoal` left true by somebody who
+        // then turned the tab off has nowhere to be turned back off.
+        assertFalse(goalBuzzWanted(goalOnly, healthOn = false))
+        assertFalse(stepWorkWanted(goalOnly, healthOn = false))
+        assertTrue(goalBuzzWanted(goalOnly, healthOn = true))
+    }
+
+    @Test
+    fun `with nothing switched on there is nothing to wake up for`() {
+        val off = StepGoalSettings(hourlyNudge = false, buzzOnGoal = false)
+
+        assertFalse(stepWorkWanted(off, healthOn = true))
+        assertFalse(stepWorkWanted(off, healthOn = false))
+    }
 }

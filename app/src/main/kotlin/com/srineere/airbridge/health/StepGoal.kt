@@ -53,6 +53,35 @@ data class StepGoalHistory(
 )
 
 /**
+ * Whether the daily goal buzz is a thing that can happen at all.
+ *
+ * It is a figure set on the Steps screen and read against a whole day, so
+ * it goes with the Health tab. Somebody who turns that tab off and leaves
+ * `buzzOnGoal` true has a setting with nowhere left to turn it off, and a
+ * buzz arriving from a screen that is no longer in the app is the worst
+ * version of this. The stored flag is not cleared, so turning the tab
+ * back on returns the goal they had.
+ */
+fun goalBuzzWanted(settings: StepGoalSettings, healthOn: Boolean): Boolean =
+    settings.buzzOnGoal && healthOn
+
+/**
+ * Whether anything is still worth waking up to check.
+ *
+ * The hourly nudge is deliberately not conditioned on [healthOn]. It is
+ * the one thing here that is not a Health tab feature wearing an Alerts
+ * hat: it reads how many steps this hour has had and nothing else, asks
+ * Health Connect for that permission on its own, and buzzes the wrist.
+ * Tying it to a tab meant the price of a buzz every hour was thirteen
+ * record types and a page nobody wanted.
+ *
+ * With neither wanted the relay drops its alarm entirely rather than
+ * waking every quarter of an hour to read a setting that is off.
+ */
+fun stepWorkWanted(settings: StepGoalSettings, healthOn: Boolean): Boolean =
+    goalBuzzWanted(settings, healthOn) || settings.hourlyNudge
+
+/**
  * Whether crossing the goal should buzz right now.
  *
  * Silence wins over everything, exactly as it does for notifications: a goal

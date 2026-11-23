@@ -30,8 +30,11 @@ import dev.airpulse.fitbit_air.AirLink
 import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthReader
 import com.srineere.airbridge.health.HealthSettings
+import com.srineere.airbridge.health.StepGoalSettings
 import com.srineere.airbridge.health.canPulseBand
+import com.srineere.airbridge.health.goalBuzzWanted
 import com.srineere.airbridge.health.nextStepCheckMillis
+import com.srineere.airbridge.health.stepWorkWanted
 import com.srineere.airbridge.health.shouldBuzzForGoal
 import com.srineere.airbridge.health.shouldNudgeForHour
 import dev.airpulse.fitbit_air.AirResult
@@ -453,12 +456,29 @@ class CalendarRelayService : Service() {
         }
     }
 
+    /**
+     * A notification that means the ringing is over, whatever the audio
+     * mode says.
+     *
+     * The second witness, and on a silent phone the only one that fires
+     * for a call nobody picked up: Telecom posts the missed call on its
+     * own channel the moment it gives up. Without this the ring would run
+     * to its maximum after a phone that had already stopped ringing.
+     */
+    internal fun onSettledCall(packageName: String, channelId: String?) {
+        val session = ring ?: return
+        if (RelayRingWatch.endsRing(session.packageName, packageName, channelId)) {
+            Log.i(TAG, "ring stopped by a settled call notification on $channelId")
+            stopRing("ended")
+        }
+    }
+
     /** A ring stops when the call is answered, declined, cleared, or times out. */
     internal fun onAlertRemoved(key: String) {
         if (ring?.key == key) {
             // A locked phone swaps the ringing notification for its full-screen
             // call UI. That is not the call ending, and the ringer says so.
-            if (RelayRingWatch.stopOnRemoval(audioMode())) stopRing("cleared")
+            if (RelayRingWatch.stopOnRemoval(audioMode(), ringerAudible())) stopRing("cleared")
             else Log.i(TAG, "ringing notification replaced; phone still ringing")
         }
         // The call is over, so this key may ring again when it next comes in.
@@ -517,6 +537,28 @@ class CalendarRelayService : Service() {
     private fun audioMode(): Int = runCatching {
         getSystemService(AudioManager::class.java).mode
     }.getOrDefault(AudioManager.MODE_NORMAL)
+
+    /**
+     * Whether the phone would actually play a ringtone.
+     *
+     * The question behind it is not about sound: it is whether
+     * `MODE_RINGTONE` is a witness worth consulting. Telecom takes ringing
+     * audio focus in order to play a ringtone, so with the ringer on
+     * silent or vibrate it never does, and the mode sits at
+     * `MODE_NORMAL` through a ringing call.
+     *
+     * Volume as well as mode, because a phone left on Normal with the ring
+     * stream pulled to zero is silent by every measure except the one
+     * `getRingerMode` reports.
+     *
+     * Defaults to audible when it cannot be read: that is the behaviour
+     * this app has always had, and it is the half that works.
+     */
+    private fun ringerAudible(): Boolean = runCatching {
+        val audio = getSystemService(AudioManager::class.java)
+        audio.ringerMode == AudioManager.RINGER_MODE_NORMAL &&
+            audio.getStreamVolume(AudioManager.STREAM_RING) > 0
+    }.getOrDefault(true)
 
     /** True once this call was picked up, including WhatsApp and Instagram calls. */
     private fun answered(session: RingSession): Boolean =
@@ -701,25 +743,28 @@ class CalendarRelayService : Service() {
      */
     private fun scheduleStepCheck() {
         handler.removeCallbacks(stepCheck)
-        // Both of these count your steps, so both are the health half
-        // wearing an Alerts hat, and with that half off there is nothing
-        // for them to read. Nothing is scheduled at all: the alarm is
-        // dropped rather than rearmed, and a nudge already sitting in the
-        // shade goes with it, for the same reason the next few lines drop
-        // one whose own switch has just been turned off.
-        if (!HealthEnabled.isOn(this)) {
+        val settings = HealthSettings.read(this)
+        // The step goal belongs to the health half; the hourly nudge does
+        // not, and can be switched on with the tab off -- it asks Health
+        // Connect for the Steps permission on its own. So the check runs
+        // whenever either of them has something to do, and the two rules
+        // below decide which.
+        //
+        // With neither, nothing is scheduled at all: the alarm is dropped
+        // rather than rearmed, and a nudge already sitting in the shade
+        // goes with it, for the same reason the next few lines drop one
+        // whose own switch has just been turned off.
+        if (!stepChecksWanted(settings)) {
             runCatching { getSystemService(NotificationManager::class.java).cancel(903) }
             cancelStepAlarm()
             return
         }
-        val settings = HealthSettings.read(this)
         // A nudge still sitting in the shade after the thing that posts it
         // was switched off is a notification about a setting that no longer
         // exists. Cleared here because this runs on every settings change.
         if (!settings.hourlyNudge || !settings.nudgeOnPhone) {
             runCatching { getSystemService(NotificationManager::class.java).cancel(903) }
         }
-        if (!settings.buzzOnGoal && !settings.hourlyNudge) { cancelStepAlarm(); return }
         // Not a flat quarter of an hour: see nextStepCheckMillis. A strict
         // period samples the same four minutes of every hour and can miss
         // the nudge's window for good.
@@ -860,16 +905,27 @@ class CalendarRelayService : Service() {
         checkStepGoals()
     }
 
+    /**
+     * Read here rather than passed in, because the switch can move while
+     * an alarm is already in flight: the system holds a PendingIntent
+     * across a process restart, so a check armed before the health half
+     * went off still arrives after it.
+     */
+    private fun stepChecksWanted(settings: StepGoalSettings): Boolean =
+        stepWorkWanted(settings, HealthEnabled.isOn(this))
+
+    private fun goalWanted(settings: StepGoalSettings): Boolean =
+        goalBuzzWanted(settings, HealthEnabled.isOn(this))
+
     private fun checkStepGoals(reschedule: Boolean = true) {
         if (reschedule) scheduleStepCheck()
+        val settings = HealthSettings.read(this)
         // Asked again here and not only in the schedule above, because
         // [onStepAlarm] comes in from a broadcast and goes straight
         // through. The system holds a PendingIntent across a process
         // restart, so an alarm armed before the health half was switched
         // off can still arrive after it.
-        if (!HealthEnabled.isOn(this)) return
-        val settings = HealthSettings.read(this)
-        if (!settings.buzzOnGoal && !settings.hourlyNudge) return
+        if (!stepChecksWanted(settings)) return
         // A missing band used to end this outright. It still does when the
         // wrist is the only destination -- but a nudge the phone is meant to
         // show has somewhere to go without one. Relaying being off still
@@ -897,7 +953,13 @@ class CalendarRelayService : Service() {
             // be worse than missing it. What has changed is that a pulse
             // which was never *sent* no longer counts. Those are different
             // failures and only the first is worth giving up on.
-            if (shouldBuzzForGoal(settings, history, today, day, silenced)) {
+            // The goal is asked only while the health half is on. Its
+            // switch lives on the Steps screen, which goes with the tab,
+            // so a `buzzOnGoal` left true by somebody who then turned the
+            // tab off is a setting with nowhere to be turned back off.
+            if (goalWanted(settings) &&
+                shouldBuzzForGoal(settings, history, today, day, silenced)
+            ) {
                 if (buzzForSteps("goal")) {
                     HealthSettings.recordGoalFired(this@CalendarRelayService, day)
                 }

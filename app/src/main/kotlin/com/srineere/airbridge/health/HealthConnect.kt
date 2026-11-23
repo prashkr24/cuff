@@ -72,6 +72,25 @@ object HealthConnect {
     val allPermissions: Set<String> =
         readPermissions + writePermissions + historyPermission + backgroundPermission
 
+    /**
+     * What the hourly nudge needs on its own, with the Health tab off.
+     *
+     * The nudge is not a Health tab feature wearing an Alerts hat, which
+     * is how it was filed: it is a buzz on the wrist, and the only thing
+     * it reads is how many steps this hour has had. Asking for thirteen
+     * record types and a tab nobody wanted, to deliver that, is the
+     * reason it was hidden rather than offered.
+     *
+     * Background is in here and history is not. The nudge fires at ten to
+     * the hour whether or not the app is open, so without background it
+     * would simply never happen; history is for reading further back than
+     * thirty days, and this reads the hour it is in.
+     */
+    val stepPermissions: Set<String> = setOf(
+        HealthPermission.getReadPermission(StepsRecord::class),
+        backgroundPermission,
+    )
+
     fun availability(context: Context): HealthAvailability =
         when (HealthConnectClient.getSdkStatus(context)) {
             HealthConnectClient.SDK_AVAILABLE -> HealthAvailability.Ready

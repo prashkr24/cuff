@@ -30,7 +30,13 @@ import com.srineere.airbridge.RelayPattern
 import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.RelayPreset
 import com.srineere.airbridge.ui.theme.extras
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.StepsRecord
 import com.srineere.airbridge.health.StepGoalSettings
+import com.srineere.airbridge.health.HealthAvailability
+import com.srineere.airbridge.health.HealthConnect
 import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthSettings
 import com.srineere.airbridge.health.MorningMoment
@@ -92,16 +98,30 @@ internal fun AlertsScreen(onOpen: (String) -> Unit) {
             )
             StepBuzzRows(onOpen, goals = false)
         } else {
-            // Said, rather than shown as three rows that cannot do
-            // anything. All three of these read your steps or your nights,
-            // so they are the health half wearing an Alerts hat: with that
-            // half off they do not fire, the relay does not even schedule
-            // the step check, and a switch that promises a buzz nothing
-            // can deliver is worse than a sentence.
+            // The hourly nudge is here with the health half off, and the
+            // other two are not.
+            //
+            // All three were hidden together, on the reasoning that they
+            // read your steps or your nights and so belong to the Health
+            // tab. That is true of the morning report, which is a summary
+            // of a night, and of the step goal, which is a figure off the
+            // Steps screen. It was never true of the nudge: it is a buzz
+            // on the wrist that asks one question -- has this hour had
+            // 250 steps -- and answering it costs the Steps permission
+            // and nothing else. Thirteen record types and a tab nobody
+            // asked for was the price of a buzz every hour, so people
+            // went without the buzz.
+            //
+            // The door is shown here and nowhere else. With the tab on,
+            // the figures live on the Steps screen and a second way in
+            // from Alerts would be a second answer; with it off, the
+            // Steps screen is not there and this is the only way to the
+            // hour and the window.
+            StepBuzzRows(onOpen, goals = true, stepGoal = false)
             Text(
-                "The morning report, the step goal buzz and the hourly nudge all read your " +
-                    "steps and your nights, so they come with the Health tab. It is off — " +
-                    "Device is where to turn it on.",
+                "The morning report and the step goal buzz read your nights and your whole " +
+                    "day, so they come with the Health tab. It is off — Device is where to " +
+                    "turn it on.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.extras.disabled,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
@@ -181,10 +201,25 @@ private fun RelayStatusCard(state: RelayState, onOpen: (String) -> Unit) {
  * switch changes whether it happens.
  */
 @Composable
-internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
+internal fun StepBuzzRows(
+    onOpen: (String) -> Unit,
+    goals: Boolean = true,
+    /**
+     * Whether the daily step goal is one of the rows.
+     *
+     * False with the health half off, where the nudge stands alone: the
+     * goal is a figure set on the Steps screen and read against a whole
+     * day, and it belongs with the tab that shows both.
+     */
+    stepGoal: Boolean = true,
+) {
     val context = LocalContext.current
     val relay = LocalRelayState.current
     var settings by remember { mutableStateOf(HealthSettings.read(context)) }
+    // Only when the nudge is standing on its own. With the tab on, the
+    // Steps permission came with the other twelve and this never runs.
+    val needsAsking = !HealthEnabled.isOn(context)
+    var stepsRefused by remember { mutableStateOf(false) }
 
     fun update(next: StepGoalSettings) {
         settings = next
@@ -194,7 +229,27 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
         CalendarRelayService.active?.settingsChanged()
     }
 
-    SettingsRow(
+    // Health Connect's own sheet, asked for two permissions rather than
+    // fifteen. The same contract the Device switch and the Permissions
+    // screen use: one way of asking, so there is one set of answers to
+    // get right.
+    val askSteps = rememberLauncherForActivityResult(
+        PermissionController.createRequestPermissionResultContract(),
+    ) { granted ->
+        // The switch follows what was granted, not what was asked for. A
+        // sheet dismissed with nothing allowed leaves the nudge off,
+        // because a nudge with no steps to read is a switch that promises
+        // a buzz every hour and delivers silence -- which is exactly the
+        // thing hiding the row was meant to avoid.
+        if (HealthPermission.getReadPermission(StepsRecord::class) in granted) {
+            stepsRefused = false
+            update(settings.copy(hourlyNudge = true))
+        } else {
+            stepsRefused = true
+        }
+    }
+
+    if (stepGoal) SettingsRow(
         title = "Buzz me at ${NumberFormat.getIntegerInstance().format(settings.goal)} steps",
         subtitle = "Once a day, when you cross it · " +
             describe(relay.preset(VibrationTarget.StepGoal) ?: relay.inherited(VibrationTarget.StepGoal)),
@@ -217,10 +272,32 @@ internal fun StepBuzzRows(onOpen: (String) -> Unit, goals: Boolean = true) {
         trailing = {
             RowSwitch(
                 checked = settings.hourlyNudge,
-                onCheckedChange = { update(settings.copy(hourlyNudge = it)) },
+                onCheckedChange = { wanted ->
+                    when {
+                        // Nothing is granted back, and nothing needs to
+                        // be: switching off stops the relay asking.
+                        !wanted -> { stepsRefused = false; update(settings.copy(hourlyNudge = false)) }
+                        !needsAsking -> update(settings.copy(hourlyNudge = true))
+                        // Not switched on here. The sheet's answer
+                        // switches it, above, so a dismissed sheet leaves
+                        // the switch where the finger found it.
+                        HealthConnect.availability(context) == HealthAvailability.Ready ->
+                            runCatching { askSteps.launch(HealthConnect.stepPermissions) }
+                        else -> stepsRefused = true
+                    }
+                },
             )
         },
     )
+    if (stepsRefused) {
+        Text(
+            "The nudge counts the steps in each hour, so it needs Health Connect's " +
+                "permission to read them. Nothing else is read, and the Health tab stays off.",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.extras.hrv,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+        )
+    }
     // Only while the nudge is on. A switch for a thing that is not happening
     // is a question about nothing, and the row above is where you say
     // whether it happens at all.

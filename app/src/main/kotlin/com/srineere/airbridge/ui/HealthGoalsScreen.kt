@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.srineere.airbridge.CalendarRelayService
 import com.srineere.airbridge.health.Goals
 import com.srineere.airbridge.health.HealthConnect
+import com.srineere.airbridge.health.HealthEnabled
 import com.srineere.airbridge.health.HealthSettings
 import com.srineere.airbridge.health.HealthSource
 import com.srineere.airbridge.health.HealthSources
@@ -90,30 +92,50 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
         CalendarRelayService.active?.settingsChanged()
     }
 
+    // With the health half off this screen is reachable from one place
+    // only -- the hourly nudge on the Alerts tab -- and it is the nudge's
+    // own settings page. A sleep target and a weekly activity target are
+    // lines on charts that are not in the app, so they are not asked for
+    // here; nothing is cleared, and turning the tab back on brings every
+    // one of them back as it was.
+    val healthOn by HealthEnabled.enabled.collectAsState()
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Goals", onBack = onBack)
         Text(
-            "Health Connect carries measurements, not targets: whatever you set " +
-                "inside Google Health stays there, and no app can read it. These " +
-                "are CUFF's own, and every goal line on the tab is drawn " +
-                "from them.",
+            if (healthOn) {
+                "Health Connect carries measurements, not targets: whatever you set " +
+                    "inside Google Health stays there, and no app can read it. These " +
+                    "are CUFF's own, and every goal line on the tab is drawn " +
+                    "from them."
+            } else {
+                "Health Connect carries measurements, not targets, so these are " +
+                    "CUFF's own. With the Health tab off, the hourly nudge is the " +
+                    "only one of them that does anything."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
         )
 
         SectionHeader("Steps")
-        GoalRow(
-            value = count(goals.steps.toLong()),
-            unit = "a day",
-            note = "Your last seven average " +
-                (data.stepsTrend?.let { count(it.recent.roundToInt().toLong()) } ?: "—") +
-                ".",
-            onLess = { save(goals.copy(steps = (goals.steps - 500).coerceAtLeast(500))) },
-            onMore = { save(goals.copy(steps = goals.steps + 500)) },
-        )
+        if (healthOn) {
+            GoalRow(
+                value = count(goals.steps.toLong()),
+                unit = "a day",
+                note = "Your last seven average " +
+                    (data.stepsTrend?.let { count(it.recent.roundToInt().toLong()) } ?: "—") +
+                    ".",
+                onLess = { save(goals.copy(steps = (goals.steps - 500).coerceAtLeast(500))) },
+                onMore = { save(goals.copy(steps = goals.steps + 500)) },
+            )
+        }
+        // Shown either way: it decides whose steps are counted, and the
+        // nudge counts steps. A phone that adds its own pocket count to
+        // the band's is a phone that nudges you for an hour you walked.
         StepSourcePicker()
 
+        if (healthOn) {
         SectionHeader("Sleep")
         GoalRow(
             value = "${goals.sleepMinutes / 60}h ${"%02d".format(goals.sleepMinutes % 60)}m",
@@ -162,6 +184,8 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
             },
         )
 
+        }
+
         SectionHeader("Hourly nudge")
         GoalRow(
             value = "${buzz.hourlyGoal}",
@@ -200,19 +224,26 @@ internal fun HealthGoalsScreen(onBack: () -> Unit) {
             },
         )
 
-        SectionHeader("Activity")
-        GoalRow(
-            value = "${goals.activeMinutes}",
-            unit = "minutes a week",
-            note = "The World Health Organization's lower bound for adults is 150 " +
-                "minutes of moderate activity a week.",
-            onLess = { save(goals.copy(activeMinutes = (goals.activeMinutes - 15).coerceAtLeast(0))) },
-            onMore = { save(goals.copy(activeMinutes = (goals.activeMinutes + 15).coerceAtMost(1500))) },
-        )
+        if (healthOn) {
+            SectionHeader("Activity")
+            GoalRow(
+                value = "${goals.activeMinutes}",
+                unit = "minutes a week",
+                note = "The World Health Organization's lower bound for adults is 150 " +
+                    "minutes of moderate activity a week.",
+                onLess = { save(goals.copy(activeMinutes = (goals.activeMinutes - 15).coerceAtLeast(0))) },
+                onMore = { save(goals.copy(activeMinutes = (goals.activeMinutes + 15).coerceAtMost(1500))) },
+            )
+        }
 
         Text(
-            "The step goal and the hourly nudge reach the band. The rest draw " +
-                "lines on charts and nothing more.",
+            if (healthOn) {
+                "The step goal and the hourly nudge reach the band. The rest draw " +
+                    "lines on charts and nothing more."
+            } else {
+                "The hourly nudge reaches the band. It is the only thing on this " +
+                    "screen that does while the Health tab is off."
+            },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.extras.disabled,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
