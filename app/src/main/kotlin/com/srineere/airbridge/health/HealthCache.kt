@@ -63,7 +63,7 @@ data class KeptHealth(
  * not have, because every screen on the tab treats an absent reading as
  * "nothing was written" and says so in those words.
  */
-internal const val CACHE_VERSION = 1
+internal const val CACHE_VERSION = 2
 
 /**
  * One read's worth of state, in the preferences file the rest of the tab
@@ -421,6 +421,12 @@ private fun nightJson(night: Night): JSONObject = JSONObject()
     .put("light", night.light.toMillis())
     .put("deep", night.deep.toMillis())
     .put("rem", night.rem.toMillis())
+    // Time in bed is its own figure now that a day's naps are folded into
+    // one night: it is the sum of every sleep, not the span from the
+    // night's start to its end, and it cannot be recovered from the two.
+    .put("inBed", night.inBed.toMillis())
+    .put("naps", night.naps)
+    .put("napAsleep", night.napAsleep.toMillis())
     .put("stages", encodeSegments(night.start, night.segments))
 
 private fun nightOf(json: JSONObject): Night? {
@@ -435,6 +441,9 @@ private fun nightOf(json: JSONObject): Night? {
         deep = Duration.ofMillis(json.getLong("deep")),
         rem = Duration.ofMillis(json.getLong("rem")),
         segments = decodeSegments(json.getString("stages"), start) ?: return null,
+        inBed = Duration.ofMillis(json.getLong("inBed")),
+        naps = json.getInt("naps"),
+        napAsleep = Duration.ofMillis(json.getLong("napAsleep")),
     )
 }
 

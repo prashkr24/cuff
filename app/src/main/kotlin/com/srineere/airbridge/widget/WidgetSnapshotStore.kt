@@ -71,7 +71,7 @@ internal data class KeptSnapshot(
  * rather than migrated -- which is the cheap end of the "fail closed"
  * invariant, and the one place it costs nothing to obey.
  */
-private const val KEPT_VERSION = 1
+private const val KEPT_VERSION = 2
 
 /**
  * Every series is an array of arrays, never an array of objects.
@@ -97,7 +97,10 @@ private fun doublesOf(list: List<Double>): JSONArray =
 private fun doubles(array: JSONArray): List<Double> =
     (0 until array.length()).map { array.getDouble(it) }
 
-/** `[day, start, end, asleep, awake, light, deep, rem]`, the five as seconds. */
+/**
+ * `[day, start, end, asleep, awake, light, deep, rem, inBed, naps,
+ * napAsleep]` -- every duration in seconds, the two instants in millis.
+ */
 private fun nightsOf(list: List<Night>): JSONArray = JSONArray().apply {
     list.forEach { night ->
         put(
@@ -110,6 +113,12 @@ private fun nightsOf(list: List<Night>): JSONArray = JSONArray().apply {
                 .put(night.light.seconds)
                 .put(night.deep.seconds)
                 .put(night.rem.seconds)
+                // Time in bed is kept because the two sleep faces draw
+                // efficiency from it, and once a day's naps are folded in
+                // it is no longer the span from start to end.
+                .put(night.inBed.seconds)
+                .put(night.naps)
+                .put(night.napAsleep.seconds)
         )
     }
 }
@@ -140,6 +149,9 @@ private fun nights(array: JSONArray): List<Night> =
             light = Duration.ofSeconds(row.getLong(5)),
             deep = Duration.ofSeconds(row.getLong(6)),
             rem = Duration.ofSeconds(row.getLong(7)),
+            inBed = Duration.ofSeconds(row.getLong(8)),
+            naps = row.getInt(9),
+            napAsleep = Duration.ofSeconds(row.getLong(10)),
         )
     }
 

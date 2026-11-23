@@ -41,7 +41,23 @@ data class SleepSegment(val stage: SleepStage, val start: Instant, val end: Inst
     val length: Duration get() = Duration.between(start, end)
 }
 
-/** One night's sleep, with its stages when the writer supplied them. */
+/**
+ * A day's sleep, with its stages when the writer supplied them.
+ *
+ * One of these per day, not per session. Health Connect writes a separate
+ * `SleepSessionRecord` for every sleep -- an afternoon nap is a session
+ * exactly as last night is -- and a list of sessions treated as a list of
+ * nights goes wrong in every direction at once: a twenty-minute nap takes
+ * a slot in "the last 7 nights", and a screen that keys nights by day
+ * keeps whichever one happened to come last, so the nap replaces the
+ * night. [oneNightPerDay] folds them together before anything sees them.
+ *
+ * [start], [end] and [segments] stay those of the longest sleep of the
+ * day. The sums are the day's. That split is the whole design: a total
+ * ought to count every sleep, but a hypnogram drawn from midnight to
+ * three the following afternoon, and a body clock judged by the middle of
+ * that span, would both be nonsense.
+ */
 data class Night(
     val day: Long,
     val start: Instant,
@@ -53,13 +69,24 @@ data class Night(
     val rem: Duration,
     /** In order, empty for a night written as one block. */
     val segments: List<SleepSegment> = emptyList(),
+    /**
+     * Time in bed, summed over every sleep of the day.
+     *
+     * Held rather than measured from [start] to [end], because once a nap
+     * is folded in those two are the ends of the main sleep and the span
+     * between them is not what anybody lay down for. A single-session day
+     * gets the same number either way, which is why the default is the
+     * span.
+     */
+    val inBed: Duration = Duration.between(start, end),
+    /** Sleeps besides the longest one that were folded into this day. */
+    val naps: Int = 0,
+    /** How much of [asleep] came from those naps. */
+    val napAsleep: Duration = Duration.ZERO,
 ) {
-    /** Asleep against time in bed. Null when the session has no length. */
+    /** Asleep against time in bed. Null when the day has no length. */
     val efficiency: Double?
-        get() {
-            val inBed = Duration.between(start, end).seconds
-            return if (inBed <= 0) null else asleep.seconds.toDouble() / inBed
-        }
+        get() = if (inBed.seconds <= 0) null else asleep.seconds.toDouble() / inBed.seconds
 
     /** True when the writer broke the night down; false when it is one block. */
     val hasStages: Boolean
@@ -78,9 +105,55 @@ data class Night(
                 segment.length >= Duration.ofMinutes(1)
         }.size
 
-    /** The middle of the night, which is what consistency is measured on. */
+    /**
+     * The middle of the main sleep, which is what consistency is measured on.
+     *
+     * Deliberately not the middle of the whole day's sleep: a nap would
+     * drag it hours later and report a body clock nobody has.
+     */
     val midpoint: Instant
         get() = start.plusSeconds(Duration.between(start, end).seconds / 2)
+}
+
+/**
+ * Every sleep of a day folded into one [Night], sorted oldest first.
+ *
+ * Naps are the reason this exists, but it also repairs nights a writer
+ * split in two around a long wake -- which read as two short nights, and
+ * scored as two short nights, for as long as this app counted sessions.
+ *
+ * The longest sleep leads: it keeps its [Night.start], [Night.end] and
+ * hypnogram, so the timeline and the midpoint go on describing the thing
+ * that was actually the night. Everything that is a quantity -- asleep,
+ * awake, the three stages, time in bed -- is the day's sum, because a
+ * total that leaves out an hour of afternoon sleep is not a total. The
+ * naps are counted and their sleep totalled separately so a screen can
+ * say where the extra came from rather than quietly inflating a night.
+ */
+internal fun oneNightPerDay(nights: List<Night>): List<Night> =
+    nights.groupBy { it.day }
+        .map { (_, sameDay) -> if (sameDay.size == 1) sameDay.first() else folded(sameDay) }
+        .sortedBy { it.day }
+
+private fun folded(sameDay: List<Night>): Night {
+    // Longest asleep leads; the earlier one wins a tie, so the result does
+    // not depend on the order Health Connect happened to hand them back.
+    val main = sameDay.maxWith(compareBy<Night> { it.asleep }.thenByDescending { it.start })
+    // By identity, not by value: two genuinely identical sessions in a day
+    // are unlikely, but `-` on a data class would drop both of them.
+    val rest = sameDay.filter { it !== main }
+    fun total(of: (Night) -> Duration): Duration =
+        sameDay.fold(Duration.ZERO) { sum, night -> sum + of(night) }
+    return main.copy(
+        asleep = total { it.asleep },
+        awake = total { it.awake },
+        light = total { it.light },
+        deep = total { it.deep },
+        rem = total { it.rem },
+        inBed = total { it.inBed },
+        naps = rest.size,
+        napAsleep = rest.fold(Duration.ZERO) { sum, night -> sum + night.asleep },
+    )
 }
 
 /** One workout, with whatever Health Connect actually held for it. */
@@ -351,7 +424,7 @@ class HealthReader(private val zone: ZoneId = ZoneId.systemDefault()) {
                 from,
                 today,
                 originsFor(context, client, granted, Written.Sleep),
-            ).map(::toNight)
+            ).map(::toNight).let(::oneNightPerDay)
         } else {
             emptyList()
         }

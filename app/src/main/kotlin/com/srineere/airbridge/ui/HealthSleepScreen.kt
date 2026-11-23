@@ -161,6 +161,19 @@ internal fun HealthSleepScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                         color = if (sleptEnough) stagePalette().rem
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // Said out loud, because the figure above is a day's
+                    // sleep and the timeline below is only the night of
+                    // it. Without this line the two disagree and neither
+                    // of them explains why.
+                    if (night.naps > 0) {
+                        Text(
+                            "Includes ${night.naps} " +
+                                (if (night.naps == 1) "nap" else "naps") +
+                                ", ${night.napAsleep.asHoursMinutes()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 data.sleepTrend?.let { trend ->
                     ChangeChip(trend.change, "min", stagePalette().rem)

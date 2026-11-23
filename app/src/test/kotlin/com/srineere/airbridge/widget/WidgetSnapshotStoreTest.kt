@@ -222,12 +222,19 @@ class WidgetSnapshotStoreTest {
         assertEquals("[[20405,8421],[20406,1000.5]]", JSONObject(raw).getJSONArray("steps").toString())
     }
 
-    /** Eight positions, the five lengths in seconds. */
+    /**
+     * Eleven positions, every length in seconds.
+     *
+     * Time in bed is among them rather than measured back from the start
+     * and end: a day whose naps have been folded into one night has its
+     * sleep spread over sessions, and the span between the two instants
+     * here covers only the longest of them.
+     */
     @Test
-    fun `a night is stored as eight numbers`() {
+    fun `a night is stored as eleven numbers`() {
         val raw = encodeKept(kept(HealthSnapshot(nights = health().nights)), zone)
         assertEquals(
-            "[[20405,${lastNight},${lastNight + 26_000_000L},24720,1380,12600,5520,6600]]",
+            "[[20405,${lastNight},${lastNight + 26_000_000L},24720,1380,12600,5520,6600,26000,0,0]]",
             JSONObject(raw).getJSONArray("nights").toString(),
         )
     }
@@ -240,7 +247,11 @@ class WidgetSnapshotStoreTest {
     @Test
     fun `the entry says which version and which local day it is`() {
         val root = JSONObject(encodeKept(kept(), zone))
-        assertEquals(1, root.getInt("version"))
+        // Written down rather than compared against the constant, so that
+        // changing the shape of an entry without bumping it fails here --
+        // which is the only thing standing between an old entry and being
+        // read as a new one. 2 added time in bed and the nap counts.
+        assertEquals(2, root.getInt("version"))
         assertEquals(today, root.getLong("day"))
         assertEquals(noon, root.getLong("readAt"))
     }
@@ -268,7 +279,9 @@ class WidgetSnapshotStoreTest {
      */
     @Test
     fun `an entry from a newer build decodes to nothing`() {
-        val newer = JSONObject(encodeKept(kept(), zone)).put("version", 2).toString()
+        // Any number above the one this build writes; it has to be raised
+        // with the constant.
+        val newer = JSONObject(encodeKept(kept(), zone)).put("version", 3).toString()
         assertNull(decodeKept(newer, today))
     }
 

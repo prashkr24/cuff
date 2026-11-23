@@ -494,6 +494,52 @@ to decide a label it no longer writes. A composable called `LastNight` is how
 "last night" ended up printed over a night that was not last night; the name
 was the bug's first draft.
 
+## A day's sleep, not a session's
+
+Health Connect has no concept of a night. It holds `SleepSessionRecord`s,
+and an afternoon nap is a session exactly as last night is. For a long time
+this app mapped one session to one `Night`, which was wrong in three
+directions at once and quietly in all of them:
+
+- a total that left out an hour of afternoon sleep;
+- "the last 7 nights" silently becoming the last seven *sessions*, so a
+  napper saw five days of history in a seven-day chart;
+- every screen that keys nights by day — the sleep bank's `associateBy`,
+  readiness' `sleepByDay` — keeping whichever session came last. On a
+  napping day that is the nap, so a twenty-minute doze replaced a
+  seven-hour night in the baseline and in the bank.
+
+`oneNightPerDay` in `health/HealthReader.kt` folds them before anything
+sees them, called once, right where `toNight` is mapped over the records.
+Everything downstream — charts, score, readiness, widgets, export, both
+caches — gets one night per day for free, and nothing else needed to know.
+
+**What is summed and what is not is the whole design.** The longest sleep
+of the day leads and keeps its `start`, `end` and `segments`; the
+quantities are the day's sum. A hypnogram drawn from midnight to three the
+following afternoon, an efficiency diluted by eight waking hours, and a
+body clock judged by the middle of that span would each be a new lie in
+place of the old one. So `Night.inBed` is now a stored field rather than
+`Duration.between(start, end)` — the two agree on a single-session day and
+must not be confused on any other — and `midpoint`, which drives the
+consistency score, stays the middle of the main sleep.
+
+`naps` and `napAsleep` are carried so a screen can say where the extra came
+from. The sleep screen prints "Includes 1 nap, 40m" under the date, because
+the figure above it is a day and the timeline below it is a night, and
+without that line the two disagree with no explanation.
+
+The fold also repairs a night a writer split in two around a long wake,
+which until now read and scored as two short nights. It is counted as a nap
+in that case. Nothing available here can tell the two apart, and claiming
+"includes 1 nap, 3h" is less wrong than counting the night twice.
+
+Both persisted caches gained the three fields, and both version constants
+went to 2 — `CACHE_VERSION` and `KEPT_VERSION`. That is what makes the
+migration a non-event: a cache written by the old build is refused whole
+and rebuilt by the next read, so no pre-fold night can survive into a
+screen that now assumes one night per day.
+
 ## The export
 
 `health/HealthExport.kt` writes a zip of four CSVs — `daily.csv`,
@@ -1642,3 +1688,25 @@ way nobody's band feels different after an update — that is the shape to copy,
 and the reason each has a test is that the way such a migration fails is
 silently. Note that the "newer schema is rejected" test has to move up with the
 version, or it starts asserting against a number the decoder now accepts.
+
+## Nothing on this phone is backed up
+
+`allowBackup="false"`, and `backup_rules.xml` and `data_extraction_rules.xml`
+exclude every domain from both cloud backup and device-to-device transfer. It
+is deliberate: the app holds somebody's sleep, their resting heart rate and
+every notification that reached their wrist, and none of that goes to a
+Google server for the sake of a smoother reinstall.
+
+The price is paid at uninstall. Goals, relay rules, the tile layout, saved
+foods, journal answers and alert history all live in this app's
+`SharedPreferences` — goals in `air_health` under `step_goal`,
+`sleep_goal_minutes`, `energy_goal_kcal`, `protein_goal_g`,
+`active_goal_minutes` — and the system deletes that directory with the app.
+A reinstall starts at the defaults. Nothing warns about this, and anyone
+who wants to change it should change the policy rather than the symptom.
+
+Switching the Health half off is **not** that, and must not become it.
+`healthSwitched` removes two cache keys by name and touches nothing written:
+`HealthCache.clear` is `remove(KEY)`, not `edit().clear()`, which matters
+because the goals share the `air_health` file with it. Turning the half back
+on returns the tab somebody had.
