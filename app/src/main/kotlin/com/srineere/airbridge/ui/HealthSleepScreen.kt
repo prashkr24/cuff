@@ -464,14 +464,18 @@ private fun NightDetail(night: Night, extras: AirExtraColors) {
             ) {
                 Text(
                     "${clock.format(part.start)} – ${clock.format(part.end)}",
-                    style = MaterialTheme.typography.labelLarge,
+                    // bodyMedium against the length's labelLarge: both are
+                    // 13sp, but labelLarge is semibold, so the length
+                    // carries and the clock reads as its caption. Two
+                    // labelLarges side by side were the same weight and
+                    // the row had no shape.
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
                     part.asleep.asHoursMinutes(),
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
