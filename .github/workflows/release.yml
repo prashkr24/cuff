@@ -5,7 +5,7 @@ name: Release
 #
 # Signing, honestly: no keystore and no key.properties are checked in, and
 # none can be -- key.properties is gitignored. app/build.gradle.kts already
-# knows how to read a keystore from the AIR_RELAY_* environment variables and
+# knows how to read a keystore from the CUFF_* environment variables and
 # falls back to the DEBUG key when none is set. So this workflow does the same
 # thing, and says in the release notes which of the two happened rather than
 # leaving somebody to find out at install time.
@@ -14,11 +14,11 @@ name: Release
 # (Settings > Secrets and variables > Actions). NONE of them is currently set,
 # and nothing here invents one that is:
 #
-#   AIR_RELAY_KEYSTORE_BASE64     the .jks, base64-encoded:
+#   CUFF_KEYSTORE_BASE64     the .jks, base64-encoded:
 #                                   base64 -w0 release.jks
-#   AIR_RELAY_KEYSTORE_PASSWORD   the store password
-#   AIR_RELAY_KEY_ALIAS           the key alias inside the store
-#   AIR_RELAY_KEY_PASSWORD        that key's password
+#   CUFF_KEYSTORE_PASSWORD   the store password
+#   CUFF_KEY_ALIAS           the key alias inside the store
+#   CUFF_KEY_PASSWORD        that key's password
 #
 # Set all four or none. A keystore with the wrong password fails the build,
 # which is the right outcome: a release that silently fell back to the debug
@@ -70,7 +70,7 @@ jobs:
       - name: Write the signing keystore, if one is configured
         id: signing
         env:
-          KEYSTORE_BASE64: ${{ secrets.AIR_RELAY_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.CUFF_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
@@ -83,13 +83,13 @@ jobs:
 
       # The build file reads these and uses the debug key when storeFile is
       # null, which is exactly what happens when the step above found no
-      # secret and AIR_RELAY_KEYSTORE is therefore empty.
+      # secret and CUFF_KEYSTORE is therefore empty.
       - name: Assemble the release APK
         env:
-          AIR_RELAY_KEYSTORE: ${{ steps.signing.outputs.signed == 'true' && format('{0}/release.jks', runner.temp) || '' }}
-          AIR_RELAY_KEYSTORE_PASSWORD: ${{ secrets.AIR_RELAY_KEYSTORE_PASSWORD }}
-          AIR_RELAY_KEY_ALIAS: ${{ secrets.AIR_RELAY_KEY_ALIAS }}
-          AIR_RELAY_KEY_PASSWORD: ${{ secrets.AIR_RELAY_KEY_PASSWORD }}
+          CUFF_KEYSTORE: ${{ steps.signing.outputs.signed == 'true' && format('{0}/release.jks', runner.temp) || '' }}
+          CUFF_KEYSTORE_PASSWORD: ${{ secrets.CUFF_KEYSTORE_PASSWORD }}
+          CUFF_KEY_ALIAS: ${{ secrets.CUFF_KEY_ALIAS }}
+          CUFF_KEY_PASSWORD: ${{ secrets.CUFF_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease :app:bundleRelease --console=plain
 
       - name: Name the APK after the tag
@@ -157,7 +157,7 @@ jobs:
             echo
             echo "Installing needs four grants no installer can make for you — Bluetooth,"
             echo "notification access, background running, and Health Connect for the Health"
-            echo "tab. See [Install](https://github.com/srineere/air-bridge#install)."
+            echo "tab. See [Install](https://github.com/srineere/cuff#install)."
             echo
             echo "<details><summary>App Bundle</summary>"
             echo

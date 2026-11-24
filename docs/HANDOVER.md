@@ -263,7 +263,7 @@ decisions that are settled:
 - **Live heart rate needs Share heart rate on in Google Health.** With it off
   the CCCD write still succeeds and nothing arrives, and the transport waits
   `OPERATION_TIMEOUT_MS = 45_000` before saying so. The screen gives up at ten
-  seconds and names the toggle. See `[[air-bridge-air-protocol]]`.
+  seconds and names the toggle.
 - **A measurement takes the relay's one slot**, through the same
   `begin()`/`onAir` path a notification uses, so alerts queue behind it rather
   than fighting for the session. `holdsBand` exists because the service object

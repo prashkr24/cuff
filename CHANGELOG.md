@@ -361,4 +361,4 @@ Reconstructed from the commit history on `native`, which began on 2 November
   other apps' notifications, except `AccessoryNotifications`, which Apple
   restricts to EU accounts on EU devices. [5 Nov]
 
-[Unreleased]: https://github.com/srineere/air-bridge/commits/native
+[Unreleased]: https://github.com/srineere/cuff/commits/native

@@ -1,6 +1,12 @@
 MIT License
 
 Copyright (c) 2026 Thore Koritzius
+Copyright (c) 2026 Srineer Kaleri
+
+The first line is the upstream project this one began inside; the second is
+the work added here. Both are MIT, and this file covers the whole repository
+except the vendored Golden Gate transport, which is Apache-2.0 — see
+THIRD_PARTY_NOTICES.md.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

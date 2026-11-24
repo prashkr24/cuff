@@ -108,11 +108,16 @@ Cuff is not directed at children and collects nothing from anyone.
 Cuff is unofficial, and is not made, endorsed or supported by Fitbit or
 Google.
 
-The source is not public, so the claims above cannot be checked by reading
-it. One of them can be checked without it, and it is the one that matters
-most: an app's permissions are listed in the APK itself. Any APK inspector,
-or Android's own app info screen, will show that Cuff does not hold the
-`INTERNET` permission — and an app without it cannot open a network
+The source is public, at <https://github.com/srineere/cuff>, so every claim
+above can be checked by reading it rather than believed. Two places are worth
+starting at: `app/src/main/AndroidManifest.xml`, which is the whole list of
+what the app may do, and `health/HealthWriter.kt`, which is the only code in
+the repository that writes anything anywhere.
+
+One claim can be checked without reading a line, and it is the one that
+matters most: an app's permissions are listed in the APK itself. Any APK
+inspector, or Android's own app info screen, will show that Cuff does not hold
+the `INTERNET` permission — and an app without it cannot open a network
 connection, whatever its code says.
 
 One honest note for anyone who does inspect the APK: the vendored Golden Gate
@@ -127,18 +132,13 @@ effective date, and the change is noted in the app's changelog.
 
 ## Contact
 
-<!-- Fill this in before publishing anywhere that requires a privacy policy.
-     A store listing needs a contact a stranger can actually reach, and with
-     this repository private that cannot be its issue tracker: it has to be
-     an address. Left blank rather than guessed at, because which address to
-     put in public is not a decision to make on somebody's behalf. -->
-
-_Contact details to be added._
+Open an issue at <https://github.com/srineere/cuff/issues>. For anything that
+should not be public — a security report, or a privacy question you would
+rather not ask in the open — see [`SECURITY.md`](SECURITY.md).
 
 ## Where this document lives
 
-This file is the source of truth and sits in a private repository, so the
-copy you are reading may be a published mirror of it. A store listing needs
-a privacy policy at a public URL, and this app's code is not public; if the
-two ever disagree, the version carrying the later effective date is the
-current one.
+This file is the source of truth, at
+<https://github.com/srineere/cuff/blob/native/PRIVACY.md>. Any copy elsewhere
+is a mirror; if the two disagree, the version carrying the later effective
+date is the current one.

@@ -1,1 +1,17 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Security or privacy report (private)
+    url: https://github.com/srineere/cuff/security/advisories/new
+    about: >-
+      Anything you would not want in a public issue. Goes to the maintainer
+      only. SECURITY.md says what is in scope.
+  - name: Read this first if the relay stopped working
+    url: https://github.com/srineere/cuff#troubleshooting
+    about: >-
+      The failure notes in the Alerts tab each mean something specific, and
+      Troubleshooting matches them to causes. Quote the exact wording you saw.
+  - name: How a pulse actually works
+    url: https://github.com/srineere/cuff#how-a-pulse-actually-works
+    about: >-
+      Why the band holds one session at a time, and why that explains most of
+      what looks like a bug.

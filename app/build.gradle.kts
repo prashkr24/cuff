@@ -8,7 +8,7 @@ plugins {
 }
 
 // Release signing comes from key.properties (local, never committed) or
-// AIR_RELAY_* environment variables (CI). Without either, release builds fall
+// CUFF_* environment variables (CI). Without either, release builds fall
 // back to the debug key and must not be distributed.
 val releaseKey = Properties().apply {
     rootProject.file("key.properties").takeIf { it.isFile }?.inputStream()?.use(::load)
@@ -75,11 +75,11 @@ android {
 
     signingConfigs {
         create("release") {
-            releaseSetting("storeFile", "AIR_RELAY_KEYSTORE")?.let { path ->
+            releaseSetting("storeFile", "CUFF_KEYSTORE")?.let { path ->
                 storeFile = file(path)
-                storePassword = releaseSetting("storePassword", "AIR_RELAY_KEYSTORE_PASSWORD")
-                keyAlias = releaseSetting("keyAlias", "AIR_RELAY_KEY_ALIAS")
-                keyPassword = releaseSetting("keyPassword", "AIR_RELAY_KEY_PASSWORD")
+                storePassword = releaseSetting("storePassword", "CUFF_KEYSTORE_PASSWORD")
+                keyAlias = releaseSetting("keyAlias", "CUFF_KEY_ALIAS")
+                keyPassword = releaseSetting("keyPassword", "CUFF_KEY_PASSWORD")
             }
         }
     }

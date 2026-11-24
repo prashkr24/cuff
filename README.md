@@ -2,7 +2,7 @@
 
 **Calls and notifications on a Fitbit Air, plus a Health tab worth opening.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/srineere/air-bridge/ci.yml?branch=native&label=CI&style=flat-square)](https://github.com/srineere/air-bridge/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/srineere/cuff/ci.yml?branch=native&label=CI&style=flat-square)](https://github.com/srineere/cuff/actions/workflows/ci.yml)
 [![Licence](https://img.shields.io/badge/licence-MIT%20%2B%20Apache--2.0-blue?style=flat-square)](#licence)
 [![minSdk 28](https://img.shields.io/badge/minSdk-28-informational?style=flat-square)](app/build.gradle.kts)
 [![targetSdk 36](https://img.shields.io/badge/targetSdk-36-informational?style=flat-square)](app/build.gradle.kts)
@@ -35,18 +35,29 @@ where the Air writes them.
 
 ## Screenshots
 
-| | |
-| --- | --- |
-| ![The Health tab](docs/screenshots/health-tiles.png)<br>**Health** — a grid you arrange | ![Sleep](docs/screenshots/sleep-detail.png)<br>**Sleep** — a score built from your own nights |
-| ![Apps](docs/screenshots/alerts-apps.png)<br>**Apps** — a vibration each | ![Device](docs/screenshots/device.png)<br>**Device** — the band, and what it is doing |
-| ![Widgets](docs/screenshots/widgets-home.png)<br>**Widgets** — thirty-one designs, five cell sizes | ![Readiness](docs/screenshots/readiness.png)<br>**Readiness** — settled each morning |
-| ![Morning report](docs/screenshots/morning-report.png)<br>**Morning** — the night, once it has been written | |
+![Alerts and Apps](press/shots/1-alerts.png)
 
-Taken on a Pixel-class phone at 1080×2412, dark theme, from a real install
-with real readings. Two of the shots the folder asks for are not here: a
-person's rules, which cannot be shown without showing somebody's name and
-number, and a live heart rate, which has to be started by hand and holds the
-band's one session while it runs.
+![Calls, how it buzzes, and what got through](press/shots/2-buzzes.png)
+
+![Health, Energy, and burned against eaten](press/shots/3-health.png)
+
+![Sleep, the food log, and Activity](press/shots/4-health-2.png)
+
+![Widgets, every style, and a stack](press/shots/5-widgets.png)
+
+![Device and Theme](press/shots/6-device.png)
+
+Every phone above is a real capture from a real install at 1080 × 2412, dark
+theme, Cuff's own Ink/Rose theme — not a mock-up. The figures are one person's
+actual readings; the two caller names that appeared in them are blurred, and
+the tool that does the blurring is [`press/tools/redact.py`](press/tools/redact.py),
+so you can see exactly what was covered and why.
+
+The plain, unframed captures are in [`docs/screenshots/`](docs/screenshots/),
+with a note there on which shots the folder still wants. Two are deliberately
+missing: a person's own rules, which cannot be shown without showing somebody's
+name and number, and a live heart rate, which has to be started by hand and
+holds the band's one session while it runs.
 
 ## Features
 
@@ -163,7 +174,7 @@ is *Settings → Security → Unknown sources*; on Android 12 and up it is
 per-app — *Settings → Apps → Special app access → Install unknown apps* — and
 you grant it to whatever app is handing over the APK.
 
-**3. Install the APK** from [Releases](https://github.com/srineere/air-bridge/releases).
+**3. Install the APK** from [Releases](https://github.com/srineere/cuff/releases).
 It targets `arm64-v8a`, which is every phone from about 2017 onward.
 
 **4. Grant Nearby devices while the app is on screen.** The relay needs
@@ -249,7 +260,7 @@ doing when the startup path changes shape:
 ```
 
 Release builds are signed from `key.properties` — gitignored, never
-committed — or from the `AIR_RELAY_*` environment variables. **Without either
+committed — or from the `CUFF_*` environment variables. **Without either
 they fall back to the debug key** and must not be distributed.
 
 ## Releases
@@ -276,15 +287,15 @@ change notes from the commits.
 **About signing, honestly.** No signing config is checked in — `key.properties`
 is gitignored and no keystore exists in this repository. The workflow therefore
 signs the APK **only if** repository secrets have been set for it, namely
-`AIR_RELAY_KEYSTORE_BASE64`, `AIR_RELAY_KEYSTORE_PASSWORD`,
-`AIR_RELAY_KEY_ALIAS` and `AIR_RELAY_KEY_PASSWORD`. **None of those is
+`CUFF_KEYSTORE_BASE64`, `CUFF_KEYSTORE_PASSWORD`,
+`CUFF_KEY_ALIAS` and `CUFF_KEY_PASSWORD`. **None of those is
 currently configured**, so today's releases are debug-signed: installable, and
 fine for trying the app, but each release is signed with a key generated on the
 CI runner, so Android will refuse to install one over another and you have to
 uninstall first. The workflow says which of the two happened in the release
 notes rather than leaving you to find out at install time.
 
-[All releases →](https://github.com/srineere/air-bridge/releases)
+[All releases →](https://github.com/srineere/cuff/releases)
 
 ## How a pulse actually works
 
@@ -438,8 +449,18 @@ The other documents:
   out of: feature gaps against other trackers, food data sources, other
   wearables' data, and why iOS support is not possible outside the EU.
 - [`CHANGELOG.md`](CHANGELOG.md) — what has changed.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to send something, what is easy to
+  get wrong here, and what this project is not going to do.
+- [`SECURITY.md`](SECURITY.md) — where to report privately, and what the attack
+  surface is for an app with no network access.
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
+- [`press/`](press/) — the store-style cards at the top of this file, the
+  captures they are built from, and the scripts that build them.
 
 ## Contributing
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) is the full version, including what this
+project is deliberately not going to do. The summary:
 
 Issues are welcome, particularly the two the templates exist for: something not
 working, and a firmware version this has not been tested against. Firmware
@@ -461,6 +482,11 @@ If you are opening a pull request:
   migration fails is silently.
 - Anything that touches the band has to be tried on a band. There is no
   emulator for this.
+
+Security reports go through GitHub's private vulnerability reporting rather
+than a public issue — [`SECURITY.md`](SECURITY.md) says what is in scope and
+what is not. [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) applies to everything
+here.
 
 ## Licence
 

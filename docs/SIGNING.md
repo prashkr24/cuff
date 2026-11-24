@@ -76,10 +76,10 @@ when it is empty.
 
 | Secret | Value |
 | --- | --- |
-| `AIR_RELAY_KEYSTORE_BASE64` | the `.jks`, base64 encoded |
-| `AIR_RELAY_KEYSTORE_PASSWORD` | the store password |
-| `AIR_RELAY_KEY_ALIAS` | `cuff` |
-| `AIR_RELAY_KEY_PASSWORD` | that key's password |
+| `CUFF_KEYSTORE_BASE64` | the `.jks`, base64 encoded |
+| `CUFF_KEYSTORE_PASSWORD` | the store password |
+| `CUFF_KEY_ALIAS` | `cuff` |
+| `CUFF_KEY_PASSWORD` | that key's password |
 
 To encode the keystore:
 

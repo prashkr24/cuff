@@ -120,7 +120,7 @@ that is the one ABI anyone has verified the transport on.
 ## Module structure
 
 ```
-air-bridge/
+cuff/
 ├── app/              the application: UI, relay, Health, widgets  (~37k lines Kotlin)
 ├── air/              the Fitbit Air transport, vendored           (~139 Kotlin files + 6 .so)
 └── baselineprofile/  a com.android.test module that records a startup profile
@@ -1454,7 +1454,7 @@ somebody who has not rung yet.
 declared.
 
 Release builds are signed from `key.properties` — which is gitignored and not in
-the repository — or from the `AIR_RELAY_*` environment variables. **Without
+the repository — or from the `CUFF_*` environment variables. **Without
 either they fall back to the debug key** and must not be distributed; the build
 file is explicit about this and so is the release workflow.
 

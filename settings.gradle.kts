@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "air-bridge"
+rootProject.name = "cuff"
 
 include(":app")
 include(":air")
