@@ -492,9 +492,10 @@ here.
 
 Two licences, for two parts of the repository.
 
-- [`LICENSE`](LICENSE) is the **MIT Licence**, carrying Thore Koritzius'
-  copyright. It came with the upstream project this app began inside, and it
-  covers this repository.
+- [`LICENSE`](LICENSE) is the **MIT Licence** and covers this repository. It
+  carries two copyright lines: Thore Koritzius', which came with the upstream
+  project this app began inside and had to stay, and Srineer Kaleri's for the
+  work added on top of it.
 - [`LICENSE-APACHE-2.0`](LICENSE-APACHE-2.0) is the **Apache License 2.0**,
   which covers the vendored Golden Gate transport — the Kotlin bindings under
   `air/src/main/kotlin/com/fitbit/goldengate/`, which keep their SPDX headers,
