@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
 import com.srineere.airbridge.Band
 import com.srineere.airbridge.CalendarRelayService
+import com.srineere.airbridge.health.ActiveZoneStore
 import com.srineere.airbridge.health.HealthAvailability
 import com.srineere.airbridge.health.HealthCache
 import com.srineere.airbridge.health.HealthConnect
@@ -324,6 +325,7 @@ private fun healthSwitched(context: Context, on: Boolean) {
         // nights sitting on disk for a feature they have just turned
         // off.
         runCatching { HealthCache.clear(context) }
+        runCatching { ActiveZoneStore.clear(context) }
         runCatching { WidgetSnapshotStore.clear(context) }
     }
     // Both of these cancel when they are not wanted and book when they
