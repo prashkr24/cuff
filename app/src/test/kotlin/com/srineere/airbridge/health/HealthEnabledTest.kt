@@ -82,9 +82,9 @@ class HealthEnabledTest {
         "journal", "readiness", "fitnessage", "morning", "export",
     )
 
-    /** Everything else the graph registers, which is the relay's side. */
+    /** Everything else the graph registers, which is the relay's side (plus self-gated top-level tabs). */
     private val relayRoutes = listOf(
-        "alerts", "device", "apps", "calls", "people", "activity", "schedule",
+        "gage", "alerts", "device", "apps", "calls", "people", "activity", "schedule",
         "person/{id}", "contacts", "contacts/{source}", "callers/{group}",
         "callers/{group}/{scope}", "appearance", "widgets", "permissions", "about",
         "appcallers/{packageName}", "vibration/{target}",

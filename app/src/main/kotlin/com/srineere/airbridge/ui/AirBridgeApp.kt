@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.HourglassFull
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.Watch
 import androidx.compose.material3.Icon
@@ -93,6 +95,7 @@ private enum class Tab(
     val chosen: ImageVector,
 ) {
     Health("health", "Health", Icons.Outlined.FavoriteBorder, Icons.Filled.Favorite),
+    GAge("gage", "G-Age", Icons.Outlined.HourglassEmpty, Icons.Filled.HourglassFull),
     // One glyph both ways. GraphicEq is a row of bars that reads as
     // something pulsing, which is nearer this tab's job than a bell: what
     // is configured here is how the band moves, not whether a phone makes
@@ -375,6 +378,7 @@ fun AirBridgeApp(openRoute: String? = null, openCount: Int = 0) {
                 },
             ) {
                 composable(Tab.Health.route) { HealthScreen(onOpen = nav::navigate) }
+                composable(Tab.GAge.route) { GAgeScreen(onOpen = nav::navigate) }
                 composable(Tab.Alerts.route) { AlertsScreen(onOpen = nav::navigate) }
                 composable(Tab.Device.route) { DeviceScreen(onOpen = nav::navigate) }
 
