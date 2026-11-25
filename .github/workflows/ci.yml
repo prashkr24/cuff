@@ -7,7 +7,13 @@ name: CI
 # the only one found so far was found by lint, not by use.
 on:
   push:
+    branches: [native]
   pull_request:
+    branches: [native]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
